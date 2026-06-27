@@ -98,6 +98,13 @@ button {
   font-size: 14px;
 }
 
+.topbar span {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 14px;
+}
+
 .topbar h1 {
   margin: 0;
   font-size: 28px;
@@ -183,4 +190,15 @@ button {
 
 .empty-state strong {
   color: #334155;
+}
+
+.section-panel {
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: white;
+  padding: 18px;
+}
+
+.section-empty {
+  min-height: 420px;
 }
