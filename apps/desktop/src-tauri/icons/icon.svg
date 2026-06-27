@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Moneta">
+  <rect width="512" height="512" rx="96" fill="#111827"/>
+  <rect x="72" y="72" width="368" height="368" rx="72" fill="#2dd4bf"/>
+  <path
+    fill="#06201d"
+    d="M138 352V160h54l64 94 64-94h54v192h-54V242l-48 70h-32l-48-70v110h-54z"
+  />
+</svg>
