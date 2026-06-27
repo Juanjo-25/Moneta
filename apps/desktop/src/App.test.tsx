@@ -1,7 +1,18 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "./App";
+
+async function createProductFixture(user: UserEvent) {
+  await user.click(screen.getByRole("button", { name: "Productos" }));
+  await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
+  await user.type(screen.getByLabelText("Producto"), "Arroz libra");
+  await user.type(screen.getByLabelText("Unidad"), "4");
+  await user.type(screen.getByLabelText("Costo"), "3200");
+  await user.type(screen.getByLabelText("Precio venta"), "4500");
+  await user.type(screen.getByLabelText("Stock minimo"), "1");
+  await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+}
 
 describe("App navigation", () => {
   it("switches active section from the sidebar", async () => {
@@ -94,5 +105,111 @@ describe("App navigation", () => {
     expect(screen.getByText("El nombre es obligatorio.")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Productos registrados" })).toBeNull();
     expect(screen.getByText("Sin productos registrados")).toBeTruthy();
+  });
+
+  it("registers a paid sale, decreases stock, and lists it in ventas", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre cliente"), "Ana Perez");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Ana Perez")).toBeTruthy();
+    expect(within(salesTable).getByText("Arroz libra")).toBeTruthy();
+    expect(within(salesTable).getByText("Pagada")).toBeTruthy();
+    expect(within(salesTable).getByText(/\$\s*9\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("cell", { name: "2" })).toBeTruthy();
+  });
+
+  it("registers a pending sale without decreasing stock and exposes receivable data", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre cliente"), "Carlos Ruiz");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "3");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Pendiente")).toBeTruthy();
+    expect(within(salesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("cell", { name: "4" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    const receivablesTable = screen.getByRole("table", { name: "Cartera pendiente" });
+    expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
+    expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
+  });
+
+  it("validates missing customer, product, quantity, and empty inline customer name", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByText("El nombre del cliente es obligatorio.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    expect(screen.getByText("Debes seleccionar un cliente.")).toBeTruthy();
+    expect(screen.getByText("Debes seleccionar un producto.")).toBeTruthy();
+    expect(screen.getByText("La cantidad debe ser un entero mayor a cero.")).toBeTruthy();
+  });
+
+  it("rejects a paid sale when stock is insufficient", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre cliente"), "Luisa Mora");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "5");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    expect(
+      screen.getByText("No hay inventario suficiente para completar el movimiento.")
+    ).toBeTruthy();
   });
 });

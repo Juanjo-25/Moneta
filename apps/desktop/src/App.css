@@ -339,3 +339,101 @@ button {
 .alert-list span {
   color: #991b1b;
 }
+
+.sales-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.sales-form {
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: white;
+  padding: 18px;
+}
+
+.sales-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.field select {
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 11px;
+  color: #111827;
+  font: inherit;
+  background: white;
+}
+
+.field select[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.inline-action-group {
+  display: flex;
+  align-items: flex-end;
+}
+
+.inline-action-group button,
+.inline-customer-form button {
+  min-height: 42px;
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #334155;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.inline-customer-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.payment-status-group {
+  display: flex;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.payment-status-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.summary-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.summary-card span {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.summary-card strong {
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.form-error {
+  margin: 14px 0 0;
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 600;
+}
