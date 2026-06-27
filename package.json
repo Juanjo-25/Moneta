@@ -7,7 +7,9 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "dev:desktop": "pnpm --filter @moneta/desktop dev"
+    "dev:desktop": "pnpm --filter @moneta/desktop dev",
+    "dev:native": "pnpm --filter @moneta/desktop dev:native",
+    "build:native": "pnpm --filter @moneta/desktop build:native"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
