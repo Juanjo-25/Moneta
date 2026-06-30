@@ -115,7 +115,8 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre cliente"), "Ana Perez");
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
       screen.getByLabelText("Producto"),
@@ -145,7 +146,8 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre cliente"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
       screen.getByLabelText("Producto"),
@@ -182,6 +184,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
     expect(screen.getByText("El nombre del cliente es obligatorio.")).toBeTruthy();
+    expect(screen.getByText("El documento del cliente es obligatorio.")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
@@ -198,7 +201,8 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre cliente"), "Luisa Mora");
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Luisa Mora");
+    await user.type(screen.getByLabelText("NIT o C.C."), "456789123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
       screen.getByLabelText("Producto"),
@@ -211,5 +215,37 @@ describe("App navigation", () => {
     expect(
       screen.getByText("No hay inventario suficiente para completar el movimiento.")
     ).toBeTruthy();
+  });
+
+  it("creates an inline customer with document, address, city, and email", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.type(screen.getByLabelText("Direccion"), "Calle 10 # 20-30");
+    await user.type(screen.getByLabelText("Ciudad"), "Medellin");
+    await user.type(screen.getByLabelText("Email"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
+  });
+
+  it("requires customer name and document when creating an inline customer", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByText("El nombre del cliente es obligatorio.")).toBeTruthy();
+    expect(screen.getByText("El documento del cliente es obligatorio.")).toBeTruthy();
   });
 });

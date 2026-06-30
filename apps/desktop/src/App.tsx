@@ -47,6 +47,10 @@ type ProductRecord = {
 type CustomerRecord = {
   id: string;
   name: string;
+  document: string;
+  address: string;
+  city: string;
+  email: string;
 };
 
 type SaleRecord = {
@@ -98,7 +102,13 @@ type SalesFormErrors = {
 
 type CustomerFormState = {
   name: string;
+  document: string;
+  address: string;
+  city: string;
+  email: string;
 };
+
+type CustomerFormErrors = Partial<Record<keyof CustomerFormState, string>>;
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -114,6 +124,14 @@ const emptySalesForm: SalesFormState = {
   productId: "",
   quantity: "",
   paymentStatus: "paid"
+};
+
+const emptyCustomerForm: CustomerFormState = {
+  address: "",
+  city: "",
+  document: "",
+  email: "",
+  name: ""
 };
 
 const navigationItems: SectionConfig[] = [
@@ -346,10 +364,14 @@ export function App() {
     setProducts((currentProducts) => [...currentProducts, product]);
   }
 
-  function createCustomer(name: string): CustomerRecord {
+  function createCustomer(input: CustomerFormState): CustomerRecord {
     const customer = {
+      address: input.address.trim(),
+      city: input.city.trim(),
+      document: input.document.trim(),
+      email: input.email.trim(),
       id: `customer-${Date.now()}`,
-      name: name.trim()
+      name: input.name.trim()
     };
 
     setCustomers((currentCustomers) => [...currentCustomers, customer]);
@@ -591,7 +613,7 @@ function DashboardContent({
 
 type SectionContentProps = {
   customers: CustomerRecord[];
-  onCreateCustomer: (name: string) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onCreateProduct: (product: ProductRecord) => void;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
@@ -787,7 +809,7 @@ function ProductsSection({ onCreateProduct, products }: ProductsSectionProps) {
 
 type SalesSectionProps = {
   customers: CustomerRecord[];
-  onCreateCustomer: (name: string) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     product: ProductRecord;
@@ -813,8 +835,9 @@ function SalesSection({
   const [form, setForm] = useState<SalesFormState>(emptySalesForm);
   const [errors, setErrors] = useState<SalesFormErrors>({});
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
-  const [customerForm, setCustomerForm] = useState<CustomerFormState>({ name: "" });
-  const [customerError, setCustomerError] = useState<string | null>(null);
+  const [customerForm, setCustomerForm] =
+    useState<CustomerFormState>(emptyCustomerForm);
+  const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
 
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
@@ -874,17 +897,32 @@ function SalesSection({
     setForm(emptySalesForm);
   }
 
+  function updateCustomerField(field: keyof CustomerFormState, value: string) {
+    setCustomerForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setCustomerErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
   function submitCustomer() {
+    const nextErrors: CustomerFormErrors = {};
+
     if (customerForm.name.trim() === "") {
-      setCustomerError("El nombre del cliente es obligatorio.");
+      nextErrors.name = "El nombre del cliente es obligatorio.";
+    }
+    if (customerForm.document.trim() === "") {
+      nextErrors.document = "El documento del cliente es obligatorio.";
+    }
+
+    setCustomerErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
       return;
     }
 
-    const customer = onCreateCustomer(customerForm.name);
+    const customer = onCreateCustomer(customerForm);
 
     setForm((currentForm) => ({ ...currentForm, customerId: customer.id }));
-    setCustomerForm({ name: "" });
-    setCustomerError(null);
+    setCustomerForm(emptyCustomerForm);
+    setCustomerErrors({});
     setCustomerFormVisible(false);
   }
 
@@ -912,7 +950,7 @@ function SalesSection({
               <option value="">Selecciona un cliente</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
-                  {customer.name}
+                  {customer.name} - {customer.document}
                 </option>
               ))}
             </select>
@@ -973,13 +1011,34 @@ function SalesSection({
         {customerFormVisible ? (
           <div className="inline-customer-form">
             <TextField
-              error={customerError ?? undefined}
-              label="Nombre cliente"
-              onChange={(value) => {
-                setCustomerForm({ name: value });
-                setCustomerError(null);
-              }}
+              error={customerErrors.name}
+              label="Nombre o razon social"
+              onChange={(value) => updateCustomerField("name", value)}
               value={customerForm.name}
+            />
+            <TextField
+              error={customerErrors.document}
+              label="NIT o C.C."
+              onChange={(value) => updateCustomerField("document", value)}
+              value={customerForm.document}
+            />
+            <TextField
+              error={customerErrors.address}
+              label="Direccion"
+              onChange={(value) => updateCustomerField("address", value)}
+              value={customerForm.address}
+            />
+            <TextField
+              error={customerErrors.city}
+              label="Ciudad"
+              onChange={(value) => updateCustomerField("city", value)}
+              value={customerForm.city}
+            />
+            <TextField
+              error={customerErrors.email}
+              label="Email"
+              onChange={(value) => updateCustomerField("email", value)}
+              value={customerForm.email}
             />
             <button type="button" onClick={submitCustomer}>
               Guardar cliente

@@ -390,11 +390,15 @@ button {
 
 .inline-customer-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #e2e8f0;
+}
+
+.inline-customer-form button {
+  align-self: end;
 }
 
 .payment-status-group {
