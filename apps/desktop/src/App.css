@@ -295,6 +295,20 @@ button {
   border-bottom: 0;
 }
 
+.table-action {
+  border-radius: 8px;
+  background: #eef2f7;
+  color: #334155;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.table-action:hover {
+  background: #dbe5ef;
+}
+
 .status {
   display: inline-flex;
   align-items: center;

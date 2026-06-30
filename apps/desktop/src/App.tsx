@@ -12,6 +12,7 @@ import {
   type FormEvent,
   type HTMLAttributes
 } from "react";
+import { generateInvoicePdf } from "./invoice-pdf";
 
 type SectionId =
   | "dashboard"
@@ -55,6 +56,7 @@ type CustomerRecord = {
 
 type SaleRecord = {
   id: string;
+  customer: CustomerRecord;
   customerId: string;
   customerName: string;
   productId: string;
@@ -425,6 +427,7 @@ export function App() {
     setSales((currentSales) => [
       {
         id: savedSale.sale.id,
+        customer: input.customer,
         customerId: input.customer.id,
         customerName: input.customer.name,
         productId: input.product.id,
@@ -453,6 +456,7 @@ export function App() {
     setSales((currentSales) => [
       {
         id: saleId,
+        customer: input.customer,
         customerId: input.customer.id,
         customerName: input.customer.name,
         productId: input.product.id,
@@ -838,6 +842,7 @@ function SalesSection({
   const [customerForm, setCustomerForm] =
     useState<CustomerFormState>(emptyCustomerForm);
   const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
 
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
@@ -924,6 +929,32 @@ function SalesSection({
     setCustomerForm(emptyCustomerForm);
     setCustomerErrors({});
     setCustomerFormVisible(false);
+  }
+
+  function generateInvoiceForSale(sale: SaleRecord) {
+    try {
+      generateInvoicePdf({
+        customer: {
+          address: sale.customer.address,
+          city: sale.customer.city,
+          document: sale.customer.document,
+          email: sale.customer.email,
+          name: sale.customer.name
+        },
+        invoiceNumber: `FE-${sale.id}`,
+        issueDate: sale.occurredAtLabel,
+        item: {
+          description: sale.productName,
+          quantity: sale.quantity,
+          totalMinor: sale.totalMinor,
+          unitPriceMinor: sale.unitPriceMinor
+        },
+        paymentStatus: sale.paymentStatus
+      });
+      setInvoiceError(null);
+    } catch {
+      setInvoiceError("No se pudo generar la factura PDF.");
+    }
   }
 
   return (
@@ -1099,30 +1130,43 @@ function SalesSection({
       </form>
 
       {sales.length > 0 ? (
-        <table className="data-table" aria-label="Ventas registradas">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Cliente</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Estado</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sales.map((sale) => (
-              <tr key={sale.id}>
-                <td>{sale.occurredAtLabel}</td>
-                <td>{sale.customerName}</td>
-                <td>{sale.productName}</td>
-                <td>{sale.quantity}</td>
-                <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
-                <td>{formatCurrency(sale.totalMinor)}</td>
+        <>
+          <table className="data-table" aria-label="Ventas registradas">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Estado</th>
+                <th>Total</th>
+                <th>Factura</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sales.map((sale) => (
+                <tr key={sale.id}>
+                  <td>{sale.occurredAtLabel}</td>
+                  <td>{sale.customerName}</td>
+                  <td>{sale.productName}</td>
+                  <td>{sale.quantity}</td>
+                  <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                  <td>{formatCurrency(sale.totalMinor)}</td>
+                  <td>
+                    <button
+                      className="table-action"
+                      onClick={() => generateInvoiceForSale(sale)}
+                      type="button"
+                    >
+                      Generar factura PDF
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
+        </>
       ) : (
         <div className="empty-state section-empty">
           <strong>Sin ventas registradas</strong>
