@@ -15,10 +15,12 @@ const setDrawColorMock = vi.fn();
 const setTextColorMock = vi.fn();
 const rectMock = vi.fn();
 const lineMock = vi.fn();
+const outputMock = vi.fn(() => "data:application/pdf;base64,invoice-pdf");
 
 vi.mock("jspdf", () => ({
   jsPDF: vi.fn().mockImplementation(() => ({
     line: lineMock,
+    output: outputMock,
     rect: rectMock,
     save: saveMock,
     setDrawColor: setDrawColorMock,
@@ -63,8 +65,8 @@ describe("invoice PDF", () => {
     expect(buildInvoicePaymentLabel("pending")).toBe("Credito");
   });
 
-  it("renders customer, item, payment, and totals into the generated PDF", () => {
-    generateInvoicePdf(invoiceInput);
+  it("renders customer, item, payment, and totals into a previewable PDF result", () => {
+    const result = generateInvoicePdf(invoiceInput);
 
     const renderedText = textMock.mock.calls
       .map((call) => String(call[0]))
@@ -80,7 +82,12 @@ describe("invoice PDF", () => {
     expect(renderedText).toContain("Arroz libra");
     expect(renderedText).toContain("Contado");
     expect(renderedText).toContain("$ 9.000");
-    expect(saveMock).toHaveBeenCalledWith("factura-FE-sale-1.pdf");
+    expect(outputMock).toHaveBeenCalledWith("datauristring");
+    expect(saveMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      dataUri: "data:application/pdf;base64,invoice-pdf",
+      fileName: "factura-FE-sale-1.pdf"
+    });
   });
 
   it("prints No registrado for empty optional customer fields", () => {

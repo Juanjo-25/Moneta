@@ -12,7 +12,7 @@ import {
   type FormEvent,
   type HTMLAttributes
 } from "react";
-import { generateInvoicePdf } from "./invoice-pdf";
+import { generateInvoicePdf, type InvoicePdfResult } from "./invoice-pdf";
 
 type SectionId =
   | "dashboard"
@@ -843,6 +843,7 @@ function SalesSection({
     useState<CustomerFormState>(emptyCustomerForm);
   const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
 
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
@@ -933,7 +934,7 @@ function SalesSection({
 
   function generateInvoiceForSale(sale: SaleRecord) {
     try {
-      generateInvoicePdf({
+      const invoice = generateInvoicePdf({
         customer: {
           address: sale.customer.address,
           city: sale.customer.city,
@@ -951,8 +952,10 @@ function SalesSection({
         },
         paymentStatus: sale.paymentStatus
       });
+      setInvoicePreview(invoice);
       setInvoiceError(null);
     } catch {
+      setInvoicePreview(null);
       setInvoiceError("No se pudo generar la factura PDF.");
     }
   }
@@ -1165,6 +1168,20 @@ function SalesSection({
               ))}
             </tbody>
           </table>
+          {invoicePreview ? (
+            <section className="invoice-preview" aria-label="Factura PDF generada">
+              <div className="invoice-preview-header">
+                <strong>Factura generada</strong>
+                <a download={invoicePreview.fileName} href={invoicePreview.dataUri}>
+                  Descargar PDF
+                </a>
+              </div>
+              <iframe
+                src={invoicePreview.dataUri}
+                title="Vista previa de factura PDF"
+              />
+            </section>
+          ) : null}
           {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
         </>
       ) : (

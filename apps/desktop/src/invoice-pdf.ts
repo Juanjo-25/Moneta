@@ -23,6 +23,11 @@ export type InvoicePdfInput = {
   paymentStatus: InvoicePaymentStatus;
 };
 
+export type InvoicePdfResult = {
+  dataUri: string;
+  fileName: string;
+};
+
 function formatCurrency(minor: number): string {
   const amount = new Intl.NumberFormat("es-CO", {
     maximumFractionDigits: 0
@@ -53,7 +58,7 @@ function writeText(
   doc.text(text, x, y, options);
 }
 
-export function generateInvoicePdf(input: InvoicePdfInput): void {
+export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   const doc = new jsPDF({ format: "letter", unit: "mm" });
   const paymentLabel = buildInvoicePaymentLabel(input.paymentStatus);
   const subtotal = formatCurrency(input.item.totalMinor);
@@ -161,5 +166,8 @@ export function generateInvoicePdf(input: InvoicePdfInput): void {
     { align: "center" }
   );
 
-  doc.save(buildInvoiceFileName(input.invoiceNumber));
+  return {
+    dataUri: doc.output("datauristring"),
+    fileName: buildInvoiceFileName(input.invoiceNumber)
+  };
 }

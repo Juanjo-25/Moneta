@@ -23,7 +23,11 @@ async function createProductFixture(user: UserEvent) {
 
 describe("App navigation", () => {
   beforeEach(() => {
-    generateInvoicePdfMock.mockClear();
+    generateInvoicePdfMock.mockReset();
+    generateInvoicePdfMock.mockReturnValue({
+      dataUri: "data:application/pdf;base64,invoice-pdf",
+      fileName: "factura-FE-sale-1.pdf"
+    });
   });
 
   it("switches active section from the sidebar", async () => {
@@ -300,6 +304,13 @@ describe("App navigation", () => {
         },
         paymentStatus: "paid"
       })
+    );
+    expect(screen.getByText("Factura generada")).toBeTruthy();
+    expect(screen.getByTitle("Vista previa de factura PDF").getAttribute("src")).toBe(
+      "data:application/pdf;base64,invoice-pdf"
+    );
+    expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
+      "data:application/pdf;base64,invoice-pdf"
     );
   });
 
