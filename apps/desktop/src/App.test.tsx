@@ -58,6 +58,17 @@ async function createPendingPurchaseFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Proveedores" }));
 }
 
+function formatDateOffsetFromToday(days: number): string {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 describe("App navigation", () => {
   beforeEach(() => {
     generateInvoicePdfMock.mockReset();
@@ -396,6 +407,124 @@ describe("App navigation", () => {
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receivablesTable).getByText(/\$\s*11\.500/)).toBeTruthy();
+  });
+
+  it("sorts cartera rows by due date and labels overdue and upcoming invoices", async () => {
+    const user = userEvent.setup();
+    const upcomingDueAt = formatDateOffsetFromToday(20);
+    const overdueDueAt = formatDateOffsetFromToday(-5);
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Tarde");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), upcomingDueAt);
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Vencido");
+    await user.type(screen.getByLabelText("NIT o C.C."), "456");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), overdueDueAt);
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    const rows = within(
+      screen.getByRole("table", { name: "Cartera por cobrar" })
+    ).getAllByRole("row");
+    expect(rows[1]?.textContent).toContain("Cliente Vencido");
+    expect(rows[1]?.textContent).toContain("Vencida");
+    expect(rows[2]?.textContent).toContain("Cliente Tarde");
+    expect(rows[2]?.textContent).toContain("30 dias");
+  });
+
+  it("shows cartera summary totals and switches between por cobrar and por pagar", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-10");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Central");
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+    await user.type(screen.getByLabelText("Numero factura"), "FC-3001");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-30");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "5");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    expect(screen.getByText("Total por cobrar")).toBeTruthy();
+    expect(screen.getByText("Total por pagar")).toBeTruthy();
+    expect(screen.getByText("Facturas vencidas")).toBeTruthy();
+    expect(screen.getByText("Proximas a vencer")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Por cobrar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Por pagar" })).toBeTruthy();
+    expect(screen.getByRole("table", { name: "Cartera por cobrar" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+
+    const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    expect(within(payablesTable).getByText("Proveedor Central")).toBeTruthy();
+    expect(within(payablesTable).getByText("FC-3001")).toBeTruthy();
+    expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
+  });
+
+  it("registers supplier payable payments from cartera por pagar", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "5000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    expect(within(payablesTable).getByText("Abonada")).toBeTruthy();
+    expect(within(payablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
   });
 
   it("registers a paid purchase, increases stock, and lists the invoice", async () => {

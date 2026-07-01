@@ -483,6 +483,92 @@ button {
   font-size: 18px;
 }
 
+.cartera-dashboard {
+  display: grid;
+  gap: 18px;
+}
+
+.cartera-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cartera-summary .summary-card {
+  margin-top: 0;
+}
+
+.cartera-alerts {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.cartera-alerts strong {
+  color: #0f172a;
+}
+
+.cartera-alerts > span {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.cartera-alerts ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cartera-alerts li {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px 14px;
+}
+
+.cartera-alerts li span,
+.cartera-alerts li strong {
+  font-size: 13px;
+}
+
+.cartera-alerts li span:first-child {
+  font-weight: 700;
+}
+
+.view-switch {
+  display: inline-flex;
+  width: fit-content;
+  gap: 6px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #eef2f7;
+  padding: 4px;
+}
+
+.view-switch button {
+  min-width: 124px;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  padding: 9px 14px;
+  font-weight: 700;
+}
+
+.view-switch button.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
 .form-error {
   margin: 14px 0 0;
   color: #b91c1c;
