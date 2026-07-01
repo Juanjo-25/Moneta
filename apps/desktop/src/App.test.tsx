@@ -12,6 +12,7 @@ const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
 
 async function createProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Productos" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
   await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
   await user.type(screen.getByLabelText("Producto"), "Arroz libra");
   await user.type(screen.getByLabelText("Unidad"), "4");
@@ -19,6 +20,30 @@ async function createProductFixture(user: UserEvent) {
   await user.type(screen.getByLabelText("Precio venta"), "4500");
   await user.type(screen.getByLabelText("Stock minimo"), "1");
   await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+}
+
+async function createSupplierFixture(user: UserEvent, name = "Distribuidora Norte") {
+  await user.click(screen.getByRole("button", { name: "Compras" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+  await user.type(screen.getByLabelText("Nombre proveedor"), name);
+  await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+}
+
+async function createPendingPurchaseFixture(user: UserEvent) {
+  await createProductFixture(user);
+  await createSupplierFixture(user, "Proveedor Central");
+  await user.type(screen.getByLabelText("Numero factura"), "FC-3001");
+  await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
+  await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-30");
+  await user.selectOptions(
+    screen.getByLabelText("Producto"),
+    screen.getByRole("option", { name: "Arroz libra" })
+  );
+  await user.type(screen.getByLabelText("Cantidad compra"), "5");
+  await user.type(screen.getByLabelText("Costo unitario"), "3000");
+  await user.click(screen.getByLabelText("Pendiente"));
+  await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+  await user.click(screen.getByRole("button", { name: "Proveedores" }));
 }
 
 describe("App navigation", () => {
@@ -66,6 +91,7 @@ describe("App navigation", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
     await user.type(screen.getByLabelText("Producto"), "Arroz libra");
     await user.type(screen.getByLabelText("Unidad"), "4");
@@ -90,12 +116,29 @@ describe("App navigation", () => {
     expect(screen.getByText("Arroz libra")).toBeTruthy();
   });
 
+  it("shows the product entry form only after clicking nuevo producto", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    expect(screen.queryByLabelText("Codigo")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Guardar producto" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+
+    expect(screen.getByLabelText("Codigo")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Guardar producto" })).toBeTruthy();
+  });
+
   it("formats cost and sale price as colombian pesos while typing", async () => {
     const user = userEvent.setup();
 
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
 
     const costInput = screen.getByLabelText("Costo") as HTMLInputElement;
     const salePriceInput = screen.getByLabelText("Precio venta") as HTMLInputElement;
@@ -113,6 +156,7 @@ describe("App navigation", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     expect(screen.queryByLabelText("Stock inicial")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Guardar producto" }));
 
@@ -186,6 +230,174 @@ describe("App navigation", () => {
     const receivablesTable = screen.getByRole("table", { name: "Cartera pendiente" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
+  });
+
+  it("registers a paid purchase, increases stock, and lists the invoice", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSupplierFixture(user);
+    await user.type(screen.getByLabelText("Numero factura"), "FC-1001");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-15");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "6");
+    await user.type(screen.getByLabelText("Costo unitario"), "3100");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    const purchasesTable = screen.getByRole("table", { name: "Compras registradas" });
+    expect(within(purchasesTable).getByText("Distribuidora Norte")).toBeTruthy();
+    expect(within(purchasesTable).getByText("FC-1001")).toBeTruthy();
+    expect(within(purchasesTable).getByText("Arroz libra")).toBeTruthy();
+    expect(within(purchasesTable).getByText("Pagada")).toBeTruthy();
+    expect(within(purchasesTable).getByText(/\$\s*18\.600/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("cell", { name: "10" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    expect(screen.getByText("Sin cuentas por pagar")).toBeTruthy();
+  });
+
+  it("creates a new product inline while registering a purchase invoice", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createSupplierFixture(user, "Distribuidora Sur");
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    await user.type(screen.getByLabelText("Codigo producto"), "PAN-001");
+    await user.type(screen.getByLabelText("Nombre producto"), "Panela unidad");
+    await user.type(screen.getByLabelText("Costo producto"), "2500");
+    await user.type(screen.getByLabelText("Precio venta producto"), "3500");
+    await user.type(screen.getByLabelText("Stock minimo producto"), "2");
+    await user.click(screen.getByRole("button", { name: "Guardar producto compra" }));
+    await user.type(screen.getByLabelText("Numero factura"), "FC-1002");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "8");
+    await user.type(screen.getByLabelText("Costo unitario"), "2500");
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    const purchasesTable = screen.getByRole("table", { name: "Compras registradas" });
+    expect(within(purchasesTable).getByText("Panela unidad")).toBeTruthy();
+    expect(within(purchasesTable).getByText(/\$\s*20\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("cell", { name: "PAN-001" })).toBeTruthy();
+    expect(within(productsTable).getByRole("cell", { name: "Panela unidad" })).toBeTruthy();
+    expect(within(productsTable).getByRole("cell", { name: "8" })).toBeTruthy();
+  });
+
+  it("registers a pending purchase and creates a supplier payable", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSupplierFixture(user, "Proveedor Central");
+    await user.type(screen.getByLabelText("Numero factura"), "FC-2001");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-30");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "5");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+
+    const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
+    expect(within(payablesTable).getByText("Proveedor Central")).toBeTruthy();
+    expect(within(payablesTable).getByText("FC-2001")).toBeTruthy();
+    expect(within(payablesTable).getByText("Pendiente")).toBeTruthy();
+    expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
+  });
+
+  it("registers a partial supplier payment and marks payable as abonada", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "5000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
+    expect(within(payablesTable).getByText("Abonada")).toBeTruthy();
+    expect(within(payablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
+  });
+
+  it("registers a full supplier payment and marks payable as pagada", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "15000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
+    expect(within(payablesTable).getByText("Pagada")).toBeTruthy();
+    expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(1);
+    expect(within(payablesTable).getByText(/\$\s*0/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Registrar abono" })).toBeNull();
+  });
+
+  it("validates missing purchase invoice fields and empty supplier name", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    expect(screen.getByText("El nombre del proveedor es obligatorio.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    expect(screen.getByText("Debes seleccionar un proveedor.")).toBeTruthy();
+    expect(screen.getByText("El numero de factura es obligatorio.")).toBeTruthy();
+    expect(screen.getByText("La fecha de emision es obligatoria.")).toBeTruthy();
+    expect(screen.getByText("Debes seleccionar un producto.")).toBeTruthy();
+    expect(screen.getByText("La cantidad debe ser un entero mayor a cero.")).toBeTruthy();
+    expect(screen.getByText("El costo unitario debe ser cero o mayor.")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Compras registradas" })).toBeNull();
+  });
+
+  it("rejects supplier payment greater than payable balance", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "16000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    expect(screen.getByText("El abono no puede superar el saldo pendiente.")).toBeTruthy();
+    const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
+    expect(within(payablesTable).getByText("Pendiente")).toBeTruthy();
+    expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
   });
 
   it("validates missing customer, product, quantity, and empty inline customer name", async () => {

@@ -516,11 +516,7 @@ export function App() {
           </div>
           <button
             className="primary-action"
-            onClick={() =>
-              activeSection.id === "dashboard"
-                ? openSection("sales")
-                : openSection(activeSection.id)
-            }
+            onClick={handlePrimaryAction}
           >
             {activeSection.primaryAction}
           </button>
@@ -538,12 +534,20 @@ export function App() {
             customers={customers}
             onCreateCustomer={createCustomer}
             onCreateProduct={createProduct}
+            onCreateSupplier={createSupplier}
+            onRegisterPurchase={registerPurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
+            onRegisterSupplierPayment={registerSupplierPayment}
+            onCloseProductForm={() => setProductFormVisible(false)}
+            productFormVisible={productFormVisible}
             products={products}
+            purchases={purchases}
             receivables={receivables}
             sales={sales}
             section={activeSection}
+            supplierPayables={supplierPayables}
+            suppliers={suppliers}
           />
         )}
       </section>
@@ -619,6 +623,17 @@ type SectionContentProps = {
   customers: CustomerRecord[];
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onCreateProduct: (product: ProductRecord) => void;
+  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onRegisterPurchase: (input: {
+    supplier: SupplierRecord;
+    product: ProductRecord;
+    invoiceNumber: string;
+    issuedAt: string;
+    dueAt: string;
+    quantity: number;
+    unitCostMinor: number;
+    paymentStatus: PurchasePaymentStatus;
+  }) => void;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     product: ProductRecord;
@@ -629,25 +644,62 @@ type SectionContentProps = {
     product: ProductRecord;
     quantity: number;
   }) => void;
+  onRegisterSupplierPayment: (input: {
+    payableId: string;
+    amountMinor: number;
+  }) => void;
+  onCloseProductForm: () => void;
+  productFormVisible: boolean;
   products: ProductRecord[];
+  purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
   section: SectionConfig;
+  supplierPayables: SupplierPayableRecord[];
+  suppliers: SupplierRecord[];
 };
 
 function SectionContent({
   customers,
   onCreateCustomer,
   onCreateProduct,
+  onCreateSupplier,
+  onRegisterPurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
+  onRegisterSupplierPayment,
+  onCloseProductForm,
+  productFormVisible,
   products,
+  purchases,
   receivables,
   sales,
-  section
+  section,
+  supplierPayables,
+  suppliers
 }: SectionContentProps) {
   if (section.id === "products") {
-    return <ProductsSection onCreateProduct={onCreateProduct} products={products} />;
+    return (
+      <ProductsSection
+        formVisible={productFormVisible}
+        onCloseForm={onCloseProductForm}
+        onCreateProduct={onCreateProduct}
+        products={products}
+      />
+    );
+  }
+
+  if (section.id === "purchases") {
+    return (
+      <PurchasesSection
+        onCreateProduct={onCreateProduct}
+        onCreateSupplier={onCreateSupplier}
+        onRegisterPurchase={onRegisterPurchase}
+        products={products}
+        purchases={purchases}
+        suppliers={suppliers}
+      />
+    );
   }
 
   if (section.id === "sales") {
@@ -667,6 +719,15 @@ function SectionContent({
     return <ReceivablesSection receivables={receivables} />;
   }
 
+  if (section.id === "suppliers") {
+    return (
+      <SuppliersSection
+        onRegisterSupplierPayment={onRegisterSupplierPayment}
+        supplierPayables={supplierPayables}
+      />
+    );
+  }
+
   return (
     <section className="section-panel">
       <div className="empty-state section-empty">
@@ -678,11 +739,18 @@ function SectionContent({
 }
 
 type ProductsSectionProps = {
+  formVisible: boolean;
+  onCloseForm: () => void;
   onCreateProduct: (product: ProductRecord) => void;
   products: ProductRecord[];
 };
 
-function ProductsSection({ onCreateProduct, products }: ProductsSectionProps) {
+function ProductsSection({
+  formVisible,
+  onCloseForm,
+  onCreateProduct,
+  products
+}: ProductsSectionProps) {
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [errors, setErrors] = useState<ProductFormErrors>({});
 
@@ -747,57 +815,60 @@ function ProductsSection({ onCreateProduct, products }: ProductsSectionProps) {
       stock: quantity!
     });
     setForm(emptyProductForm);
+    onCloseForm();
   }
 
   return (
     <section className="products-layout">
-      <form className="product-form" onSubmit={submitProduct}>
-        <div className="form-grid">
-          <TextField
-            error={errors.sku}
-            label="Codigo"
-            onChange={(value) => updateField("sku", value)}
-            value={form.sku}
-          />
-          <TextField
-            error={errors.name}
-            label="Producto"
-            onChange={(value) => updateField("name", value)}
-            value={form.name}
-          />
-          <TextField
-            error={errors.quantity}
-            inputMode="numeric"
-            label="Unidad"
-            onChange={(value) => updateField("quantity", value)}
-            value={form.quantity}
-          />
-          <TextField
-            error={errors.cost}
-            inputMode="numeric"
-            label="Costo"
-            onChange={(value) => updateMoneyField("cost", value)}
-            value={form.cost}
-          />
-          <TextField
-            error={errors.salePrice}
-            inputMode="numeric"
-            label="Precio venta"
-            onChange={(value) => updateMoneyField("salePrice", value)}
-            value={form.salePrice}
-          />
-          <TextField
-            error={errors.minimumStock}
-            inputMode="numeric"
-            label="Stock minimo"
-            onChange={(value) => updateField("minimumStock", value)}
-            value={form.minimumStock}
-          />
-        </div>
-        <div className="form-actions">
-          <button type="submit">Guardar producto</button>
-        </div>
-      </form>
+      {formVisible ? (
+        <form className="product-form" onSubmit={submitProduct}>
+          <div className="form-grid">
+            <TextField
+              error={errors.sku}
+              label="Codigo"
+              onChange={(value) => updateField("sku", value)}
+              value={form.sku}
+            />
+            <TextField
+              error={errors.name}
+              label="Producto"
+              onChange={(value) => updateField("name", value)}
+              value={form.name}
+            />
+            <TextField
+              error={errors.quantity}
+              inputMode="numeric"
+              label="Unidad"
+              onChange={(value) => updateField("quantity", value)}
+              value={form.quantity}
+            />
+            <TextField
+              error={errors.cost}
+              inputMode="numeric"
+              label="Costo"
+              onChange={(value) => updateMoneyField("cost", value)}
+              value={form.cost}
+            />
+            <TextField
+              error={errors.salePrice}
+              inputMode="numeric"
+              label="Precio venta"
+              onChange={(value) => updateMoneyField("salePrice", value)}
+              value={form.salePrice}
+            />
+            <TextField
+              error={errors.minimumStock}
+              inputMode="numeric"
+              label="Stock minimo"
+              onChange={(value) => updateField("minimumStock", value)}
+              value={form.minimumStock}
+            />
+          </div>
+          <div className="form-actions">
+            <button type="submit">Guardar producto</button>
+          </div>
+        </form>
+      ) : null}
 
       {products.length > 0 ? (
         <ProductTable products={products} />
@@ -807,6 +878,568 @@ function ProductsSection({ onCreateProduct, products }: ProductsSectionProps) {
           <span>Crea productos para empezar a controlar inventario.</span>
         </div>
       )}
+    </section>
+  );
+}
+
+type PurchasesSectionProps = {
+  onCreateProduct: (product: ProductRecord) => void;
+  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onRegisterPurchase: (input: {
+    supplier: SupplierRecord;
+    product: ProductRecord;
+    invoiceNumber: string;
+    issuedAt: string;
+    dueAt: string;
+    quantity: number;
+    unitCostMinor: number;
+    paymentStatus: PurchasePaymentStatus;
+  }) => void;
+  products: ProductRecord[];
+  purchases: PurchaseRecord[];
+  suppliers: SupplierRecord[];
+};
+
+function PurchasesSection({
+  onCreateProduct,
+  onCreateSupplier,
+  onRegisterPurchase,
+  products,
+  purchases,
+  suppliers
+}: PurchasesSectionProps) {
+  const [form, setForm] = useState<PurchaseFormState>(emptyPurchaseForm);
+  const [errors, setErrors] = useState<PurchaseFormErrors>({});
+  const [supplierFormVisible, setSupplierFormVisible] = useState(false);
+  const [supplierForm, setSupplierForm] =
+    useState<SupplierFormState>(emptySupplierForm);
+  const [supplierErrors, setSupplierErrors] = useState<SupplierFormErrors>({});
+  const [productFormVisible, setProductFormVisible] = useState(false);
+  const [productForm, setProductForm] =
+    useState<PurchaseProductFormState>(emptyPurchaseProductForm);
+  const [productErrors, setProductErrors] = useState<PurchaseProductFormErrors>({});
+
+  const selectedSupplier =
+    suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
+  const selectedProduct =
+    products.find((product) => product.id === form.productId) ?? null;
+  const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
+  const unitCost = parseNonNegativeInteger(form.unitCost) ?? 0;
+  const totalMinor = quantity * unitCost;
+
+  function updateField(field: keyof PurchaseFormState, value: string) {
+    setForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function updateMoneyField(value: string) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      unitCost: formatIntegerInput(value)
+    }));
+    setErrors((currentErrors) => ({ ...currentErrors, unitCost: undefined }));
+  }
+
+  function updateProductField(
+    field: keyof PurchaseProductFormState,
+    value: string
+  ) {
+    setProductForm((currentForm) => ({
+      ...currentForm,
+      [field]:
+        field === "cost" || field === "salePrice" || field === "minimumStock"
+          ? formatIntegerInput(value)
+          : value
+    }));
+    setProductErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined
+    }));
+  }
+
+  function submitSupplier() {
+    const nextErrors: SupplierFormErrors = {};
+
+    if (supplierForm.name.trim() === "") {
+      nextErrors.name = "El nombre del proveedor es obligatorio.";
+    }
+
+    setSupplierErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    const supplier = onCreateSupplier(supplierForm);
+
+    setForm((currentForm) => ({ ...currentForm, supplierId: supplier.id }));
+    setSupplierForm(emptySupplierForm);
+    setSupplierErrors({});
+    setSupplierFormVisible(false);
+  }
+
+  function submitProduct() {
+    const nextErrors: PurchaseProductFormErrors = {};
+    const cost = parseNonNegativeInteger(productForm.cost);
+    const salePrice = parseNonNegativeInteger(productForm.salePrice);
+    const minimumStock = parseNonNegativeInteger(productForm.minimumStock);
+
+    if (productForm.sku.trim() === "") {
+      nextErrors.sku = "El codigo es obligatorio.";
+    }
+    if (productForm.name.trim() === "") {
+      nextErrors.name = "El nombre es obligatorio.";
+    }
+    if (cost === null) {
+      nextErrors.cost = "El costo debe ser cero o mayor.";
+    }
+    if (salePrice === null) {
+      nextErrors.salePrice = "El precio de venta debe ser cero o mayor.";
+    }
+    if (minimumStock === null) {
+      nextErrors.minimumStock = "El stock minimo debe ser cero o mayor.";
+    }
+
+    setProductErrors(nextErrors);
+
+    if (
+      Object.keys(nextErrors).length > 0 ||
+      cost === null ||
+      salePrice === null ||
+      minimumStock === null
+    ) {
+      return;
+    }
+
+    const product = {
+      active: true,
+      costMinor: cost,
+      id: `product-${Date.now()}`,
+      minimumStock,
+      name: productForm.name.trim(),
+      salePriceMinor: salePrice,
+      sku: productForm.sku.trim(),
+      stock: 0
+    };
+
+    onCreateProduct(product);
+    setForm((currentForm) => ({ ...currentForm, productId: product.id }));
+    setProductForm(emptyPurchaseProductForm);
+    setProductErrors({});
+    setProductFormVisible(false);
+  }
+
+  function submitPurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: PurchaseFormErrors = {};
+    const parsedQuantity = parseNonNegativeInteger(form.quantity);
+    const parsedUnitCost = parseNonNegativeInteger(form.unitCost);
+
+    if (!selectedSupplier) {
+      nextErrors.supplierId = "Debes seleccionar un proveedor.";
+    }
+    if (form.invoiceNumber.trim() === "") {
+      nextErrors.invoiceNumber = "El numero de factura es obligatorio.";
+    }
+    if (form.issuedAt.trim() === "") {
+      nextErrors.issuedAt = "La fecha de emision es obligatoria.";
+    }
+    if (!selectedProduct) {
+      nextErrors.productId = "Debes seleccionar un producto.";
+    }
+    if (parsedQuantity === null || parsedQuantity <= 0) {
+      nextErrors.quantity = "La cantidad debe ser un entero mayor a cero.";
+    }
+    if (parsedUnitCost === null) {
+      nextErrors.unitCost = "El costo unitario debe ser cero o mayor.";
+    }
+
+    setErrors(nextErrors);
+
+    if (
+      Object.keys(nextErrors).length > 0 ||
+      !selectedSupplier ||
+      !selectedProduct ||
+      parsedQuantity === null ||
+      parsedQuantity <= 0 ||
+      parsedUnitCost === null
+    ) {
+      return;
+    }
+
+    onRegisterPurchase({
+      dueAt: form.dueAt.trim(),
+      invoiceNumber: form.invoiceNumber.trim(),
+      issuedAt: form.issuedAt.trim(),
+      paymentStatus: form.paymentStatus,
+      product: selectedProduct,
+      quantity: parsedQuantity,
+      supplier: selectedSupplier,
+      unitCostMinor: parsedUnitCost
+    });
+    setErrors({});
+    setForm(emptyPurchaseForm);
+  }
+
+  return (
+    <section className="purchases-layout">
+      <form className="purchase-form" onSubmit={submitPurchase}>
+        <div className="purchase-grid">
+          <label className="field" htmlFor="proveedor-compra">
+            <span>Proveedor</span>
+            <select
+              aria-invalid={Boolean(errors.supplierId)}
+              id="proveedor-compra"
+              onChange={(event) => updateField("supplierId", event.target.value)}
+              value={form.supplierId}
+            >
+              <option value="">Selecciona un proveedor</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name}
+                </option>
+              ))}
+            </select>
+            {errors.supplierId ? <small>{errors.supplierId}</small> : null}
+          </label>
+
+          <div className="inline-action-group">
+            <button
+              type="button"
+              onClick={() => setSupplierFormVisible((visible) => !visible)}
+            >
+              Nuevo proveedor
+            </button>
+          </div>
+
+          <TextField
+            error={errors.invoiceNumber}
+            label="Numero factura"
+            onChange={(value) => updateField("invoiceNumber", value)}
+            value={form.invoiceNumber}
+          />
+          <TextField
+            error={errors.issuedAt}
+            label="Fecha emision"
+            onChange={(value) => updateField("issuedAt", value)}
+            value={form.issuedAt}
+          />
+          <TextField
+            error={errors.dueAt}
+            label="Fecha vencimiento"
+            onChange={(value) => updateField("dueAt", value)}
+            value={form.dueAt}
+          />
+          <label className="field" htmlFor="producto-compra">
+            <span>Producto</span>
+            <select
+              aria-invalid={Boolean(errors.productId)}
+              id="producto-compra"
+              onChange={(event) => updateField("productId", event.target.value)}
+              value={form.productId}
+            >
+              <option value="">Selecciona un producto</option>
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+            {errors.productId ? <small>{errors.productId}</small> : null}
+          </label>
+          <div className="inline-action-group">
+            <button
+              type="button"
+              onClick={() => setProductFormVisible((visible) => !visible)}
+            >
+              Nuevo producto
+            </button>
+          </div>
+          <TextField
+            error={errors.quantity}
+            inputMode="numeric"
+            label="Cantidad compra"
+            onChange={(value) => updateField("quantity", value)}
+            value={form.quantity}
+          />
+          <TextField
+            error={errors.unitCost}
+            inputMode="numeric"
+            label="Costo unitario"
+            onChange={updateMoneyField}
+            value={form.unitCost}
+          />
+        </div>
+
+        {supplierFormVisible ? (
+          <div className="inline-supplier-form">
+            <TextField
+              error={supplierErrors.name}
+              label="Nombre proveedor"
+              onChange={(value) => {
+                setSupplierForm({ name: value });
+                setSupplierErrors({});
+              }}
+              value={supplierForm.name}
+            />
+            <button type="button" onClick={submitSupplier}>
+              Guardar proveedor
+            </button>
+          </div>
+        ) : null}
+
+        {productFormVisible ? (
+          <div className="inline-purchase-product-form">
+            <TextField
+              error={productErrors.sku}
+              label="Codigo producto"
+              onChange={(value) => updateProductField("sku", value)}
+              value={productForm.sku}
+            />
+            <TextField
+              error={productErrors.name}
+              label="Nombre producto"
+              onChange={(value) => updateProductField("name", value)}
+              value={productForm.name}
+            />
+            <TextField
+              error={productErrors.cost}
+              inputMode="numeric"
+              label="Costo producto"
+              onChange={(value) => updateProductField("cost", value)}
+              value={productForm.cost}
+            />
+            <TextField
+              error={productErrors.salePrice}
+              inputMode="numeric"
+              label="Precio venta producto"
+              onChange={(value) => updateProductField("salePrice", value)}
+              value={productForm.salePrice}
+            />
+            <TextField
+              error={productErrors.minimumStock}
+              inputMode="numeric"
+              label="Stock minimo producto"
+              onChange={(value) => updateProductField("minimumStock", value)}
+              value={productForm.minimumStock}
+            />
+            <button type="button" onClick={submitProduct}>
+              Guardar producto compra
+            </button>
+          </div>
+        ) : null}
+
+        <div
+          aria-label="Estado de factura compra"
+          className="payment-status-group"
+          role="radiogroup"
+        >
+          <label htmlFor="compra-pagada">
+            <input
+              checked={form.paymentStatus === "paid"}
+              id="compra-pagada"
+              name="purchase-payment-status"
+              onChange={() => updateField("paymentStatus", "paid")}
+              type="radio"
+            />
+            Pagada
+          </label>
+          <label htmlFor="compra-pendiente">
+            <input
+              checked={form.paymentStatus === "pending"}
+              id="compra-pendiente"
+              name="purchase-payment-status"
+              onChange={() => updateField("paymentStatus", "pending")}
+              type="radio"
+            />
+            Pendiente
+          </label>
+        </div>
+
+        <div className="summary-card">
+          <span>Costo unitario {formatCurrency(unitCost)}</span>
+          <strong>Total factura {formatCurrency(totalMinor)}</strong>
+        </div>
+
+        <div className="form-actions">
+          <button type="submit">Registrar compra</button>
+        </div>
+      </form>
+
+      {purchases.length > 0 ? (
+        <table className="data-table" aria-label="Compras registradas">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Proveedor</th>
+              <th>Factura</th>
+              <th>Producto</th>
+              <th>Cantidad</th>
+              <th>Estado</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {purchases.map((purchase) => (
+              <tr key={purchase.id}>
+                <td>{purchase.occurredAtLabel}</td>
+                <td>{purchase.supplierName}</td>
+                <td>{purchase.invoiceNumber}</td>
+                <td>{purchase.productName}</td>
+                <td>{purchase.quantity}</td>
+                <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                <td>{formatCurrency(purchase.totalMinor)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="empty-state section-empty">
+          <strong>Sin compras registradas</strong>
+          <span>Las compras confirmadas aumentaran el inventario.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type SuppliersSectionProps = {
+  onRegisterSupplierPayment: (input: {
+    payableId: string;
+    amountMinor: number;
+  }) => void;
+  supplierPayables: SupplierPayableRecord[];
+};
+
+function formatPayableStatus(status: SupplierPayableStatus): string {
+  if (status === "paid") {
+    return "Pagada";
+  }
+
+  return status === "partial" ? "Abonada" : "Pendiente";
+}
+
+function SuppliersSection({
+  onRegisterSupplierPayment,
+  supplierPayables
+}: SuppliersSectionProps) {
+  const [form, setForm] = useState<SupplierPaymentFormState>({
+    amount: "",
+    payableId: ""
+  });
+  const [errors, setErrors] = useState<SupplierPaymentFormErrors>({});
+  const selectedPayable =
+    supplierPayables.find((payable) => payable.id === form.payableId) ?? null;
+
+  function openPaymentForm(payableId: string) {
+    setForm({ amount: "", payableId });
+    setErrors({});
+  }
+
+  function updateAmount(value: string) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      amount: formatIntegerInput(value)
+    }));
+    setErrors({});
+  }
+
+  function submitPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const amount = parseNonNegativeInteger(form.amount);
+
+    if (amount === null || amount <= 0) {
+      setErrors({ amount: "El abono debe ser mayor a cero." });
+      return;
+    }
+    if (selectedPayable && amount > selectedPayable.balanceMinor) {
+      setErrors({ amount: "El abono no puede superar el saldo pendiente." });
+      return;
+    }
+    if (!selectedPayable) {
+      return;
+    }
+
+    onRegisterSupplierPayment({
+      amountMinor: amount,
+      payableId: selectedPayable.id
+    });
+    setForm({ amount: "", payableId: "" });
+    setErrors({});
+  }
+
+  if (supplierPayables.length === 0) {
+    return (
+      <section className="section-panel">
+        <div className="empty-state section-empty">
+          <strong>Sin cuentas por pagar</strong>
+          <span>Las facturas pendientes de proveedor apareceran aqui.</span>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="section-panel">
+      <table className="data-table" aria-label="Cuentas por pagar">
+        <thead>
+          <tr>
+            <th>Proveedor</th>
+            <th>Factura</th>
+            <th>Vence</th>
+            <th>Original</th>
+            <th>Abonado</th>
+            <th>Saldo</th>
+            <th>Estado</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {supplierPayables.map((payable) => (
+            <tr key={payable.id}>
+              <td>{payable.supplierName}</td>
+              <td>{payable.invoiceNumber}</td>
+              <td>{payable.dueAt || "Sin vencimiento"}</td>
+              <td>{formatCurrency(payable.originalAmountMinor)}</td>
+              <td>{formatCurrency(payable.paidAmountMinor)}</td>
+              <td>{formatCurrency(payable.balanceMinor)}</td>
+              <td>{formatPayableStatus(payable.status)}</td>
+              <td>
+                {payable.status !== "paid" ? (
+                  <button
+                    className="table-action"
+                    onClick={() => openPaymentForm(payable.id)}
+                    type="button"
+                  >
+                    Registrar abono
+                  </button>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {selectedPayable ? (
+        <form className="supplier-payment-form" onSubmit={submitPayment}>
+          <div className="summary-card">
+            <span>{selectedPayable.supplierName}</span>
+            <strong>Saldo {formatCurrency(selectedPayable.balanceMinor)}</strong>
+          </div>
+          <TextField
+            error={errors.amount}
+            inputMode="numeric"
+            label="Valor abono"
+            onChange={updateAmount}
+            value={form.amount}
+          />
+          <div className="form-actions">
+            <button type="submit">Guardar abono</button>
+          </div>
+        </form>
+      ) : null}
     </section>
   );
 }
