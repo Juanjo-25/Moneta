@@ -12,6 +12,7 @@ import {
   type FormEvent,
   type HTMLAttributes
 } from "react";
+import { generateInvoicePdf, type InvoicePdfResult } from "./invoice-pdf";
 
 type SectionId =
   | "dashboard"
@@ -47,10 +48,15 @@ type ProductRecord = {
 type CustomerRecord = {
   id: string;
   name: string;
+  document: string;
+  address: string;
+  city: string;
+  email: string;
 };
 
 type SaleRecord = {
   id: string;
+  customer: CustomerRecord;
   customerId: string;
   customerName: string;
   productId: string;
@@ -98,7 +104,13 @@ type SalesFormErrors = {
 
 type CustomerFormState = {
   name: string;
+  document: string;
+  address: string;
+  city: string;
+  email: string;
 };
+
+type CustomerFormErrors = Partial<Record<keyof CustomerFormState, string>>;
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -114,6 +126,14 @@ const emptySalesForm: SalesFormState = {
   productId: "",
   quantity: "",
   paymentStatus: "paid"
+};
+
+const emptyCustomerForm: CustomerFormState = {
+  address: "",
+  city: "",
+  document: "",
+  email: "",
+  name: ""
 };
 
 const navigationItems: SectionConfig[] = [
@@ -346,10 +366,14 @@ export function App() {
     setProducts((currentProducts) => [...currentProducts, product]);
   }
 
-  function createCustomer(name: string): CustomerRecord {
+  function createCustomer(input: CustomerFormState): CustomerRecord {
     const customer = {
+      address: input.address.trim(),
+      city: input.city.trim(),
+      document: input.document.trim(),
+      email: input.email.trim(),
       id: `customer-${Date.now()}`,
-      name: name.trim()
+      name: input.name.trim()
     };
 
     setCustomers((currentCustomers) => [...currentCustomers, customer]);
@@ -403,6 +427,7 @@ export function App() {
     setSales((currentSales) => [
       {
         id: savedSale.sale.id,
+        customer: input.customer,
         customerId: input.customer.id,
         customerName: input.customer.name,
         productId: input.product.id,
@@ -431,6 +456,7 @@ export function App() {
     setSales((currentSales) => [
       {
         id: saleId,
+        customer: input.customer,
         customerId: input.customer.id,
         customerName: input.customer.name,
         productId: input.product.id,
@@ -591,7 +617,7 @@ function DashboardContent({
 
 type SectionContentProps = {
   customers: CustomerRecord[];
-  onCreateCustomer: (name: string) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onCreateProduct: (product: ProductRecord) => void;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
@@ -787,7 +813,7 @@ function ProductsSection({ onCreateProduct, products }: ProductsSectionProps) {
 
 type SalesSectionProps = {
   customers: CustomerRecord[];
-  onCreateCustomer: (name: string) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     product: ProductRecord;
@@ -813,8 +839,11 @@ function SalesSection({
   const [form, setForm] = useState<SalesFormState>(emptySalesForm);
   const [errors, setErrors] = useState<SalesFormErrors>({});
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
-  const [customerForm, setCustomerForm] = useState<CustomerFormState>({ name: "" });
-  const [customerError, setCustomerError] = useState<string | null>(null);
+  const [customerForm, setCustomerForm] =
+    useState<CustomerFormState>(emptyCustomerForm);
+  const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
 
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
@@ -874,18 +903,61 @@ function SalesSection({
     setForm(emptySalesForm);
   }
 
+  function updateCustomerField(field: keyof CustomerFormState, value: string) {
+    setCustomerForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setCustomerErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
   function submitCustomer() {
+    const nextErrors: CustomerFormErrors = {};
+
     if (customerForm.name.trim() === "") {
-      setCustomerError("El nombre del cliente es obligatorio.");
+      nextErrors.name = "El nombre del cliente es obligatorio.";
+    }
+    if (customerForm.document.trim() === "") {
+      nextErrors.document = "El documento del cliente es obligatorio.";
+    }
+
+    setCustomerErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
       return;
     }
 
-    const customer = onCreateCustomer(customerForm.name);
+    const customer = onCreateCustomer(customerForm);
 
     setForm((currentForm) => ({ ...currentForm, customerId: customer.id }));
-    setCustomerForm({ name: "" });
-    setCustomerError(null);
+    setCustomerForm(emptyCustomerForm);
+    setCustomerErrors({});
     setCustomerFormVisible(false);
+  }
+
+  function generateInvoiceForSale(sale: SaleRecord) {
+    try {
+      const invoice = generateInvoicePdf({
+        customer: {
+          address: sale.customer.address,
+          city: sale.customer.city,
+          document: sale.customer.document,
+          email: sale.customer.email,
+          name: sale.customer.name
+        },
+        invoiceNumber: `FE-${sale.id}`,
+        issueDate: sale.occurredAtLabel,
+        item: {
+          description: sale.productName,
+          quantity: sale.quantity,
+          totalMinor: sale.totalMinor,
+          unitPriceMinor: sale.unitPriceMinor
+        },
+        paymentStatus: sale.paymentStatus
+      });
+      setInvoicePreview(invoice);
+      setInvoiceError(null);
+    } catch {
+      setInvoicePreview(null);
+      setInvoiceError("No se pudo generar la factura PDF.");
+    }
   }
 
   return (
@@ -912,7 +984,7 @@ function SalesSection({
               <option value="">Selecciona un cliente</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
-                  {customer.name}
+                  {customer.name} - {customer.document}
                 </option>
               ))}
             </select>
@@ -973,13 +1045,34 @@ function SalesSection({
         {customerFormVisible ? (
           <div className="inline-customer-form">
             <TextField
-              error={customerError ?? undefined}
-              label="Nombre cliente"
-              onChange={(value) => {
-                setCustomerForm({ name: value });
-                setCustomerError(null);
-              }}
+              error={customerErrors.name}
+              label="Nombre o razon social"
+              onChange={(value) => updateCustomerField("name", value)}
               value={customerForm.name}
+            />
+            <TextField
+              error={customerErrors.document}
+              label="NIT o C.C."
+              onChange={(value) => updateCustomerField("document", value)}
+              value={customerForm.document}
+            />
+            <TextField
+              error={customerErrors.address}
+              label="Direccion"
+              onChange={(value) => updateCustomerField("address", value)}
+              value={customerForm.address}
+            />
+            <TextField
+              error={customerErrors.city}
+              label="Ciudad"
+              onChange={(value) => updateCustomerField("city", value)}
+              value={customerForm.city}
+            />
+            <TextField
+              error={customerErrors.email}
+              label="Email"
+              onChange={(value) => updateCustomerField("email", value)}
+              value={customerForm.email}
             />
             <button type="button" onClick={submitCustomer}>
               Guardar cliente
@@ -1040,30 +1133,57 @@ function SalesSection({
       </form>
 
       {sales.length > 0 ? (
-        <table className="data-table" aria-label="Ventas registradas">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Cliente</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Estado</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sales.map((sale) => (
-              <tr key={sale.id}>
-                <td>{sale.occurredAtLabel}</td>
-                <td>{sale.customerName}</td>
-                <td>{sale.productName}</td>
-                <td>{sale.quantity}</td>
-                <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
-                <td>{formatCurrency(sale.totalMinor)}</td>
+        <>
+          <table className="data-table" aria-label="Ventas registradas">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Estado</th>
+                <th>Total</th>
+                <th>Factura</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sales.map((sale) => (
+                <tr key={sale.id}>
+                  <td>{sale.occurredAtLabel}</td>
+                  <td>{sale.customerName}</td>
+                  <td>{sale.productName}</td>
+                  <td>{sale.quantity}</td>
+                  <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                  <td>{formatCurrency(sale.totalMinor)}</td>
+                  <td>
+                    <button
+                      className="table-action"
+                      onClick={() => generateInvoiceForSale(sale)}
+                      type="button"
+                    >
+                      Generar factura PDF
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {invoicePreview ? (
+            <section className="invoice-preview" aria-label="Factura PDF generada">
+              <div className="invoice-preview-header">
+                <strong>Factura generada</strong>
+                <a download={invoicePreview.fileName} href={invoicePreview.dataUri}>
+                  Descargar PDF
+                </a>
+              </div>
+              <iframe
+                src={invoicePreview.dataUri}
+                title="Vista previa de factura PDF"
+              />
+            </section>
+          ) : null}
+          {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
+        </>
       ) : (
         <div className="empty-state section-empty">
           <strong>Sin ventas registradas</strong>
