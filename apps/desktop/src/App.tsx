@@ -95,6 +95,23 @@ type SupplierRecord = {
 
 type PurchasePaymentStatus = "paid" | "pending";
 
+type PurchaseLineRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+};
+
+type PurchaseDraftLine = {
+  id: string;
+  product: ProductRecord;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+};
+
 type PurchaseRecord = {
   id: string;
   supplierId: string;
@@ -107,6 +124,7 @@ type PurchaseRecord = {
   quantity: number;
   unitCostMinor: number;
   totalMinor: number;
+  lines: PurchaseLineRecord[];
   paymentStatus: PurchasePaymentStatus;
   occurredAtLabel: string;
 };

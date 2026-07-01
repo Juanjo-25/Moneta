@@ -10,16 +10,19 @@ export type InvoiceCustomer = {
   email: string;
 };
 
+export type InvoiceItem = {
+  description: string;
+  quantity: number;
+  unitPriceMinor: number;
+  totalMinor: number;
+};
+
 export type InvoicePdfInput = {
   customer: InvoiceCustomer;
   invoiceNumber: string;
   issueDate: string;
-  item: {
-    description: string;
-    quantity: number;
-    unitPriceMinor: number;
-    totalMinor: number;
-  };
+  item?: InvoiceItem;
+  items?: InvoiceItem[];
   paymentStatus: InvoicePaymentStatus;
 };
 
@@ -61,9 +64,10 @@ function writeText(
 export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   const doc = new jsPDF({ format: "letter", unit: "mm" });
   const paymentLabel = buildInvoicePaymentLabel(input.paymentStatus);
-  const subtotal = formatCurrency(input.item.totalMinor);
-  const total = formatCurrency(input.item.totalMinor);
-  const unitPrice = formatCurrency(input.item.unitPriceMinor);
+  const items = input.items ?? (input.item ? [input.item] : []);
+  const totalMinor = items.reduce((total, item) => total + item.totalMinor, 0);
+  const subtotal = formatCurrency(totalMinor);
+  const total = formatCurrency(totalMinor);
 
   doc.setFillColor(15, 118, 110);
   doc.rect(0, 0, 216, 20, "F");
@@ -117,21 +121,28 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   writeText(doc, "Total", 184, 117);
 
   doc.setFont("helvetica", "normal");
-  doc.rect(14, 120, 188, 16);
-  writeText(doc, input.item.description, 17, 130, { maxWidth: 66 });
-  writeText(doc, String(input.item.quantity), 91, 130);
-  writeText(doc, unitPrice, 108, 130);
-  writeText(doc, "0%", 146, 130);
-  writeText(doc, "$ 0", 162, 130);
-  writeText(doc, total, 181, 130);
+  items.forEach((item, index) => {
+    const rowY = 120 + index * 12;
+    const textY = rowY + 8;
+
+    doc.rect(14, rowY, 188, 12);
+    writeText(doc, item.description, 17, textY, { maxWidth: 66 });
+    writeText(doc, String(item.quantity), 91, textY);
+    writeText(doc, formatCurrency(item.unitPriceMinor), 108, textY);
+    writeText(doc, "0%", 146, textY);
+    writeText(doc, "$ 0", 162, textY);
+    writeText(doc, formatCurrency(item.totalMinor), 181, textY);
+  });
+
+  const totalsY = 138 + items.length * 12;
 
   doc.setFont("helvetica", "normal");
-  writeText(doc, `Subtotal (sin IVA): ${subtotal}`, 138, 150);
-  writeText(doc, "Total IVA: $ 0", 138, 158);
-  writeText(doc, "Descuentos: $ 0", 138, 166);
+  writeText(doc, `Subtotal (sin IVA): ${subtotal}`, 138, totalsY);
+  writeText(doc, "Total IVA: $ 0", 138, totalsY + 8);
+  writeText(doc, "Descuentos: $ 0", 138, totalsY + 16);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  writeText(doc, `TOTAL A PAGAR: ${total}`, 138, 176);
+  writeText(doc, `TOTAL A PAGAR: ${total}`, 138, totalsY + 26);
 
   doc.setFontSize(10);
   writeText(doc, "INFORMACION LEGAL - DIAN", 14, 154);
