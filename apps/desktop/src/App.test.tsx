@@ -22,6 +22,18 @@ async function createProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Guardar producto" }));
 }
 
+async function createSecondProductFixture(user: UserEvent) {
+  await user.click(screen.getByRole("button", { name: "Productos" }));
+  await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+  await user.type(screen.getByLabelText("Codigo"), "PNL-001");
+  await user.type(screen.getByLabelText("Producto"), "Panela unidad");
+  await user.type(screen.getByLabelText("Unidad"), "3");
+  await user.type(screen.getByLabelText("Costo"), "2500");
+  await user.type(screen.getByLabelText("Precio venta"), "3500");
+  await user.type(screen.getByLabelText("Stock minimo"), "1");
+  await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+}
+
 async function createSupplierFixture(user: UserEvent, name = "Distribuidora Norte") {
   await user.click(screen.getByRole("button", { name: "Compras" }));
   await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
@@ -197,7 +209,7 @@ describe("App navigation", () => {
     expect(within(productsTable).getByRole("cell", { name: "2" })).toBeTruthy();
   });
 
-  it("registers a pending sale without decreasing stock and exposes receivable data", async () => {
+  it("registers a pending sale, decreases stock, and exposes receivable data", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -223,13 +235,113 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
-    expect(within(productsTable).getByRole("cell", { name: "4" })).toBeTruthy();
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+1\s+1/
+      })
+    ).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera pendiente" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
+  });
+
+  it("registers a paid sale with several products and decreases each stock", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Ana Perez")).toBeTruthy();
+    expect(within(salesTable).getByText("2 productos")).toBeTruthy();
+    expect(within(salesTable).getByText("4")).toBeTruthy();
+    expect(within(salesTable).getByText(/\$\s*16\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+      })
+    ).toBeTruthy();
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /PNL-001\s+Panela unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+      })
+    ).toBeTruthy();
+  });
+
+  it("registers a pending sale with several products and creates one receivable", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
+      })
+    ).toBeTruthy();
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /PNL-001\s+Panela unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+      })
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    const receivablesTable = screen.getByRole("table", { name: "Cartera pendiente" });
+    expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
+    expect(within(receivablesTable).getByText(/\$\s*11\.500/)).toBeTruthy();
   });
 
   it("registers a paid purchase, increases stock, and lists the invoice", async () => {
@@ -264,6 +376,19 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Proveedores" }));
     expect(screen.getByText("Sin cuentas por pagar")).toBeTruthy();
+  });
+
+  it("uses calendar date inputs for purchase issue and due dates", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+
+    expect(screen.getByLabelText("Fecha emision").getAttribute("type")).toBe("date");
+    expect(screen.getByLabelText("Fecha vencimiento").getAttribute("type")).toBe(
+      "date"
+    );
   });
 
   it("creates a new product inline while registering a purchase invoice", async () => {
@@ -326,6 +451,59 @@ describe("App navigation", () => {
     expect(within(payablesTable).getByText("FC-2001")).toBeTruthy();
     expect(within(payablesTable).getByText("Pendiente")).toBeTruthy();
     expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
+  });
+
+  it("registers multiple products in one pending purchase invoice", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    await user.type(screen.getByLabelText("Codigo"), "PNL-001");
+    await user.type(screen.getByLabelText("Producto"), "Panela unidad");
+    await user.type(screen.getByLabelText("Unidad"), "2");
+    await user.type(screen.getByLabelText("Costo"), "2500");
+    await user.type(screen.getByLabelText("Precio venta"), "3500");
+    await user.type(screen.getByLabelText("Stock minimo"), "1");
+    await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+
+    await createSupplierFixture(user, "Proveedor Mixto");
+    await user.type(screen.getByLabelText("Numero factura"), "FC-4001");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-30");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "3");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "4");
+    await user.type(screen.getByLabelText("Costo unitario"), "2500");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    const purchasesTable = screen.getByRole("table", { name: "Compras registradas" });
+    expect(within(purchasesTable).getByText("Proveedor Mixto")).toBeTruthy();
+    expect(within(purchasesTable).getByText("2 productos")).toBeTruthy();
+    expect(within(purchasesTable).getByText(/\$\s*19\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("row", { name: /Arroz libra.*7/ })).toBeTruthy();
+    expect(within(productsTable).getByRole("row", { name: /Panela unidad.*6/ })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
+    expect(within(payablesTable).getByText("FC-4001")).toBeTruthy();
+    expect(within(payablesTable).getAllByText(/\$\s*19\.000/).length).toBeGreaterThan(0);
   });
 
   it("registers a partial supplier payment and marks payable as abonada", async () => {
@@ -523,6 +701,53 @@ describe("App navigation", () => {
     );
     expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
       "data:application/pdf;base64,invoice-pdf"
+    );
+  });
+
+  it("passes every sold product to invoice generation", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+
+    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          {
+            description: "Arroz libra",
+            quantity: 2,
+            totalMinor: 9000,
+            unitPriceMinor: 4500
+          },
+          {
+            description: "Panela unidad",
+            quantity: 1,
+            totalMinor: 3500,
+            unitPriceMinor: 3500
+          }
+        ],
+        paymentStatus: "paid"
+      })
     );
   });
 

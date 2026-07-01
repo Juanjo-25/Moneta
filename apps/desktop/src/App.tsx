@@ -1,16 +1,9 @@
-import { registerSale, type InventoryRepository, type SaleRepository } from "@moneta/application";
-import {
-  Product,
-  createMoney,
-  type InventoryMovement,
-  type Receivable,
-  type SaleDraft
-} from "@moneta/domain";
 import {
   useMemo,
   useState,
   type FormEvent,
-  type HTMLAttributes
+  type HTMLAttributes,
+  type HTMLInputTypeAttribute
 } from "react";
 import { generateInvoicePdf, type InvoicePdfResult } from "./invoice-pdf";
 
@@ -54,6 +47,23 @@ type CustomerRecord = {
   email: string;
 };
 
+type SaleLineRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPriceMinor: number;
+  totalMinor: number;
+};
+
+type SaleDraftLine = {
+  id: string;
+  product: ProductRecord;
+  quantity: number;
+  totalMinor: number;
+  unitPriceMinor: number;
+};
+
 type SaleRecord = {
   id: string;
   customer: CustomerRecord;
@@ -64,6 +74,7 @@ type SaleRecord = {
   quantity: number;
   unitPriceMinor: number;
   totalMinor: number;
+  lines: SaleLineRecord[];
   paymentStatus: "paid" | "pending";
   occurredAtLabel: string;
 };
@@ -390,64 +401,6 @@ function isLowStock(product: ProductRecord): boolean {
   return product.stock <= product.minimumStock;
 }
 
-function toDomainProduct(product: ProductRecord): Product {
-  return Product.create({
-    id: product.id,
-    sku: product.sku,
-    name: product.name,
-    unit: "unidad",
-    minimumStock: product.minimumStock,
-    salePriceMinor: product.salePriceMinor,
-    costMinor: product.costMinor,
-    active: product.active
-  });
-}
-
-function createInventoryRepository(product: ProductRecord): InventoryRepository {
-  let currentStock = product.stock;
-
-  return {
-    async findProductStock(productId) {
-      if (productId !== product.id) {
-        return null;
-      }
-
-      return {
-        product: toDomainProduct(product),
-        stock: currentStock
-      };
-    },
-    async recordMovement(movement: InventoryMovement) {
-      if (movement.type === "sale" || movement.type === "adjustment_out") {
-        currentStock -= movement.quantity;
-        return;
-      }
-
-      currentStock += movement.quantity;
-    },
-    getStock(productId) {
-      return productId === product.id ? currentStock : 0;
-    }
-  };
-}
-
-function createSaleRepository() {
-  let saved: { sale: SaleDraft; receivable: Receivable | null } | null = null;
-
-  const repository: SaleRepository = {
-    async saveSale(sale, receivable) {
-      saved = { sale, receivable };
-    }
-  };
-
-  return {
-    repository,
-    getSavedSale() {
-      return saved;
-    }
-  };
-}
-
 export function App() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
@@ -540,22 +493,41 @@ export function App() {
 
   function registerPurchaseInSession(input: {
     supplier: SupplierRecord;
-    product: ProductRecord;
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
-    quantity: number;
-    unitCostMinor: number;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+      unitCostMinor: number;
+    }>;
     paymentStatus: PurchasePaymentStatus;
   }) {
     const occurredAt = new Date();
     const purchaseId = `purchase-${Date.now()}`;
-    const totalMinor = input.quantity * input.unitCostMinor;
+    const lines = input.lines.map((line, index) => ({
+      id: `${purchaseId}-line-${index}`,
+      productId: line.product.id,
+      productName: line.product.name,
+      quantity: line.quantity,
+      totalMinor: line.quantity * line.unitCostMinor,
+      unitCostMinor: line.unitCostMinor
+    }));
+    const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
+    const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
+    const firstLine = lines[0]!;
 
     setProducts((currentProducts) =>
       currentProducts.map((product) =>
-        product.id === input.product.id
-          ? { ...product, stock: product.stock + input.quantity }
+        lines.some((line) => line.productId === product.id)
+          ? {
+              ...product,
+              stock:
+                product.stock +
+                lines
+                  .filter((line) => line.productId === product.id)
+                  .reduce((total, line) => total + line.quantity, 0)
+            }
           : product
       )
     );
@@ -565,15 +537,17 @@ export function App() {
         id: purchaseId,
         invoiceNumber: input.invoiceNumber,
         issuedAt: input.issuedAt,
+        lines,
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         paymentStatus: input.paymentStatus,
-        productId: input.product.id,
-        productName: input.product.name,
-        quantity: input.quantity,
+        productId: firstLine.productId,
+        productName:
+          lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+        quantity: totalQuantity,
         supplierId: input.supplier.id,
         supplierName: input.supplier.name,
         totalMinor,
-        unitCostMinor: input.unitCostMinor
+        unitCostMinor: firstLine.unitCostMinor
       },
       ...currentPurchases
     ]);
@@ -620,105 +594,111 @@ export function App() {
     );
   }
 
-  async function registerPaidSaleInSession(input: {
+  function registerSaleInSession(input: {
     customer: CustomerRecord;
-    product: ProductRecord;
-    quantity: number;
-  }): Promise<string | null> {
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+    paymentStatus: "paid" | "pending";
+  }): string | null {
     const occurredAt = new Date();
-    const inventory = createInventoryRepository(input.product);
-    const salesRepository = createSaleRepository();
+    const requestedByProduct = input.lines.reduce((requested, line) => {
+      requested.set(
+        line.product.id,
+        (requested.get(line.product.id) ?? 0) + line.quantity
+      );
+      return requested;
+    }, new Map<string, number>());
+    const insufficientProduct = products.find(
+      (product) => (requestedByProduct.get(product.id) ?? 0) > product.stock
+    );
 
-    const result = await registerSale({
-      inventory,
-      sales: salesRepository.repository
-    })({
-      id: `sale-${Date.now()}`,
-      customerId: input.customer.id,
-      occurredAt,
-      paymentStatus: "paid",
-      lines: [
-        {
-          productId: input.product.id,
-          quantity: input.quantity,
-          unitPrice: createMoney(input.product.salePriceMinor)
-        }
-      ]
-    });
-
-    if (!result.ok) {
-      return result.error.message;
+    if (insufficientProduct) {
+      return "No hay inventario suficiente para completar el movimiento.";
     }
 
-    const savedSale = salesRepository.getSavedSale();
-
-    if (!savedSale) {
-      return "No se pudo registrar la venta.";
-    }
+    const saleId = `sale-${Date.now()}`;
+    const lines = input.lines.map((line, index) => ({
+      id: `${saleId}-line-${index}`,
+      productId: line.product.id,
+      productName: line.product.name,
+      quantity: line.quantity,
+      totalMinor: line.quantity * line.product.salePriceMinor,
+      unitPriceMinor: line.product.salePriceMinor
+    }));
+    const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
+    const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
+    const firstLine = lines[0]!;
 
     setProducts((currentProducts) =>
-      currentProducts.map((product) =>
-        product.id === input.product.id
-          ? { ...product, stock: inventory.getStock(product.id) }
-          : product
-      )
+      currentProducts.map((product) => ({
+        ...product,
+        stock: product.stock - (requestedByProduct.get(product.id) ?? 0)
+      }))
     );
     setSales((currentSales) => [
       {
-        id: savedSale.sale.id,
         customer: input.customer,
         customerId: input.customer.id,
         customerName: input.customer.name,
-        productId: input.product.id,
-        productName: input.product.name,
-        quantity: input.quantity,
-        unitPriceMinor: input.product.salePriceMinor,
-        totalMinor: savedSale.sale.total.minor,
-        paymentStatus: "paid",
-        occurredAtLabel: formatOccurredAtLabel(occurredAt)
+        id: saleId,
+        lines,
+        occurredAtLabel: formatOccurredAtLabel(occurredAt),
+        paymentStatus: input.paymentStatus,
+        productId: firstLine.productId,
+        productName:
+          lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+        quantity: totalQuantity,
+        totalMinor,
+        unitPriceMinor: firstLine.unitPriceMinor,
       },
       ...currentSales
     ]);
+
+    if (input.paymentStatus === "pending") {
+      setReceivables((currentReceivables) => [
+        {
+          amountMinor: totalMinor,
+          customerId: input.customer.id,
+          customerName: input.customer.name,
+          id: `receivable-${saleId}`,
+          saleId,
+          status: "pending"
+        },
+        ...currentReceivables
+      ]);
+    }
 
     return null;
   }
 
+  function registerPaidSaleInSession(input: {
+    customer: CustomerRecord;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+  }): string | null {
+    return registerSaleInSession({
+      customer: input.customer,
+      lines: input.lines,
+      paymentStatus: "paid"
+    });
+  }
+
   function registerPendingSaleInSession(input: {
     customer: CustomerRecord;
-    product: ProductRecord;
-    quantity: number;
-  }) {
-    const occurredAt = new Date();
-    const saleId = `sale-${Date.now()}`;
-    const totalMinor = input.product.salePriceMinor * input.quantity;
-
-    setSales((currentSales) => [
-      {
-        id: saleId,
-        customer: input.customer,
-        customerId: input.customer.id,
-        customerName: input.customer.name,
-        productId: input.product.id,
-        productName: input.product.name,
-        quantity: input.quantity,
-        unitPriceMinor: input.product.salePriceMinor,
-        totalMinor,
-        paymentStatus: "pending",
-        occurredAtLabel: formatOccurredAtLabel(occurredAt)
-      },
-      ...currentSales
-    ]);
-    setReceivables((currentReceivables) => [
-      {
-        id: `receivable-${saleId}`,
-        customerId: input.customer.id,
-        customerName: input.customer.name,
-        saleId,
-        amountMinor: totalMinor,
-        status: "pending"
-      },
-      ...currentReceivables
-    ]);
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+  }): string | null {
+    return registerSaleInSession({
+      customer: input.customer,
+      lines: input.lines,
+      paymentStatus: "pending"
+    });
   }
 
   return (
@@ -865,24 +845,30 @@ type SectionContentProps = {
   onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
-    product: ProductRecord;
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
-    quantity: number;
-    unitCostMinor: number;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+      unitCostMinor: number;
+    }>;
     paymentStatus: PurchasePaymentStatus;
   }) => void;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
-    product: ProductRecord;
-    quantity: number;
-  }) => Promise<string | null>;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+  }) => string | null;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
-    product: ProductRecord;
-    quantity: number;
-  }) => void;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+  }) => string | null;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
@@ -1126,12 +1112,14 @@ type PurchasesSectionProps = {
   onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
-    product: ProductRecord;
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
-    quantity: number;
-    unitCostMinor: number;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+      unitCostMinor: number;
+    }>;
     paymentStatus: PurchasePaymentStatus;
   }) => void;
   products: ProductRecord[];
@@ -1157,6 +1145,7 @@ function PurchasesSection({
   const [productForm, setProductForm] =
     useState<PurchaseProductFormState>(emptyPurchaseProductForm);
   const [productErrors, setProductErrors] = useState<PurchaseProductFormErrors>({});
+  const [purchaseLines, setPurchaseLines] = useState<PurchaseDraftLine[]>([]);
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
@@ -1164,7 +1153,12 @@ function PurchasesSection({
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
   const unitCost = parseNonNegativeInteger(form.unitCost) ?? 0;
-  const totalMinor = quantity * unitCost;
+  const draftLineTotalMinor = quantity * unitCost;
+  const purchaseLinesTotalMinor = purchaseLines.reduce(
+    (total, line) => total + line.totalMinor,
+    0
+  );
+  const totalMinor = purchaseLinesTotalMinor + draftLineTotalMinor;
 
   function updateField(field: keyof PurchaseFormState, value: string) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
@@ -1268,22 +1262,15 @@ function PurchasesSection({
     setProductFormVisible(false);
   }
 
-  function submitPurchase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  function validateDraftLine(): {
+    errors: PurchaseFormErrors;
+    parsedQuantity: number | null;
+    parsedUnitCost: number | null;
+  } {
     const nextErrors: PurchaseFormErrors = {};
     const parsedQuantity = parseNonNegativeInteger(form.quantity);
     const parsedUnitCost = parseNonNegativeInteger(form.unitCost);
 
-    if (!selectedSupplier) {
-      nextErrors.supplierId = "Debes seleccionar un proveedor.";
-    }
-    if (form.invoiceNumber.trim() === "") {
-      nextErrors.invoiceNumber = "El numero de factura es obligatorio.";
-    }
-    if (form.issuedAt.trim() === "") {
-      nextErrors.issuedAt = "La fecha de emision es obligatoria.";
-    }
     if (!selectedProduct) {
       nextErrors.productId = "Debes seleccionar un producto.";
     }
@@ -1294,15 +1281,107 @@ function PurchasesSection({
       nextErrors.unitCost = "El costo unitario debe ser cero o mayor.";
     }
 
+    return { errors: nextErrors, parsedQuantity, parsedUnitCost };
+  }
+
+  function addPurchaseLine() {
+    const validation = validateDraftLine();
+
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      productId: validation.errors.productId,
+      quantity: validation.errors.quantity,
+      unitCost: validation.errors.unitCost
+    }));
+
+    if (
+      Object.keys(validation.errors).length > 0 ||
+      !selectedProduct ||
+      validation.parsedQuantity === null ||
+      validation.parsedQuantity <= 0 ||
+      validation.parsedUnitCost === null
+    ) {
+      return;
+    }
+
+    const parsedQuantity = validation.parsedQuantity;
+    const parsedUnitCost = validation.parsedUnitCost;
+
+    setPurchaseLines((currentLines) => [
+      ...currentLines,
+      {
+        id: `purchase-line-${Date.now()}`,
+        product: selectedProduct,
+        quantity: parsedQuantity,
+        totalMinor: parsedQuantity * parsedUnitCost,
+        unitCostMinor: parsedUnitCost
+      }
+    ]);
+    setForm((currentForm) => ({
+      ...currentForm,
+      productId: "",
+      quantity: "",
+      unitCost: ""
+    }));
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      productId: undefined,
+      quantity: undefined,
+      unitCost: undefined
+    }));
+  }
+
+  function submitPurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: PurchaseFormErrors = {};
+    const lineValidation = validateDraftLine();
+    const hasDraftLine =
+      selectedProduct ||
+      form.quantity.trim() !== "" ||
+      form.unitCost.trim() !== "";
+    const linesToRegister =
+      purchaseLines.length > 0 && !hasDraftLine
+        ? purchaseLines
+        : [
+            ...purchaseLines,
+            ...(lineValidation.parsedQuantity !== null &&
+            lineValidation.parsedQuantity > 0 &&
+            lineValidation.parsedUnitCost !== null &&
+            selectedProduct
+              ? [
+                  {
+                    id: `purchase-line-${Date.now()}`,
+                    product: selectedProduct,
+                    quantity: lineValidation.parsedQuantity,
+                    totalMinor:
+                      lineValidation.parsedQuantity *
+                      lineValidation.parsedUnitCost,
+                    unitCostMinor: lineValidation.parsedUnitCost
+                  }
+                ]
+              : [])
+          ];
+
+    if (!selectedSupplier) {
+      nextErrors.supplierId = "Debes seleccionar un proveedor.";
+    }
+    if (form.invoiceNumber.trim() === "") {
+      nextErrors.invoiceNumber = "El numero de factura es obligatorio.";
+    }
+    if (form.issuedAt.trim() === "") {
+      nextErrors.issuedAt = "La fecha de emision es obligatoria.";
+    }
+    if (purchaseLines.length === 0 || hasDraftLine) {
+      Object.assign(nextErrors, lineValidation.errors);
+    }
+
     setErrors(nextErrors);
 
     if (
       Object.keys(nextErrors).length > 0 ||
       !selectedSupplier ||
-      !selectedProduct ||
-      parsedQuantity === null ||
-      parsedQuantity <= 0 ||
-      parsedUnitCost === null
+      linesToRegister.length === 0
     ) {
       return;
     }
@@ -1311,13 +1390,16 @@ function PurchasesSection({
       dueAt: form.dueAt.trim(),
       invoiceNumber: form.invoiceNumber.trim(),
       issuedAt: form.issuedAt.trim(),
+      lines: linesToRegister.map((line) => ({
+        product: line.product,
+        quantity: line.quantity,
+        unitCostMinor: line.unitCostMinor
+      })),
       paymentStatus: form.paymentStatus,
-      product: selectedProduct,
-      quantity: parsedQuantity,
-      supplier: selectedSupplier,
-      unitCostMinor: parsedUnitCost
+      supplier: selectedSupplier
     });
     setErrors({});
+    setPurchaseLines([]);
     setForm(emptyPurchaseForm);
   }
 
@@ -1362,12 +1444,14 @@ function PurchasesSection({
             error={errors.issuedAt}
             label="Fecha emision"
             onChange={(value) => updateField("issuedAt", value)}
+            type="date"
             value={form.issuedAt}
           />
           <TextField
             error={errors.dueAt}
             label="Fecha vencimiento"
             onChange={(value) => updateField("dueAt", value)}
+            type="date"
             value={form.dueAt}
           />
           <label className="field" htmlFor="producto-compra">
@@ -1409,6 +1493,11 @@ function PurchasesSection({
             onChange={updateMoneyField}
             value={form.unitCost}
           />
+          <div className="inline-action-group">
+            <button type="button" onClick={addPurchaseLine}>
+              Agregar producto
+            </button>
+          </div>
         </div>
 
         {supplierFormVisible ? (
@@ -1469,6 +1558,29 @@ function PurchasesSection({
           </div>
         ) : null}
 
+        {purchaseLines.length > 0 ? (
+          <table className="data-table purchase-lines-table" aria-label="Productos de la compra">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Costo unitario</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchaseLines.map((line) => (
+                <tr key={line.id}>
+                  <td>{line.product.name}</td>
+                  <td>{line.quantity}</td>
+                  <td>{formatCurrency(line.unitCostMinor)}</td>
+                  <td>{formatCurrency(line.totalMinor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+
         <div
           aria-label="Estado de factura compra"
           className="payment-status-group"
@@ -1497,7 +1609,7 @@ function PurchasesSection({
         </div>
 
         <div className="summary-card">
-          <span>Costo unitario {formatCurrency(unitCost)}</span>
+          <span>Productos agregados {purchaseLines.length}</span>
           <strong>Total factura {formatCurrency(totalMinor)}</strong>
         </div>
 
@@ -1688,14 +1800,18 @@ type SalesSectionProps = {
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
-    product: ProductRecord;
-    quantity: number;
-  }) => Promise<string | null>;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+  }) => string | null;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
-    product: ProductRecord;
-    quantity: number;
-  }) => void;
+    lines: Array<{
+      product: ProductRecord;
+      quantity: number;
+    }>;
+  }) => string | null;
   products: ProductRecord[];
   sales: SaleRecord[];
 };
@@ -1716,23 +1832,34 @@ function SalesSection({
   const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
+  const [saleLines, setSaleLines] = useState<SaleDraftLine[]>([]);
 
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
-  const totalMinor = selectedProduct ? selectedProduct.salePriceMinor * quantity : 0;
+  const draftLineTotalMinor = selectedProduct
+    ? selectedProduct.salePriceMinor * quantity
+    : 0;
+  const saleLinesTotalMinor = saleLines.reduce(
+    (total, line) => total + line.totalMinor,
+    0
+  );
+  const totalMinor = saleLinesTotalMinor + draftLineTotalMinor;
 
-  async function submitSale(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function updateField(field: keyof SalesFormState, value: string) {
+    setForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
 
+  function validateDraftLine(): {
+    errors: SalesFormErrors;
+    parsedQuantity: number | null;
+  } {
     const nextErrors: SalesFormErrors = {};
     const parsedQuantity = parseNonNegativeInteger(form.quantity);
 
-    if (!selectedCustomer) {
-      nextErrors.customerId = "Debes seleccionar un cliente.";
-    }
     if (!selectedProduct) {
       nextErrors.productId = "Debes seleccionar un producto.";
     }
@@ -1740,38 +1867,118 @@ function SalesSection({
       nextErrors.quantity = "La cantidad debe ser un entero mayor a cero.";
     }
 
+    return { errors: nextErrors, parsedQuantity };
+  }
+
+  function addSaleLine() {
+    const validation = validateDraftLine();
+
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      productId: validation.errors.productId,
+      quantity: validation.errors.quantity
+    }));
+
+    if (
+      Object.keys(validation.errors).length > 0 ||
+      !selectedProduct ||
+      validation.parsedQuantity === null ||
+      validation.parsedQuantity <= 0
+    ) {
+      return;
+    }
+
+    const parsedQuantity = validation.parsedQuantity;
+
+    setSaleLines((currentLines) => [
+      ...currentLines,
+      {
+        id: `sale-line-${Date.now()}`,
+        product: selectedProduct,
+        quantity: parsedQuantity,
+        totalMinor: parsedQuantity * selectedProduct.salePriceMinor,
+        unitPriceMinor: selectedProduct.salePriceMinor
+      }
+    ]);
+    setForm((currentForm) => ({
+      ...currentForm,
+      productId: "",
+      quantity: ""
+    }));
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      productId: undefined,
+      quantity: undefined
+    }));
+  }
+
+  function submitSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: SalesFormErrors = {};
+    const lineValidation = validateDraftLine();
+    const hasDraftLine = selectedProduct || form.quantity.trim() !== "";
+    const linesToRegister =
+      saleLines.length > 0 && !hasDraftLine
+        ? saleLines
+        : [
+            ...saleLines,
+            ...(lineValidation.parsedQuantity !== null &&
+            lineValidation.parsedQuantity > 0 &&
+            selectedProduct
+              ? [
+                  {
+                    id: `sale-line-${Date.now()}`,
+                    product: selectedProduct,
+                    quantity: lineValidation.parsedQuantity,
+                    totalMinor:
+                      lineValidation.parsedQuantity *
+                      selectedProduct.salePriceMinor,
+                    unitPriceMinor: selectedProduct.salePriceMinor
+                  }
+                ]
+              : [])
+          ];
+
+    if (!selectedCustomer) {
+      nextErrors.customerId = "Debes seleccionar un cliente.";
+    }
+    if (saleLines.length === 0 || hasDraftLine) {
+      Object.assign(nextErrors, lineValidation.errors);
+    }
+
     setErrors(nextErrors);
 
     if (
       Object.keys(nextErrors).length > 0 ||
       !selectedCustomer ||
-      !selectedProduct ||
-      parsedQuantity === null ||
-      parsedQuantity <= 0
+      linesToRegister.length === 0
     ) {
       return;
     }
 
-    if (form.paymentStatus === "paid") {
-      const submitError = await onRegisterPaidSale({
-        customer: selectedCustomer,
-        product: selectedProduct,
-        quantity: parsedQuantity
-      });
+    const registerInput = {
+      customer: selectedCustomer,
+      lines: linesToRegister.map((line) => ({
+        product: line.product,
+        quantity: line.quantity
+      }))
+    };
+    let submitError: string | null = null;
 
-      if (submitError) {
-        setErrors({ submit: submitError });
-        return;
-      }
+    if (form.paymentStatus === "paid") {
+      submitError = onRegisterPaidSale(registerInput);
     } else {
-      onRegisterPendingSale({
-        customer: selectedCustomer,
-        product: selectedProduct,
-        quantity: parsedQuantity
-      });
+      submitError = onRegisterPendingSale(registerInput);
+    }
+
+    if (submitError) {
+      setErrors({ submit: submitError });
+      return;
     }
 
     setErrors({});
+    setSaleLines([]);
     setForm(emptySalesForm);
   }
 
@@ -1817,11 +2024,17 @@ function SalesSection({
         invoiceNumber: `FE-${sale.id}`,
         issueDate: sale.occurredAtLabel,
         item: {
-          description: sale.productName,
-          quantity: sale.quantity,
-          totalMinor: sale.totalMinor,
-          unitPriceMinor: sale.unitPriceMinor
+          description: sale.lines[0]?.productName ?? sale.productName,
+          quantity: sale.lines[0]?.quantity ?? sale.quantity,
+          totalMinor: sale.lines[0]?.totalMinor ?? sale.totalMinor,
+          unitPriceMinor: sale.lines[0]?.unitPriceMinor ?? sale.unitPriceMinor
         },
+        items: sale.lines.map((line) => ({
+          description: line.productName,
+          quantity: line.quantity,
+          totalMinor: line.totalMinor,
+          unitPriceMinor: line.unitPriceMinor
+        })),
         paymentStatus: sale.paymentStatus
       });
       setInvoicePreview(invoice);
@@ -1842,14 +2055,7 @@ function SalesSection({
               aria-invalid={Boolean(errors.customerId)}
               id="cliente"
               onChange={(event) => {
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  customerId: event.target.value
-                }));
-                setErrors((currentErrors) => ({
-                  ...currentErrors,
-                  customerId: undefined
-                }));
+                updateField("customerId", event.target.value);
               }}
               value={form.customerId}
             >
@@ -1878,14 +2084,7 @@ function SalesSection({
               aria-invalid={Boolean(errors.productId)}
               id="producto-venta"
               onChange={(event) => {
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  productId: event.target.value
-                }));
-                setErrors((currentErrors) => ({
-                  ...currentErrors,
-                  productId: undefined
-                }));
+                updateField("productId", event.target.value);
               }}
               value={form.productId}
             >
@@ -1904,14 +2103,15 @@ function SalesSection({
             inputMode="numeric"
             label="Cantidad"
             onChange={(value) => {
-              setForm((currentForm) => ({ ...currentForm, quantity: value }));
-              setErrors((currentErrors) => ({
-                ...currentErrors,
-                quantity: undefined
-              }));
+              updateField("quantity", value);
             }}
             value={form.quantity}
           />
+          <div className="inline-action-group">
+            <button type="button" onClick={addSaleLine}>
+              Agregar producto
+            </button>
+          </div>
         </div>
 
         {customerFormVisible ? (
@@ -1963,10 +2163,7 @@ function SalesSection({
               id="estado-pagada"
               name="payment-status"
               onChange={() =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  paymentStatus: "paid"
-                }))
+                updateField("paymentStatus", "paid")
               }
               type="radio"
             />
@@ -1978,10 +2175,7 @@ function SalesSection({
               id="estado-pendiente"
               name="payment-status"
               onChange={() =>
-                setForm((currentForm) => ({
-                  ...currentForm,
-                  paymentStatus: "pending"
-                }))
+                updateField("paymentStatus", "pending")
               }
               type="radio"
             />
@@ -1989,11 +2183,35 @@ function SalesSection({
           </label>
         </div>
 
+        {saleLines.length > 0 ? (
+          <table className="data-table purchase-lines-table" aria-label="Productos de la venta">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio unitario</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {saleLines.map((line) => (
+                <tr key={line.id}>
+                  <td>{line.product.name}</td>
+                  <td>{line.quantity}</td>
+                  <td>{formatCurrency(line.unitPriceMinor)}</td>
+                  <td>{formatCurrency(line.totalMinor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+
         <div className="summary-card">
           <span>
             Precio unitario{" "}
             {selectedProduct ? formatCurrency(selectedProduct.salePriceMinor) : formatCurrency(0)}
           </span>
+          <span>Productos agregados {saleLines.length}</span>
           <strong>Total {formatCurrency(totalMinor)}</strong>
         </div>
 
@@ -2113,10 +2331,18 @@ type TextFieldProps = {
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   label: string;
   onChange: (value: string) => void;
+  type?: HTMLInputTypeAttribute;
   value: string;
 };
 
-function TextField({ error, inputMode, label, onChange, value }: TextFieldProps) {
+function TextField({
+  error,
+  inputMode,
+  label,
+  onChange,
+  type = "text",
+  value
+}: TextFieldProps) {
   const id = label.toLowerCase().replace(/\s+/g, "-");
 
   return (
@@ -2127,6 +2353,7 @@ function TextField({ error, inputMode, label, onChange, value }: TextFieldProps)
         id={id}
         inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
+        type={type}
         value={value}
       />
       {error ? <small>{error}</small> : null}
