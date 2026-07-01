@@ -77,6 +77,44 @@ type ReceivableRecord = {
   status: "pending";
 };
 
+type SupplierRecord = {
+  id: string;
+  name: string;
+};
+
+type PurchasePaymentStatus = "paid" | "pending";
+
+type PurchaseRecord = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  dueAt: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+  paymentStatus: PurchasePaymentStatus;
+  occurredAtLabel: string;
+};
+
+type SupplierPayableStatus = "pending" | "partial" | "paid";
+
+type SupplierPayableRecord = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  purchaseId: string;
+  invoiceNumber: string;
+  originalAmountMinor: number;
+  paidAmountMinor: number;
+  balanceMinor: number;
+  dueAt: string;
+  status: SupplierPayableStatus;
+};
+
 type ProductFormState = {
   sku: string;
   name: string;
@@ -111,6 +149,60 @@ type CustomerFormState = {
 };
 
 type CustomerFormErrors = Partial<Record<keyof CustomerFormState, string>>;
+
+type SupplierFormState = {
+  name: string;
+};
+
+type SupplierFormErrors = Partial<Record<keyof SupplierFormState, string>>;
+
+type PurchaseFormState = {
+  supplierId: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  dueAt: string;
+  productId: string;
+  quantity: string;
+  unitCost: string;
+  paymentStatus: PurchasePaymentStatus;
+};
+
+type PurchaseFormErrors = {
+  dueAt?: string | undefined;
+  invoiceNumber?: string | undefined;
+  issuedAt?: string | undefined;
+  paymentStatus?: string | undefined;
+  productId?: string | undefined;
+  quantity?: string | undefined;
+  submit?: string | undefined;
+  supplierId?: string | undefined;
+  unitCost?: string | undefined;
+};
+
+type PurchaseProductFormState = {
+  sku: string;
+  name: string;
+  cost: string;
+  salePrice: string;
+  minimumStock: string;
+};
+
+type PurchaseProductFormErrors = {
+  cost?: string | undefined;
+  minimumStock?: string | undefined;
+  name?: string | undefined;
+  salePrice?: string | undefined;
+  sku?: string | undefined;
+};
+
+type SupplierPaymentFormState = {
+  payableId: string;
+  amount: string;
+};
+
+type SupplierPaymentFormErrors = {
+  amount?: string | undefined;
+};
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -258,6 +350,19 @@ function formatOccurredAtLabel(date: Date): string {
   }).format(date);
 }
 
+function getSupplierPayableStatus(input: {
+  originalAmountMinor: number;
+  paidAmountMinor: number;
+}): SupplierPayableStatus {
+  const balance = input.originalAmountMinor - input.paidAmountMinor;
+
+  if (balance <= 0) {
+    return "paid";
+  }
+
+  return input.paidAmountMinor > 0 ? "partial" : "pending";
+}
+
 function isLowStock(product: ProductRecord): boolean {
   return product.stock <= product.minimumStock;
 }
@@ -362,6 +467,20 @@ export function App() {
     setActiveSectionId(sectionId);
   }
 
+  function handlePrimaryAction() {
+    if (activeSection.id === "dashboard") {
+      openSection("sales");
+      return;
+    }
+
+    if (activeSection.id === "products") {
+      setProductFormVisible((visible) => !visible);
+      return;
+    }
+
+    openSection(activeSection.id);
+  }
+
   function createProduct(product: ProductRecord) {
     setProducts((currentProducts) => [...currentProducts, product]);
   }
@@ -379,6 +498,99 @@ export function App() {
     setCustomers((currentCustomers) => [...currentCustomers, customer]);
 
     return customer;
+  }
+
+  function createSupplier(input: SupplierFormState): SupplierRecord {
+    const supplier = {
+      id: `supplier-${Date.now()}`,
+      name: input.name.trim()
+    };
+
+    setSuppliers((currentSuppliers) => [...currentSuppliers, supplier]);
+
+    return supplier;
+  }
+
+  function registerPurchaseInSession(input: {
+    supplier: SupplierRecord;
+    product: ProductRecord;
+    invoiceNumber: string;
+    issuedAt: string;
+    dueAt: string;
+    quantity: number;
+    unitCostMinor: number;
+    paymentStatus: PurchasePaymentStatus;
+  }) {
+    const occurredAt = new Date();
+    const purchaseId = `purchase-${Date.now()}`;
+    const totalMinor = input.quantity * input.unitCostMinor;
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) =>
+        product.id === input.product.id
+          ? { ...product, stock: product.stock + input.quantity }
+          : product
+      )
+    );
+    setPurchases((currentPurchases) => [
+      {
+        dueAt: input.dueAt,
+        id: purchaseId,
+        invoiceNumber: input.invoiceNumber,
+        issuedAt: input.issuedAt,
+        occurredAtLabel: formatOccurredAtLabel(occurredAt),
+        paymentStatus: input.paymentStatus,
+        productId: input.product.id,
+        productName: input.product.name,
+        quantity: input.quantity,
+        supplierId: input.supplier.id,
+        supplierName: input.supplier.name,
+        totalMinor,
+        unitCostMinor: input.unitCostMinor
+      },
+      ...currentPurchases
+    ]);
+
+    if (input.paymentStatus === "pending") {
+      setSupplierPayables((currentPayables) => [
+        {
+          balanceMinor: totalMinor,
+          dueAt: input.dueAt,
+          id: `payable-${purchaseId}`,
+          invoiceNumber: input.invoiceNumber,
+          originalAmountMinor: totalMinor,
+          paidAmountMinor: 0,
+          purchaseId,
+          status: "pending",
+          supplierId: input.supplier.id,
+          supplierName: input.supplier.name
+        },
+        ...currentPayables
+      ]);
+    }
+  }
+
+  function registerSupplierPayment(input: { payableId: string; amountMinor: number }) {
+    setSupplierPayables((currentPayables) =>
+      currentPayables.map((payable) => {
+        if (payable.id !== input.payableId) {
+          return payable;
+        }
+
+        const paidAmountMinor = payable.paidAmountMinor + input.amountMinor;
+        const balanceMinor = Math.max(payable.originalAmountMinor - paidAmountMinor, 0);
+
+        return {
+          ...payable,
+          balanceMinor,
+          paidAmountMinor,
+          status: getSupplierPayableStatus({
+            originalAmountMinor: payable.originalAmountMinor,
+            paidAmountMinor
+          })
+        };
+      })
+    );
   }
 
   async function registerPaidSaleInSession(input: {
