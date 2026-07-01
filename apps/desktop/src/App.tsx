@@ -228,6 +228,29 @@ const emptyCustomerForm: CustomerFormState = {
   name: ""
 };
 
+const emptySupplierForm: SupplierFormState = {
+  name: ""
+};
+
+const emptyPurchaseForm: PurchaseFormState = {
+  dueAt: "",
+  invoiceNumber: "",
+  issuedAt: "",
+  paymentStatus: "paid",
+  productId: "",
+  quantity: "",
+  supplierId: "",
+  unitCost: ""
+};
+
+const emptyPurchaseProductForm: PurchaseProductFormState = {
+  cost: "",
+  minimumStock: "",
+  name: "",
+  salePrice: "",
+  sku: ""
+};
+
 const navigationItems: SectionConfig[] = [
   {
     id: "dashboard",
@@ -430,6 +453,10 @@ export function App() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [receivables, setReceivables] = useState<ReceivableRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [supplierPayables, setSupplierPayables] = useState<SupplierPayableRecord[]>([]);
+  const [productFormVisible, setProductFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
     () =>
