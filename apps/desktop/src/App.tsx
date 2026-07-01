@@ -85,6 +85,7 @@ type ReceivableRecord = {
   customerName: string;
   saleId: string;
   amountMinor: number;
+  dueAt: string;
   status: "pending";
 };
 
@@ -157,6 +158,7 @@ type ProductFormErrors = Partial<Record<keyof ProductFormState, string>>;
 
 type SalesFormState = {
   customerId: string;
+  dueAt: string;
   productId: string;
   quantity: string;
   paymentStatus: "paid" | "pending";
@@ -164,6 +166,7 @@ type SalesFormState = {
 
 type SalesFormErrors = {
   customerId?: string | undefined;
+  dueAt?: string | undefined;
   productId?: string | undefined;
   quantity?: string | undefined;
   submit?: string | undefined;
@@ -244,6 +247,7 @@ const emptyProductForm: ProductFormState = {
 
 const emptySalesForm: SalesFormState = {
   customerId: "",
+  dueAt: "",
   productId: "",
   quantity: "",
   paymentStatus: "paid"
@@ -614,6 +618,7 @@ export function App() {
 
   function registerSaleInSession(input: {
     customer: CustomerRecord;
+    dueAt?: string | undefined;
     lines: Array<{
       product: ProductRecord;
       quantity: number;
@@ -680,6 +685,7 @@ export function App() {
           amountMinor: totalMinor,
           customerId: input.customer.id,
           customerName: input.customer.name,
+          dueAt: input.dueAt ?? "",
           id: `receivable-${saleId}`,
           saleId,
           status: "pending"
@@ -707,6 +713,7 @@ export function App() {
 
   function registerPendingSaleInSession(input: {
     customer: CustomerRecord;
+    dueAt: string;
     lines: Array<{
       product: ProductRecord;
       quantity: number;
@@ -714,6 +721,7 @@ export function App() {
   }): string | null {
     return registerSaleInSession({
       customer: input.customer,
+      dueAt: input.dueAt,
       lines: input.lines,
       paymentStatus: "pending"
     });
@@ -882,6 +890,7 @@ type SectionContentProps = {
   }) => string | null;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
+    dueAt: string;
     lines: Array<{
       product: ProductRecord;
       quantity: number;
@@ -1961,6 +1970,10 @@ function SalesSection({
     if (!selectedCustomer) {
       nextErrors.customerId = "Debes seleccionar un cliente.";
     }
+    if (form.paymentStatus === "pending" && form.dueAt.trim() === "") {
+      nextErrors.dueAt =
+        "La fecha de vencimiento es obligatoria para ventas pendientes.";
+    }
     if (saleLines.length === 0 || hasDraftLine) {
       Object.assign(nextErrors, lineValidation.errors);
     }
@@ -1987,7 +2000,10 @@ function SalesSection({
     if (form.paymentStatus === "paid") {
       submitError = onRegisterPaidSale(registerInput);
     } else {
-      submitError = onRegisterPendingSale(registerInput);
+      submitError = onRegisterPendingSale({
+        ...registerInput,
+        dueAt: form.dueAt.trim()
+      });
     }
 
     if (submitError) {
@@ -2201,6 +2217,18 @@ function SalesSection({
           </label>
         </div>
 
+        {form.paymentStatus === "pending" ? (
+          <TextField
+            error={errors.dueAt}
+            label="Fecha vencimiento venta"
+            onChange={(value) => {
+              updateField("dueAt", value);
+            }}
+            type="date"
+            value={form.dueAt}
+          />
+        ) : null}
+
         {saleLines.length > 0 ? (
           <table className="data-table purchase-lines-table" aria-label="Productos de la venta">
             <thead>
@@ -2320,11 +2348,12 @@ function ReceivablesSection({ receivables }: ReceivablesSectionProps) {
 
   return (
     <section className="section-panel">
-      <table className="data-table" aria-label="Cartera pendiente">
+      <table className="data-table" aria-label="Cartera por cobrar">
         <thead>
           <tr>
             <th>Cliente</th>
             <th>Venta</th>
+            <th>Vence</th>
             <th>Saldo</th>
             <th>Estado</th>
           </tr>
@@ -2334,6 +2363,7 @@ function ReceivablesSection({ receivables }: ReceivablesSectionProps) {
             <tr key={receivable.id}>
               <td>{receivable.customerName}</td>
               <td>{receivable.saleId}</td>
+              <td>{receivable.dueAt || "Sin vencimiento"}</td>
               <td>{formatCurrency(receivable.amountMinor)}</td>
               <td>Pendiente</td>
             </tr>
