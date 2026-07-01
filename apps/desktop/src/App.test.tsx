@@ -1,7 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { generateInvoicePdf } from "./invoice-pdf";
+
+vi.mock("./invoice-pdf", () => ({
+  generateInvoicePdf: vi.fn()
+}));
+
+const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
 
 async function createProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Productos" }));
@@ -15,6 +22,14 @@ async function createProductFixture(user: UserEvent) {
 }
 
 describe("App navigation", () => {
+  beforeEach(() => {
+    generateInvoicePdfMock.mockReset();
+    generateInvoicePdfMock.mockReturnValue({
+      dataUri: "data:application/pdf;base64,invoice-pdf",
+      fileName: "factura-FE-sale-1.pdf"
+    });
+  });
+
   it("switches active section from the sidebar", async () => {
     const user = userEvent.setup();
 
@@ -115,7 +130,8 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre cliente"), "Ana Perez");
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
       screen.getByLabelText("Producto"),
@@ -145,7 +161,8 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre cliente"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
       screen.getByLabelText("Producto"),
@@ -182,6 +199,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
     expect(screen.getByText("El nombre del cliente es obligatorio.")).toBeTruthy();
+    expect(screen.getByText("El documento del cliente es obligatorio.")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
@@ -198,7 +216,8 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre cliente"), "Luisa Mora");
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Luisa Mora");
+    await user.type(screen.getByLabelText("NIT o C.C."), "456789123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
       screen.getByLabelText("Producto"),
@@ -211,5 +230,122 @@ describe("App navigation", () => {
     expect(
       screen.getByText("No hay inventario suficiente para completar el movimiento.")
     ).toBeTruthy();
+  });
+
+  it("creates an inline customer with document, address, city, and email", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.type(screen.getByLabelText("Direccion"), "Calle 10 # 20-30");
+    await user.type(screen.getByLabelText("Ciudad"), "Medellin");
+    await user.type(screen.getByLabelText("Email"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
+  });
+
+  it("requires customer name and document when creating an inline customer", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByText("El nombre del cliente es obligatorio.")).toBeTruthy();
+    expect(screen.getByText("El documento del cliente es obligatorio.")).toBeTruthy();
+  });
+
+  it("generates a PDF invoice for a registered paid sale", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.type(screen.getByLabelText("Direccion"), "Calle 10 # 20-30");
+    await user.type(screen.getByLabelText("Ciudad"), "Medellin");
+    await user.type(screen.getByLabelText("Email"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+
+    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: {
+          address: "Calle 10 # 20-30",
+          city: "Medellin",
+          document: "123456789",
+          email: "ana@example.com",
+          name: "Ana Perez"
+        },
+        item: {
+          description: "Arroz libra",
+          quantity: 2,
+          totalMinor: 9000,
+          unitPriceMinor: 4500
+        },
+        paymentStatus: "paid"
+      })
+    );
+    expect(screen.getByText("Factura generada")).toBeTruthy();
+    expect(screen.getByTitle("Vista previa de factura PDF").getAttribute("src")).toBe(
+      "data:application/pdf;base64,invoice-pdf"
+    );
+    expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
+      "data:application/pdf;base64,invoice-pdf"
+    );
+  });
+
+  it("passes pending status to invoice generation for pending sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "3");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+
+    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: expect.objectContaining({
+          document: "987654321",
+          name: "Carlos Ruiz"
+        }),
+        item: expect.objectContaining({
+          quantity: 3,
+          totalMinor: 13500
+        }),
+        paymentStatus: "pending"
+      })
+    );
   });
 });
