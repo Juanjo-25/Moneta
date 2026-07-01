@@ -402,7 +402,13 @@ button {
 
 .sales-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.2fr) minmax(0, 0.8fr);
+  grid-template-columns:
+    minmax(0, 1.2fr)
+    auto
+    minmax(0, 1.1fr)
+    minmax(0, 0.7fr)
+    minmax(0, 0.8fr)
+    auto;
   gap: 14px;
   align-items: end;
 }
@@ -643,4 +649,58 @@ button {
 
 .supplier-payment-form .summary-card {
   margin-top: 0;
+}
+
+.reports-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.report-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.report-panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.report-chart {
+  display: grid;
+  gap: 8px;
+}
+
+.report-bar-row {
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.report-bar-row span,
+.report-bar-row strong {
+  font-size: 13px;
+}
+
+.report-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.report-bar-fill {
+  height: 100%;
+  background: #0f766e;
 }
