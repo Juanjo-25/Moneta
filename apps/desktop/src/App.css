@@ -671,14 +671,51 @@ button {
   padding: 18px;
 }
 
+.report-panel-header,
+.report-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .report-panel h2 {
   margin: 0;
   font-size: 18px;
 }
 
+.report-detail-header p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.report-chart-button {
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 14px;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.report-chart-button:hover {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+  transform: translateY(-1px);
+}
+
+.report-chart-button:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
 .report-chart {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .report-bar-row {
@@ -693,8 +730,17 @@ button {
   font-size: 13px;
 }
 
+.report-bar-row span {
+  color: #334155;
+  font-weight: 600;
+}
+
+.report-bar-row strong {
+  color: #0f172a;
+}
+
 .report-bar-track {
-  height: 10px;
+  height: 12px;
   border-radius: 999px;
   background: #e2e8f0;
   overflow: hidden;
@@ -703,4 +749,30 @@ button {
 .report-bar-fill {
   height: 100%;
   background: #0f766e;
+}
+
+.report-detail-panel {
+  display: grid;
+  gap: 18px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.report-sale-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.report-chart-detail {
+  padding: 18px;
+  border: 1px solid #d8dee5;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.report-bar-row-detail {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
 }

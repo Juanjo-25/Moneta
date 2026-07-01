@@ -492,6 +492,8 @@ type SaleMarginRow = {
   saleId: string;
 };
 
+type ReportDetailView = "product" | "customer" | "sale" | null;
+
 function parseLocalDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return null;
@@ -2407,6 +2409,9 @@ type ReportsSectionProps = {
 };
 
 function ReportsSection({ sales }: ReportsSectionProps) {
+  const [detailView, setDetailView] = useState<ReportDetailView>(null);
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
+
   if (sales.length === 0) {
     return (
       <section className="section-panel">
@@ -2424,6 +2429,283 @@ function ReportsSection({ sales }: ReportsSectionProps) {
   const saleRows = buildSaleMarginRows(sales);
   const productMaxMargin = productRows[0]?.marginMinor ?? 0;
   const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
+  const selectedSale = selectedSaleId
+    ? sales.find((sale) => sale.id === selectedSaleId) ?? null
+    : null;
+
+  if (detailView === "product") {
+    return (
+      <section className="reports-layout">
+        <div className="cartera-summary" aria-label="Resumen margen comercial">
+          <div className="summary-card">
+            <span>Ventas analizadas</span>
+            <strong>{formatCurrency(summary.revenueMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Costo de ventas</span>
+            <strong>{formatCurrency(summary.costMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Utilidad bruta</span>
+            <strong>{formatCurrency(summary.marginMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>% margen bruto</span>
+            <strong>{formatPercent(summary.marginPercent)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Numero de ventas</span>
+            <strong>{String(summary.salesCount)}</strong>
+          </div>
+        </div>
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button className="table-action" onClick={() => setDetailView(null)} type="button">
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por producto</h2>
+              <p>Utilidad agregada por producto vendida en el periodo analizado.</p>
+            </div>
+          </div>
+
+          <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por producto">
+            {productRows.map((row) => (
+              <div className="report-bar-row report-bar-row-detail" key={row.productId}>
+                <span>{row.productName}</span>
+                <div className="report-bar-track">
+                  <div
+                    className="report-bar-fill"
+                    style={{
+                      width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+                <strong>{formatCurrency(row.marginMinor)}</strong>
+              </div>
+            ))}
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por producto">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Unidades</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productRows.map((row) => (
+                <tr key={row.productId}>
+                  <td>{row.productName}</td>
+                  <td>{row.quantity}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
+  if (detailView === "customer") {
+    return (
+      <section className="reports-layout">
+        <div className="cartera-summary" aria-label="Resumen margen comercial">
+          <div className="summary-card">
+            <span>Ventas analizadas</span>
+            <strong>{formatCurrency(summary.revenueMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Costo de ventas</span>
+            <strong>{formatCurrency(summary.costMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Utilidad bruta</span>
+            <strong>{formatCurrency(summary.marginMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>% margen bruto</span>
+            <strong>{formatPercent(summary.marginPercent)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Numero de ventas</span>
+            <strong>{String(summary.salesCount)}</strong>
+          </div>
+        </div>
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button className="table-action" onClick={() => setDetailView(null)} type="button">
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por cliente</h2>
+              <p>Utilidad consolidada por cliente para comparar variacion comercial.</p>
+            </div>
+          </div>
+
+          <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por cliente">
+            {customerRows.map((row) => (
+              <div className="report-bar-row report-bar-row-detail" key={row.customerId}>
+                <span>{row.customerName}</span>
+                <div className="report-bar-track">
+                  <div
+                    className="report-bar-fill"
+                    style={{
+                      width: `${customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+                <strong>{formatCurrency(row.marginMinor)}</strong>
+              </div>
+            ))}
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por cliente">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+                <th>Compras</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customerRows.map((row) => (
+                <tr key={row.customerId}>
+                  <td>{row.customerName}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                  <td>{row.purchaseCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
+  if (detailView === "sale" && selectedSale) {
+    const selectedSaleCostMinor = selectedSale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    const selectedSaleMarginMinor = selectedSale.lines.reduce(
+      (sum, line) => sum + line.marginMinor,
+      0
+    );
+    const selectedSaleMarginPercent =
+      selectedSale.totalMinor > 0 ? (selectedSaleMarginMinor / selectedSale.totalMinor) * 100 : 0;
+
+    return (
+      <section className="reports-layout">
+        <div className="cartera-summary" aria-label="Resumen margen comercial">
+          <div className="summary-card">
+            <span>Ventas analizadas</span>
+            <strong>{formatCurrency(summary.revenueMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Costo de ventas</span>
+            <strong>{formatCurrency(summary.costMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Utilidad bruta</span>
+            <strong>{formatCurrency(summary.marginMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>% margen bruto</span>
+            <strong>{formatPercent(summary.marginPercent)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Numero de ventas</span>
+            <strong>{String(summary.salesCount)}</strong>
+          </div>
+        </div>
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button
+              className="table-action"
+              onClick={() => {
+                setDetailView(null);
+                setSelectedSaleId(null);
+              }}
+              type="button"
+            >
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por venta</h2>
+              <p>
+                {selectedSale.customerName} · {selectedSale.id} · {selectedSale.occurredAtLabel}
+              </p>
+            </div>
+          </div>
+
+          <div className="report-sale-summary">
+            <div className="summary-card">
+              <span>Cliente</span>
+              <strong>{selectedSale.customerName}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Venta total</span>
+              <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Costo total</span>
+              <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Margen total</span>
+              <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
+            </div>
+            <div className="summary-card">
+              <span>% margen</span>
+              <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
+            </div>
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por producto de la venta">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio venta</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedSale.lines.map((line) => (
+                <tr key={line.id}>
+                  <td>{line.productName}</td>
+                  <td>{line.quantity}</td>
+                  <td>{formatCurrency(line.unitPriceMinor)}</td>
+                  <td>{formatCurrency(line.totalMinor)}</td>
+                  <td>{formatCurrency(line.costMinor)}</td>
+                  <td>{formatCurrency(line.marginMinor)}</td>
+                  <td>{formatPercent(line.marginPercent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
 
   return (
     <section className="reports-layout">
@@ -2452,91 +2734,75 @@ function ReportsSection({ sales }: ReportsSectionProps) {
 
       <div className="reports-grid">
         <section className="report-panel">
-          <h2>Margen por producto</h2>
-          <div className="report-chart" aria-label="Grafico margen por producto">
-            {productRows.slice(0, 5).map((row) => (
-              <div className="report-bar-row" key={row.productId}>
-                <span>{row.productName}</span>
-                <div className="report-bar-track">
-                  <div
-                    className="report-bar-fill"
-                    style={{
-                      width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
-                    }}
-                  />
-                </div>
-                <strong>{formatCurrency(row.marginMinor)}</strong>
-              </div>
-            ))}
+          <div className="report-panel-header">
+            <h2>Margen por producto</h2>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("product")}
+              type="button"
+            >
+              Ver detalle
+            </button>
           </div>
-          <table className="data-table" aria-label="Margen por producto">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Unidades</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productRows.map((row) => (
-                <tr key={row.productId}>
-                  <td>{row.productName}</td>
-                  <td>{row.quantity}</td>
-                  <td>{formatCurrency(row.revenueMinor)}</td>
-                  <td>{formatCurrency(row.costMinor)}</td>
-                  <td>{formatCurrency(row.marginMinor)}</td>
-                  <td>{formatPercent(row.marginPercent)}</td>
-                </tr>
+          <button
+            aria-label="Abrir detalle de margen por producto"
+            className="report-chart-button"
+            onClick={() => setDetailView("product")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por producto">
+              {productRows.slice(0, 5).map((row) => (
+                <div className="report-bar-row" key={row.productId}>
+                  <span>{row.productName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </button>
         </section>
 
         <section className="report-panel">
-          <h2>Margen por cliente</h2>
-          <div className="report-chart" aria-label="Grafico margen por cliente">
-            {customerRows.slice(0, 5).map((row) => (
-              <div className="report-bar-row" key={row.customerId}>
-                <span>{row.customerName}</span>
-                <div className="report-bar-track">
-                  <div
-                    className="report-bar-fill"
-                    style={{
-                      width: `${customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0}%`
-                    }}
-                  />
-                </div>
-                <strong>{formatCurrency(row.marginMinor)}</strong>
-              </div>
-            ))}
+          <div className="report-panel-header">
+            <h2>Margen por cliente</h2>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("customer")}
+              type="button"
+            >
+              Ver detalle
+            </button>
           </div>
-          <table className="data-table" aria-label="Margen por cliente">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-                <th>Compras</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customerRows.map((row) => (
-                <tr key={row.customerId}>
-                  <td>{row.customerName}</td>
-                  <td>{formatCurrency(row.revenueMinor)}</td>
-                  <td>{formatCurrency(row.costMinor)}</td>
-                  <td>{formatCurrency(row.marginMinor)}</td>
-                  <td>{formatPercent(row.marginPercent)}</td>
-                  <td>{row.purchaseCount}</td>
-                </tr>
+          <button
+            aria-label="Abrir detalle de margen por cliente"
+            className="report-chart-button"
+            onClick={() => setDetailView("customer")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por cliente">
+              {customerRows.slice(0, 5).map((row) => (
+                <div className="report-bar-row" key={row.customerId}>
+                  <span>{row.customerName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </button>
         </section>
       </div>
 
@@ -2551,6 +2817,7 @@ function ReportsSection({ sales }: ReportsSectionProps) {
             <th>Costo</th>
             <th>Utilidad</th>
             <th>% margen</th>
+            <th>Accion</th>
           </tr>
         </thead>
         <tbody>
@@ -2564,6 +2831,19 @@ function ReportsSection({ sales }: ReportsSectionProps) {
               <td>{formatCurrency(row.costMinor)}</td>
               <td>{formatCurrency(row.marginMinor)}</td>
               <td>{formatPercent(row.marginPercent)}</td>
+              <td>
+                <button
+                  aria-label={`Ver detalle de venta ${row.saleId}`}
+                  className="table-action"
+                  onClick={() => {
+                    setSelectedSaleId(row.saleId);
+                    setDetailView("sale");
+                  }}
+                  type="button"
+                >
+                  Ver detalle
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

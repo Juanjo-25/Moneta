@@ -560,12 +560,8 @@ describe("App navigation", () => {
     expect(screen.getByText("Utilidad bruta")).toBeTruthy();
     const summary = screen.getByLabelText("Resumen margen comercial");
     expect(within(summary).getByText(/\$\s*2\.600/)).toBeTruthy();
-
-    const productTable = screen.getByRole("table", { name: "Margen por producto" });
-    expect(within(productTable).getByText("Arroz libra")).toBeTruthy();
-    expect(within(productTable).getByText(/\$\s*9\.000/)).toBeTruthy();
-    expect(within(productTable).getByText(/\$\s*6\.400/)).toBeTruthy();
-    expect(within(productTable).getByText(/\$\s*2\.600/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Abrir detalle de margen por producto" })).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Margen por producto" })).toBeNull();
   });
 
   it("shows separate margin rows by client and sale when the same product is sold at different prices", async () => {
@@ -602,13 +598,93 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
 
-    const customerTable = screen.getByRole("table", { name: "Margen por cliente" });
-    expect(within(customerTable).getByText("Cliente Uno")).toBeTruthy();
-    expect(within(customerTable).getByText("Cliente Dos")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Abrir detalle de margen por cliente" })).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Margen por cliente" })).toBeNull();
 
     const salesTable = screen.getByRole("table", { name: "Margen por venta" });
     expect(within(salesTable).getAllByText(/\$\s*4\.500/).length).toBeGreaterThan(0);
     expect(within(salesTable).getByText(/\$\s*3\.850/)).toBeTruthy();
+  });
+
+  it("opens a report detail subview from the product margin chart and returns to summary", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(screen.getByRole("button", { name: "Abrir detalle de margen por producto" }));
+
+    expect(screen.getByRole("heading", { name: "Margen por producto" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Volver a resumen" })).toBeTruthy();
+
+    const detailTable = screen.getByRole("table", { name: "Detalle margen por producto" });
+    expect(within(detailTable).getByText("Arroz libra")).toBeTruthy();
+    expect(within(detailTable).getByText(/\$\s*2\.600/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Volver a resumen" }));
+
+    expect(screen.getByRole("button", { name: "Abrir detalle de margen por producto" })).toBeTruthy();
+    expect(screen.getByRole("table", { name: "Margen por venta" })).toBeTruthy();
+  });
+
+  it("opens a sale margin detail subview with total and per-product breakdown", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Mixto");
+    await user.type(screen.getByLabelText("NIT o C.C."), "333");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(screen.getByRole("button", { name: /Ver detalle de venta sale-/ }));
+
+    expect(screen.getByRole("heading", { name: "Margen por venta" })).toBeTruthy();
+    expect(screen.getByText("Cliente Mixto")).toBeTruthy();
+    const saleSummary = screen.getByText("Margen total").closest(".summary-card");
+    expect(saleSummary).toBeTruthy();
+    expect(within(saleSummary as HTMLElement).getByText(/\$\s*3\.300/)).toBeTruthy();
+
+    const detailTable = screen.getByRole("table", { name: "Detalle margen por producto de la venta" });
+    expect(within(detailTable).getByText("Arroz libra")).toBeTruthy();
+    expect(within(detailTable).getByText("Panela unidad")).toBeTruthy();
+    expect(within(detailTable).getByText(/\$\s*1\.300/)).toBeTruthy();
+    expect(within(detailTable).getByText(/\$\s*2\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Volver a resumen" }));
+
+    expect(screen.getByRole("table", { name: "Margen por venta" })).toBeTruthy();
   });
 
   it("sorts cartera rows by due date and labels overdue and upcoming invoices", async () => {
