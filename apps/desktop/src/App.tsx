@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
   type FormEvent,
@@ -52,7 +53,11 @@ type SaleLineRecord = {
   productId: string;
   productName: string;
   quantity: number;
+  unitCostMinorAtSale: number;
   unitPriceMinor: number;
+  costMinor: number;
+  marginMinor: number;
+  marginPercent: number;
   totalMinor: number;
 };
 
@@ -60,8 +65,12 @@ type SaleDraftLine = {
   id: string;
   product: ProductRecord;
   quantity: number;
-  totalMinor: number;
+  unitCostMinorAtSale: number;
   unitPriceMinor: number;
+  costMinor: number;
+  marginMinor: number;
+  marginPercent: number;
+  totalMinor: number;
 };
 
 type SaleRecord = {
@@ -76,6 +85,7 @@ type SaleRecord = {
   totalMinor: number;
   lines: SaleLineRecord[];
   paymentStatus: "paid" | "pending";
+  occurredAtMs: number;
   occurredAtLabel: string;
 };
 
@@ -161,6 +171,7 @@ type SalesFormState = {
   dueAt: string;
   productId: string;
   quantity: string;
+  unitPrice: string;
   paymentStatus: "paid" | "pending";
 };
 
@@ -169,6 +180,7 @@ type SalesFormErrors = {
   dueAt?: string | undefined;
   productId?: string | undefined;
   quantity?: string | undefined;
+  unitPrice?: string | undefined;
   submit?: string | undefined;
 };
 
@@ -250,6 +262,7 @@ const emptySalesForm: SalesFormState = {
   dueAt: "",
   productId: "",
   quantity: "",
+  unitPrice: "",
   paymentStatus: "paid"
 };
 
@@ -398,11 +411,42 @@ function formatCurrency(minor: number): string {
   }).format(minor);
 }
 
+function formatPercent(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+function formatDays(value: number): string {
+  return `${value.toFixed(1)} dias`;
+}
+
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",
     timeStyle: "short"
   }).format(date);
+}
+
+function buildSaleLineSnapshot(input: {
+  product: ProductRecord;
+  quantity: number;
+  unitPriceMinor: number;
+}): SaleDraftLine {
+  const totalMinor = input.quantity * input.unitPriceMinor;
+  const costMinor = input.quantity * input.product.costMinor;
+  const marginMinor = totalMinor - costMinor;
+  const marginPercent = totalMinor > 0 ? (marginMinor / totalMinor) * 100 : 0;
+
+  return {
+    costMinor,
+    id: `sale-line-${Date.now()}`,
+    marginMinor,
+    marginPercent,
+    product: input.product,
+    quantity: input.quantity,
+    totalMinor,
+    unitCostMinorAtSale: input.product.costMinor,
+    unitPriceMinor: input.unitPriceMinor
+  };
 }
 
 type DueAlert = "overdue" | "upcoming" | "current" | "none";
@@ -412,6 +456,65 @@ type DueMetadata = {
   alertLabel: string;
   bucketLabel: string;
   daysUntilDue: number | null;
+};
+
+type MarginSummary = {
+  costMinor: number;
+  marginMinor: number;
+  marginPercent: number;
+  revenueMinor: number;
+  salesCount: number;
+};
+
+type ProductMarginRow = {
+  costMinor: number;
+  marginMinor: number;
+  marginPercent: number;
+  productId: string;
+  productName: string;
+  quantity: number;
+  revenueMinor: number;
+};
+
+type CustomerMarginRow = {
+  costMinor: number;
+  customerId: string;
+  customerName: string;
+  marginMinor: number;
+  marginPercent: number;
+  purchaseCount: number;
+  revenueMinor: number;
+};
+
+type SaleMarginRow = {
+  costMinor: number;
+  customerName: string;
+  marginMinor: number;
+  marginPercent: number;
+  occurredAtLabel: string;
+  paymentStatus: "paid" | "pending";
+  revenueMinor: number;
+  saleId: string;
+};
+
+type ReportDetailView = "product" | "customer" | "sales" | "sale" | null;
+type ReportTab = "profitability" | "dso" | "cashflow" | "waterfall" | "variance";
+type ProfitabilityTab = "overview" | "customer" | "product" | "sales";
+
+type DsoSummary = {
+  activeReceivablesMinor: number;
+  clientCount: number;
+  dsoDays: number;
+  openInvoiceCount: number;
+};
+
+type DsoClientRow = {
+  averageOutstandingDays: number;
+  customerId: string;
+  customerName: string;
+  invoiceCount: number;
+  participationPercent: number;
+  receivableMinor: number;
 };
 
 function parseLocalDate(value: string): Date | null {
@@ -512,6 +615,196 @@ function compareDueDates(leftDueAt: string, rightDueAt: string): number {
   const right = parseLocalDate(rightDueAt)?.getTime() ?? Number.POSITIVE_INFINITY;
 
   return left - right;
+}
+
+function buildMarginSummary(sales: SaleRecord[]): MarginSummary {
+  const revenueMinor = sales.reduce((sum, sale) => sum + sale.totalMinor, 0);
+  const costMinor = sales.reduce(
+    (sum, sale) => sum + sale.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+    0
+  );
+  const marginMinor = revenueMinor - costMinor;
+
+  return {
+    costMinor,
+    marginMinor,
+    marginPercent: revenueMinor > 0 ? (marginMinor / revenueMinor) * 100 : 0,
+    revenueMinor,
+    salesCount: sales.length
+  };
+}
+
+function buildProductMarginRows(sales: SaleRecord[]): ProductMarginRow[] {
+  const productMap = new Map<string, ProductMarginRow>();
+
+  sales.forEach((sale) => {
+    sale.lines.forEach((line) => {
+      const currentRow = productMap.get(line.productId) ?? {
+        costMinor: 0,
+        marginMinor: 0,
+        marginPercent: 0,
+        productId: line.productId,
+        productName: line.productName,
+        quantity: 0,
+        revenueMinor: 0
+      };
+
+      currentRow.quantity += line.quantity;
+      currentRow.revenueMinor += line.totalMinor;
+      currentRow.costMinor += line.costMinor;
+      currentRow.marginMinor += line.marginMinor;
+      currentRow.marginPercent =
+        currentRow.revenueMinor > 0
+          ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
+          : 0;
+
+      productMap.set(line.productId, currentRow);
+    });
+  });
+
+  return [...productMap.values()].sort((left, right) => right.marginMinor - left.marginMinor);
+}
+
+function buildCustomerMarginRows(sales: SaleRecord[]): CustomerMarginRow[] {
+  const customerMap = new Map<string, CustomerMarginRow>();
+
+  sales.forEach((sale) => {
+    const saleCostMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    const saleMarginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
+    const currentRow = customerMap.get(sale.customerId) ?? {
+      costMinor: 0,
+      customerId: sale.customerId,
+      customerName: sale.customerName,
+      marginMinor: 0,
+      marginPercent: 0,
+      purchaseCount: 0,
+      revenueMinor: 0
+    };
+
+    currentRow.purchaseCount += 1;
+    currentRow.revenueMinor += sale.totalMinor;
+    currentRow.costMinor += saleCostMinor;
+    currentRow.marginMinor += saleMarginMinor;
+    currentRow.marginPercent =
+      currentRow.revenueMinor > 0
+        ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
+        : 0;
+
+    customerMap.set(sale.customerId, currentRow);
+  });
+
+  return [...customerMap.values()].sort((left, right) => right.marginMinor - left.marginMinor);
+}
+
+function buildSaleMarginRows(sales: SaleRecord[]): SaleMarginRow[] {
+  return sales.map((sale) => {
+    const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    const marginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
+
+    return {
+      costMinor,
+      customerName: sale.customerName,
+      marginMinor,
+      marginPercent: sale.totalMinor > 0 ? (marginMinor / sale.totalMinor) * 100 : 0,
+      occurredAtLabel: sale.occurredAtLabel,
+      paymentStatus: sale.paymentStatus,
+      revenueMinor: sale.totalMinor,
+      saleId: sale.id
+    };
+  });
+}
+
+function buildDsoClientRows(input: {
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+  todayMs?: number;
+}): DsoClientRow[] {
+  const todayMs = input.todayMs ?? Date.now();
+  const saleById = new Map(input.sales.map((sale) => [sale.id, sale]));
+  const customerMap = new Map<
+    string,
+    {
+      customerId: string;
+      customerName: string;
+      invoiceCount: number;
+      receivableMinor: number;
+      weightedOutstandingDays: number;
+    }
+  >();
+
+  input.receivables.forEach((receivable) => {
+    const sale = saleById.get(receivable.saleId);
+
+    if (!sale) {
+      return;
+    }
+
+    const outstandingDays = Math.max(
+      (todayMs - sale.occurredAtMs) / (24 * 60 * 60 * 1000),
+      0
+    );
+    const currentRow = customerMap.get(receivable.customerId) ?? {
+      customerId: receivable.customerId,
+      customerName: receivable.customerName,
+      invoiceCount: 0,
+      receivableMinor: 0,
+      weightedOutstandingDays: 0
+    };
+
+    currentRow.invoiceCount += 1;
+    currentRow.receivableMinor += receivable.amountMinor;
+    currentRow.weightedOutstandingDays += outstandingDays * receivable.amountMinor;
+
+    customerMap.set(receivable.customerId, currentRow);
+  });
+
+  const totalReceivableMinor = [...customerMap.values()].reduce(
+    (sum, row) => sum + row.receivableMinor,
+    0
+  );
+
+  return [...customerMap.values()]
+    .map((row) => ({
+      averageOutstandingDays:
+        row.receivableMinor > 0 ? row.weightedOutstandingDays / row.receivableMinor : 0,
+      customerId: row.customerId,
+      customerName: row.customerName,
+      invoiceCount: row.invoiceCount,
+      participationPercent:
+        totalReceivableMinor > 0 ? (row.receivableMinor / totalReceivableMinor) * 100 : 0,
+      receivableMinor: row.receivableMinor
+    }))
+    .sort((left, right) => right.receivableMinor - left.receivableMinor);
+}
+
+function buildDsoSummary(input: {
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+  todayMs?: number;
+}): DsoSummary {
+  const clientRows = buildDsoClientRows(input);
+  const activeReceivablesMinor = clientRows.reduce((sum, row) => sum + row.receivableMinor, 0);
+
+  if (activeReceivablesMinor <= 0) {
+    return {
+      activeReceivablesMinor: 0,
+      clientCount: 0,
+      dsoDays: 0,
+      openInvoiceCount: 0
+    };
+  }
+
+  const weightedDays = clientRows.reduce(
+    (sum, row) => sum + row.averageOutstandingDays * row.receivableMinor,
+    0
+  );
+
+  return {
+    activeReceivablesMinor,
+    clientCount: clientRows.length,
+    dsoDays: weightedDays / activeReceivablesMinor,
+    openInvoiceCount: clientRows.reduce((sum, row) => sum + row.invoiceCount, 0)
+  };
 }
 
 function getSupplierPayableStatus(input: {
@@ -730,10 +1023,17 @@ export function App() {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
     paymentStatus: "paid" | "pending";
   }): string | null {
-    const occurredAt = new Date();
+    const occurredAtMs = Date.now();
+    const occurredAt = new Date(occurredAtMs);
     const requestedByProduct = input.lines.reduce((requested, line) => {
       requested.set(
         line.product.id,
@@ -751,12 +1051,16 @@ export function App() {
 
     const saleId = `sale-${Date.now()}`;
     const lines = input.lines.map((line, index) => ({
+      costMinor: line.costMinor,
       id: `${saleId}-line-${index}`,
+      marginMinor: line.marginMinor,
+      marginPercent: line.marginPercent,
       productId: line.product.id,
       productName: line.product.name,
       quantity: line.quantity,
-      totalMinor: line.quantity * line.product.salePriceMinor,
-      unitPriceMinor: line.product.salePriceMinor
+      totalMinor: line.totalMinor,
+      unitCostMinorAtSale: line.unitCostMinorAtSale,
+      unitPriceMinor: line.unitPriceMinor
     }));
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
     const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
@@ -775,6 +1079,7 @@ export function App() {
         customerName: input.customer.name,
         id: saleId,
         lines,
+        occurredAtMs,
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         paymentStatus: input.paymentStatus,
         productId: firstLine.productId,
@@ -810,6 +1115,12 @@ export function App() {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
   }): string | null {
     return registerSaleInSession({
@@ -825,6 +1136,12 @@ export function App() {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
   }): string | null {
     return registerSaleInSession({
@@ -996,6 +1313,12 @@ type SectionContentProps = {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
   }) => string | null;
   onRegisterPendingSale: (input: {
@@ -1004,6 +1327,12 @@ type SectionContentProps = {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
   }) => string | null;
   onRegisterSupplierPayment: (input: {
@@ -1094,6 +1423,10 @@ function SectionContent({
         supplierPayables={supplierPayables}
       />
     );
+  }
+
+  if (section.id === "reports") {
+    return <ReportsSection receivables={receivables} sales={sales} />;
   }
 
   return (
@@ -2189,6 +2522,678 @@ function PayablesTable({
   );
 }
 
+type ReportsSectionProps = {
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+};
+
+function ReportsSection({ receivables, sales }: ReportsSectionProps) {
+  const [activeReportTab, setActiveReportTab] = useState<ReportTab>("profitability");
+  const [activeProfitabilityTab, setActiveProfitabilityTab] =
+    useState<ProfitabilityTab>("overview");
+  const [detailView, setDetailView] = useState<ReportDetailView>(null);
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
+
+  const summary = buildMarginSummary(sales);
+  const productRows = buildProductMarginRows(sales);
+  const customerRows = buildCustomerMarginRows(sales);
+  const saleRows = buildSaleMarginRows(sales);
+  const productMaxMargin = productRows[0]?.marginMinor ?? 0;
+  const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
+  const saleMaxMargin = saleRows[0]?.marginMinor ?? 0;
+  const selectedSale = selectedSaleId
+    ? sales.find((sale) => sale.id === selectedSaleId) ?? null
+    : null;
+  const dsoSummary = buildDsoSummary({ receivables, sales });
+  const dsoClientRows = buildDsoClientRows({ receivables, sales });
+  const netMarginMinor = summary.marginMinor;
+  const topCustomerRows = customerRows.slice(0, 10);
+  const topProductRows = productRows.slice(0, 10);
+  const topSaleRows = saleRows.slice(0, 10);
+
+  const reportTabs: Array<{ id: ReportTab; label: string; title: string }> = [
+    { id: "profitability", label: "Rentabilidad", title: "Rentabilidad" },
+    { id: "dso", label: "DSO", title: "DSO" },
+    { id: "cashflow", label: "Flujo de caja", title: "Flujo de caja" },
+    { id: "waterfall", label: "Cascada", title: "Cascada" },
+    { id: "variance", label: "Variacion directa", title: "Variacion directa" }
+  ];
+
+  const profitabilityTabs: Array<{ id: ProfitabilityTab; label: string }> = [
+    { id: "overview", label: "Dashboard general" },
+    { id: "customer", label: "Clientes" },
+    { id: "product", label: "Producto" },
+    { id: "sales", label: "Ventas" }
+  ];
+
+  function selectReportTab(tab: ReportTab) {
+    setActiveReportTab(tab);
+    setDetailView(null);
+    setSelectedSaleId(null);
+  }
+
+  function selectProfitabilityTab(tab: ProfitabilityTab) {
+    setActiveProfitabilityTab(tab);
+    setDetailView(null);
+    setSelectedSaleId(null);
+  }
+
+  function renderProfitabilitySummary() {
+    return (
+      <div className="cartera-summary" aria-label="Resumen rentabilidad general">
+        <div className="summary-card">
+          <span>Ingresos totales</span>
+          <strong>{formatCurrency(summary.revenueMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Costo de ventas</span>
+          <strong>{formatCurrency(summary.costMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Margen bruto</span>
+          <strong>{formatCurrency(summary.marginMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Margen neto</span>
+          <strong>{formatCurrency(netMarginMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>% margen</span>
+          <strong>{formatPercent(summary.marginPercent)}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  function renderReportTabs() {
+    return (
+      <div className="reports-submenu" aria-label="Tipos de reportes">
+        {reportTabs.map((tab) => (
+          <button
+            aria-selected={activeReportTab === tab.id}
+            className={activeReportTab === tab.id ? "active" : ""}
+            key={tab.id}
+            onClick={() => selectReportTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function renderProfitabilityTabs() {
+    return (
+      <div className="reports-submenu" aria-label="Tipos de rentabilidad">
+        {profitabilityTabs.map((tab) => (
+          <button
+            aria-selected={activeProfitabilityTab === tab.id}
+            className={activeProfitabilityTab === tab.id ? "active" : ""}
+            key={tab.id}
+            onClick={() => selectProfitabilityTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (activeReportTab === "dso") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <div className="cartera-summary" aria-label="Resumen DSO">
+          <div className="summary-card">
+            <span>DSO global</span>
+            <strong>{formatDays(dsoSummary.dsoDays)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Cartera abierta</span>
+            <strong>{formatCurrency(dsoSummary.activeReceivablesMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Clientes con saldo</span>
+            <strong>{String(dsoSummary.clientCount)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Facturas abiertas</span>
+            <strong>{String(dsoSummary.openInvoiceCount)}</strong>
+          </div>
+        </div>
+
+        {dsoClientRows.length === 0 ? (
+          <div className="empty-state section-empty">
+            <strong>Sin cartera pendiente para DSO</strong>
+            <span>Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo.</span>
+          </div>
+        ) : (
+          <section className="report-detail-panel">
+            <div className="report-detail-header">
+              <div>
+                <h2>DSO</h2>
+                <p>Top clientes que mas empujan el promedio actual de cobro.</p>
+              </div>
+            </div>
+
+            <table className="data-table" aria-label="Impacto DSO por cliente">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Saldo pendiente</th>
+                  <th>Participacion</th>
+                  <th>DSO cliente</th>
+                  <th>Facturas abiertas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dsoClientRows.map((row) => (
+                  <tr key={row.customerId}>
+                    <td>{row.customerName}</td>
+                    <td>{formatCurrency(row.receivableMinor)}</td>
+                    <td>{formatPercent(row.participationPercent)}</td>
+                    <td>{formatDays(row.averageOutstandingDays)}</td>
+                    <td>{row.invoiceCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+      </section>
+    );
+  }
+
+  if (activeReportTab !== "profitability") {
+    const selectedTab = reportTabs.find((tab) => tab.id === activeReportTab) ?? reportTabs[0]!;
+
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <section className="report-placeholder-panel">
+          <h2>{selectedTab.title}</h2>
+          <strong>Proximamente</strong>
+          <span>Este reporte aparecera aqui cuando terminemos su implementacion.</span>
+        </section>
+      </section>
+    );
+  }
+
+  if (sales.length === 0) {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <div className="empty-state section-empty">
+          <strong>Sin ventas para analizar</strong>
+          <span>Registra ventas para habilitar los reportes de rentabilidad.</span>
+        </div>
+      </section>
+    );
+  }
+
+  if (detailView === "product") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button className="table-action" onClick={() => setDetailView(null)} type="button">
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por producto</h2>
+              <p>Utilidad agregada por producto vendida en el periodo analizado.</p>
+            </div>
+          </div>
+
+          <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por producto">
+            {productRows.map((row) => (
+              <div className="report-bar-row report-bar-row-detail" key={row.productId}>
+                <span>{row.productName}</span>
+                <div className="report-bar-track">
+                  <div
+                    className="report-bar-fill"
+                    style={{
+                      width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+                <strong>{formatCurrency(row.marginMinor)}</strong>
+              </div>
+            ))}
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por producto">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Unidades</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productRows.map((row) => (
+                <tr key={row.productId}>
+                  <td>{row.productName}</td>
+                  <td>{row.quantity}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
+  if (detailView === "customer") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button className="table-action" onClick={() => setDetailView(null)} type="button">
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por cliente</h2>
+              <p>Utilidad consolidada por cliente para comparar variacion comercial.</p>
+            </div>
+          </div>
+
+          <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por cliente">
+            {customerRows.map((row) => (
+              <div className="report-bar-row report-bar-row-detail" key={row.customerId}>
+                <span>{row.customerName}</span>
+                <div className="report-bar-track">
+                  <div
+                    className="report-bar-fill"
+                    style={{
+                      width: `${customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+                <strong>{formatCurrency(row.marginMinor)}</strong>
+              </div>
+            ))}
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por cliente">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+                <th>Compras</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customerRows.map((row) => (
+                <tr key={row.customerId}>
+                  <td>{row.customerName}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                  <td>{row.purchaseCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
+  if (detailView === "sales") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button className="table-action" onClick={() => setDetailView(null)} type="button">
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por venta</h2>
+              <p>Rentabilidad total por venta y acceso al detalle por producto de cada factura.</p>
+            </div>
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por venta">
+            <thead>
+              <tr>
+                <th>Venta</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {saleRows.map((row) => (
+                <tr key={row.saleId}>
+                  <td>{row.saleId}</td>
+                  <td>{row.occurredAtLabel}</td>
+                  <td>{row.customerName}</td>
+                  <td>{row.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                  <td>
+                    <button
+                      aria-label={`Ver detalle de venta ${row.saleId}`}
+                      className="table-action"
+                      onClick={() => {
+                        setSelectedSaleId(row.saleId);
+                        setDetailView("sale");
+                      }}
+                      type="button"
+                    >
+                      Ver detalle
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
+  if (detailView === "sale" && selectedSale) {
+    const selectedSaleCostMinor = selectedSale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    const selectedSaleMarginMinor = selectedSale.lines.reduce(
+      (sum, line) => sum + line.marginMinor,
+      0
+    );
+    const selectedSaleMarginPercent =
+      selectedSale.totalMinor > 0 ? (selectedSaleMarginMinor / selectedSale.totalMinor) * 100 : 0;
+
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button
+              className="table-action"
+              onClick={() => {
+                setDetailView("sales");
+                setSelectedSaleId(null);
+              }}
+              type="button"
+            >
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por venta</h2>
+              <p>
+                {selectedSale.customerName} · {selectedSale.id} · {selectedSale.occurredAtLabel}
+              </p>
+            </div>
+          </div>
+
+          <div className="report-sale-summary">
+            <div className="summary-card">
+              <span>Cliente</span>
+              <strong>{selectedSale.customerName}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Venta total</span>
+              <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Costo total</span>
+              <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Margen total</span>
+              <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
+            </div>
+            <div className="summary-card">
+              <span>% margen</span>
+              <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
+            </div>
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por producto de la venta">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio venta</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedSale.lines.map((line) => (
+                <tr key={line.id}>
+                  <td>{line.productName}</td>
+                  <td>{line.quantity}</td>
+                  <td>{formatCurrency(line.unitPriceMinor)}</td>
+                  <td>{formatCurrency(line.totalMinor)}</td>
+                  <td>{formatCurrency(line.costMinor)}</td>
+                  <td>{formatCurrency(line.marginMinor)}</td>
+                  <td>{formatPercent(line.marginPercent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
+  if (activeProfitabilityTab === "customer") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <section className="report-panel report-panel-single">
+          <div className="report-panel-header">
+            <div>
+              <h2>Margen por cliente</h2>
+              <p>Top clientes ordenados por utilidad real acumulada.</p>
+            </div>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("customer")}
+              type="button"
+            >
+              Ver detalle
+            </button>
+          </div>
+          <button
+            aria-label="Abrir detalle de margen por cliente"
+            className="report-chart-button"
+            onClick={() => setDetailView("customer")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por cliente">
+              {topCustomerRows.map((row) => (
+                <div className="report-bar-row" key={row.customerId}>
+                  <span>{row.customerName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
+              ))}
+            </div>
+          </button>
+        </section>
+      </section>
+    );
+  }
+
+  if (activeProfitabilityTab === "product") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <section className="report-panel report-panel-single">
+          <div className="report-panel-header">
+            <div>
+              <h2>Margen por producto</h2>
+              <p>Productos ordenados por utilidad y volumen vendido.</p>
+            </div>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("product")}
+              type="button"
+            >
+              Ver detalle
+            </button>
+          </div>
+          <button
+            aria-label="Abrir detalle de margen por producto"
+            className="report-chart-button"
+            onClick={() => setDetailView("product")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por producto">
+              {topProductRows.map((row) => (
+                <div className="report-bar-row" key={row.productId}>
+                  <span>{row.productName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
+              ))}
+            </div>
+          </button>
+        </section>
+      </section>
+    );
+  }
+
+  if (activeProfitabilityTab === "sales") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <section className="report-panel report-panel-single">
+          <div className="report-panel-header">
+            <div>
+              <h2>Margen por venta</h2>
+              <p>Rentabilidad por venta completa, con acceso al desglose por linea.</p>
+            </div>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("sales")}
+              type="button"
+            >
+              Ver detalle
+            </button>
+          </div>
+          <button
+            aria-label="Abrir detalle de margen por venta"
+            className="report-chart-button"
+            onClick={() => setDetailView("sales")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por venta">
+              {topSaleRows.map((row) => (
+                <div className="report-bar-row" key={row.saleId}>
+                  <span>{row.customerName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${saleMaxMargin > 0 ? (row.marginMinor / saleMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
+              ))}
+            </div>
+          </button>
+        </section>
+      </section>
+    );
+  }
+
+  return (
+    <section className="reports-layout">
+      {renderReportTabs()}
+      {renderProfitabilityTabs()}
+      {renderProfitabilitySummary()}
+
+      <section className="report-detail-panel">
+        <div className="report-detail-header">
+          <div>
+            <h2>Estado de perdidas y ganancias</h2>
+            <p>Vista macro de ingresos, costo de ventas y utilidad final del periodo analizado.</p>
+          </div>
+        </div>
+
+        <div className="report-waterfall" aria-label="Grafico cascada de utilidad">
+          <div className="report-waterfall-step">
+            <span>Ingresos</span>
+            <strong>{formatCurrency(summary.revenueMinor)}</strong>
+          </div>
+          <div className="report-waterfall-step report-waterfall-step-negative">
+            <span>Costo de ventas</span>
+            <strong>{formatCurrency(summary.costMinor)}</strong>
+          </div>
+          <div className="report-waterfall-step">
+            <span>Utilidad bruta</span>
+            <strong>{formatCurrency(summary.marginMinor)}</strong>
+          </div>
+          <div className="report-waterfall-step">
+            <span>Utilidad neta</span>
+            <strong>{formatCurrency(netMarginMinor)}</strong>
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
+
 type SalesSectionProps = {
   customers: CustomerRecord[];
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
@@ -2197,6 +3202,12 @@ type SalesSectionProps = {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
   }) => string | null;
   onRegisterPendingSale: (input: {
@@ -2205,6 +3216,12 @@ type SalesSectionProps = {
     lines: Array<{
       product: ProductRecord;
       quantity: number;
+      unitCostMinorAtSale: number;
+      unitPriceMinor: number;
+      costMinor: number;
+      marginMinor: number;
+      marginPercent: number;
+      totalMinor: number;
     }>;
   }) => string | null;
   products: ProductRecord[];
@@ -2234,14 +3251,29 @@ function SalesSection({
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
-  const draftLineTotalMinor = selectedProduct
-    ? selectedProduct.salePriceMinor * quantity
-    : 0;
+  const unitPriceMinor = parseNonNegativeInteger(form.unitPrice) ?? 0;
+  const draftLineTotalMinor = unitPriceMinor * quantity;
   const saleLinesTotalMinor = saleLines.reduce(
     (total, line) => total + line.totalMinor,
     0
   );
   const totalMinor = saleLinesTotalMinor + draftLineTotalMinor;
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+
+    setForm((currentForm) =>
+      currentForm.productId === selectedProduct.id &&
+      currentForm.unitPrice.trim() === ""
+        ? {
+            ...currentForm,
+            unitPrice: formatIntegerInput(String(selectedProduct.salePriceMinor))
+          }
+        : currentForm
+    );
+  }, [selectedProduct]);
 
   function updateField(field: keyof SalesFormState, value: string) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
@@ -2251,9 +3283,11 @@ function SalesSection({
   function validateDraftLine(): {
     errors: SalesFormErrors;
     parsedQuantity: number | null;
+    parsedUnitPrice: number | null;
   } {
     const nextErrors: SalesFormErrors = {};
     const parsedQuantity = parseNonNegativeInteger(form.quantity);
+    const parsedUnitPrice = parseNonNegativeInteger(form.unitPrice);
 
     if (!selectedProduct) {
       nextErrors.productId = "Debes seleccionar un producto.";
@@ -2261,8 +3295,11 @@ function SalesSection({
     if (parsedQuantity === null || parsedQuantity <= 0) {
       nextErrors.quantity = "La cantidad debe ser un entero mayor a cero.";
     }
+    if (parsedUnitPrice === null || parsedUnitPrice <= 0) {
+      nextErrors.unitPrice = "El precio de venta debe ser un entero mayor a cero.";
+    }
 
-    return { errors: nextErrors, parsedQuantity };
+    return { errors: nextErrors, parsedQuantity, parsedUnitPrice };
   }
 
   function addSaleLine() {
@@ -2271,39 +3308,43 @@ function SalesSection({
     setErrors((currentErrors) => ({
       ...currentErrors,
       productId: validation.errors.productId,
-      quantity: validation.errors.quantity
+      quantity: validation.errors.quantity,
+      unitPrice: validation.errors.unitPrice
     }));
 
     if (
       Object.keys(validation.errors).length > 0 ||
       !selectedProduct ||
       validation.parsedQuantity === null ||
-      validation.parsedQuantity <= 0
+      validation.parsedQuantity <= 0 ||
+      validation.parsedUnitPrice === null ||
+      validation.parsedUnitPrice <= 0
     ) {
       return;
     }
 
     const parsedQuantity = validation.parsedQuantity;
+    const parsedUnitPrice = validation.parsedUnitPrice;
 
     setSaleLines((currentLines) => [
       ...currentLines,
-      {
-        id: `sale-line-${Date.now()}`,
+      buildSaleLineSnapshot({
         product: selectedProduct,
         quantity: parsedQuantity,
-        totalMinor: parsedQuantity * selectedProduct.salePriceMinor,
-        unitPriceMinor: selectedProduct.salePriceMinor
-      }
+        unitPriceMinor: parsedUnitPrice
+      })
     ]);
     setForm((currentForm) => ({
       ...currentForm,
       productId: "",
-      quantity: ""
+      quantity: "",
+      unitPrice: ""
     }));
     setErrors((currentErrors) => ({
       ...currentErrors,
       productId: undefined,
-      quantity: undefined
+      quantity: undefined,
+      unitPrice: undefined
     }));
   }
 
@@ -2320,17 +3361,15 @@ function SalesSection({
             ...saleLines,
             ...(lineValidation.parsedQuantity !== null &&
             lineValidation.parsedQuantity > 0 &&
+            lineValidation.parsedUnitPrice !== null &&
+            lineValidation.parsedUnitPrice > 0 &&
             selectedProduct
               ? [
-                  {
-                    id: `sale-line-${Date.now()}`,
+                  buildSaleLineSnapshot({
                     product: selectedProduct,
                     quantity: lineValidation.parsedQuantity,
-                    totalMinor:
-                      lineValidation.parsedQuantity *
-                      selectedProduct.salePriceMinor,
-                    unitPriceMinor: selectedProduct.salePriceMinor
-                  }
+                    unitPriceMinor: lineValidation.parsedUnitPrice
+                  })
                 ]
               : [])
           ];
@@ -2359,8 +3398,14 @@ function SalesSection({
     const registerInput = {
       customer: selectedCustomer,
       lines: linesToRegister.map((line) => ({
+        costMinor: line.costMinor,
+        marginMinor: line.marginMinor,
+        marginPercent: line.marginPercent,
         product: line.product,
-        quantity: line.quantity
+        quantity: line.quantity,
+        totalMinor: line.totalMinor,
+        unitCostMinorAtSale: line.unitCostMinorAtSale,
+        unitPriceMinor: line.unitPriceMinor
       }))
     };
     let submitError: string | null = null;
@@ -2509,6 +3554,15 @@ function SalesSection({
             }}
             value={form.quantity}
           />
+          <TextField
+            error={errors.unitPrice}
+            inputMode="numeric"
+            label="Precio venta unitario"
+            onChange={(value) => {
+              updateField("unitPrice", formatIntegerInput(value));
+            }}
+            value={form.unitPrice}
+          />
           <div className="inline-action-group">
             <button type="button" onClick={addSaleLine}>
               Agregar producto
@@ -2622,8 +3676,7 @@ function SalesSection({
 
         <div className="summary-card">
           <span>
-            Precio unitario{" "}
-            {selectedProduct ? formatCurrency(selectedProduct.salePriceMinor) : formatCurrency(0)}
+            Precio unitario {unitPriceMinor > 0 ? formatCurrency(unitPriceMinor) : formatCurrency(0)}
           </span>
           <span>Productos agregados {saleLines.length}</span>
           <strong>Total {formatCurrency(totalMinor)}</strong>
