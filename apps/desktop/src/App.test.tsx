@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -593,6 +593,7 @@ describe("App navigation", () => {
     ).toBe("true");
     expect(within(submenu).getByRole("button", { name: "DSO" })).toBeTruthy();
     expect(within(submenu).getByRole("button", { name: "Flujo de caja" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cascada" })).toBeNull();
 
     const profitabilityMenu = screen.getByLabelText("Tipos de rentabilidad");
     expect(
@@ -672,6 +673,166 @@ describe("App navigation", () => {
       expect(rows[2]?.textContent).toContain("$ 4.500");
       expect(rows[2]?.textContent).toContain("10.0 dias");
       expect(rows[2]?.textContent).toContain("33.3%");
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("shows real and projected cash flow in the flujo de caja report", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Caja");
+    await user.type(screen.getByLabelText("NIT o C.C."), "300");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Proyectado");
+    await user.type(screen.getByLabelText("NIT o C.C."), "301");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-30");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await createSupplierFixture(user, "Proveedor Flujo");
+    await user.type(screen.getByLabelText("Numero factura"), "FC-REAL");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-01");
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-10");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "3");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.selectOptions(
+      screen.getByLabelText("Proveedor"),
+      screen.getByRole("option", { name: "Proveedor Flujo" })
+    );
+    await user.clear(screen.getByLabelText("Numero factura"));
+    await user.type(screen.getByLabelText("Numero factura"), "FC-PEND");
+    await user.clear(screen.getByLabelText("Fecha emision"));
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-02");
+    await user.clear(screen.getByLabelText("Fecha vencimiento"));
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-25");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.clear(screen.getByLabelText("Cantidad compra"));
+    await user.type(screen.getByLabelText("Cantidad compra"), "5");
+    await user.clear(screen.getByLabelText("Costo unitario"));
+    await user.type(screen.getByLabelText("Costo unitario"), "2000");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "4000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByLabelText("Tipos de reportes")).getByRole("button", { name: "Flujo de caja" })
+    );
+
+    const summary = screen.getByLabelText("Resumen flujo de caja");
+    expect(within(summary).getByText("Entradas reales")).toBeTruthy();
+    expect(within(summary).getByText("Salidas reales")).toBeTruthy();
+    expect(within(summary).getByText("Flujo neto real")).toBeTruthy();
+    expect(within(summary).getByText("Flujo neto proyectado")).toBeTruthy();
+    expect(within(summary).getByText(/\$\s*9\.000/)).toBeTruthy();
+    expect(within(summary).getByText(/\$\s*13\.000/)).toBeTruthy();
+    expect(within(summary).getByText(/-\$\s*4\.000|\$\s*-4\.000/)).toBeTruthy();
+    expect(within(summary).getByText(/-\$\s*1\.500|\$\s*-1\.500/)).toBeTruthy();
+
+    expect(screen.getByLabelText("Grafico flujo de caja comparativo")).toBeTruthy();
+
+    const table = screen.getByRole("table", { name: "Detalle flujo de caja" });
+    expect(within(table).getByText("Venta pagada")).toBeTruthy();
+    expect(within(table).getByText("Compra pagada")).toBeTruthy();
+    expect(within(table).getByText("Abono proveedor")).toBeTruthy();
+    expect(within(table).getByText("Cuenta por cobrar")).toBeTruthy();
+    expect(within(table).getByText("Cuenta por pagar")).toBeTruthy();
+    expect(within(table).getByText("Cliente Proyectado")).toBeTruthy();
+    expect(within(table).getAllByText("Proveedor Flujo").length).toBeGreaterThan(0);
+  });
+
+  it("shows utilidades by day after renaming variacion directa", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+
+    try {
+      const user = userEvent.setup();
+      render(<App />);
+
+      await createProductFixture(user);
+      await user.click(screen.getByRole("button", { name: "Ventas" }));
+
+      nowSpy.mockReturnValue(new Date("2026-07-01T10:00:00.000Z").getTime());
+      await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Utilidad 1");
+      await user.type(screen.getByLabelText("NIT o C.C."), "401");
+      await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+      await user.selectOptions(
+        screen.getByLabelText("Producto"),
+        screen.getByRole("option", { name: "Arroz libra" })
+      );
+      await user.type(screen.getByLabelText("Cantidad"), "2");
+      await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+      nowSpy.mockReturnValue(new Date("2026-07-02T10:00:00.000Z").getTime());
+      await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Utilidad 2");
+      await user.type(screen.getByLabelText("NIT o C.C."), "402");
+      await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+      await user.selectOptions(
+        screen.getByLabelText("Producto"),
+        screen.getByRole("option", { name: "Arroz libra" })
+      );
+      await user.type(screen.getByLabelText("Cantidad"), "1");
+      await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+      await user.click(screen.getByRole("button", { name: "Reportes" }));
+      await user.click(
+        within(screen.getByLabelText("Tipos de reportes")).getByRole("button", { name: "Utilidades" })
+      );
+
+      const summary = screen.getByLabelText("Resumen utilidades");
+      expect(within(summary).getByText("Utilidad total")).toBeTruthy();
+      expect(within(summary).getByText("Promedio por periodo")).toBeTruthy();
+      expect(within(summary).getByText("Mejor periodo")).toBeTruthy();
+      expect(within(summary).getByText("Peor periodo")).toBeTruthy();
+      expect(within(summary).getAllByText(/\$\s*3\.900/).length).toBeGreaterThan(0);
+
+      expect(screen.getByLabelText("Grafico utilidades por periodo")).toBeTruthy();
+
+      const table = screen.getByRole("table", { name: "Detalle utilidades por periodo" });
+      expect(within(table).getByText("01/07/2026")).toBeTruthy();
+      expect(within(table).getByText("02/07/2026")).toBeTruthy();
+      expect(within(table).getByText(/\$\s*9\.000/)).toBeTruthy();
+      expect(within(table).getByText(/\$\s*4\.500/)).toBeTruthy();
+      expect(within(table).getByText(/\$\s*2\.600/)).toBeTruthy();
+      expect(within(table).getByText(/\$\s*1\.300/)).toBeTruthy();
     } finally {
       nowSpy.mockRestore();
     }
@@ -1263,25 +1424,27 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
     await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
 
-    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customer: {
-          address: "Calle 10 # 20-30",
-          city: "Medellin",
-          document: "123456789",
-          email: "ana@example.com",
-          name: "Ana Perez"
-        },
-        item: {
-          description: "Arroz libra",
-          quantity: 2,
-          totalMinor: 9000,
-          unitPriceMinor: 4500
-        },
-        paymentStatus: "paid"
-      })
+    await waitFor(() =>
+      expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer: {
+            address: "Calle 10 # 20-30",
+            city: "Medellin",
+            document: "123456789",
+            email: "ana@example.com",
+            name: "Ana Perez"
+          },
+          item: {
+            description: "Arroz libra",
+            quantity: 2,
+            totalMinor: 9000,
+            unitPriceMinor: 4500
+          },
+          paymentStatus: "paid"
+        })
+      )
     );
-    expect(screen.getByText("Factura generada")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("Factura generada")).toBeTruthy());
     expect(screen.getByTitle("Vista previa de factura PDF").getAttribute("src")).toBe(
       "data:application/pdf;base64,invoice-pdf"
     );
@@ -1316,24 +1479,26 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
     await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
 
-    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        items: [
-          {
-            description: "Arroz libra",
-            quantity: 2,
-            totalMinor: 9000,
-            unitPriceMinor: 4500
-          },
-          {
-            description: "Panela unidad",
-            quantity: 1,
-            totalMinor: 3500,
-            unitPriceMinor: 3500
-          }
-        ],
-        paymentStatus: "paid"
-      })
+    await waitFor(() =>
+      expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: [
+            {
+              description: "Arroz libra",
+              quantity: 2,
+              totalMinor: 9000,
+              unitPriceMinor: 4500
+            },
+            {
+              description: "Panela unidad",
+              quantity: 1,
+              totalMinor: 3500,
+              unitPriceMinor: 3500
+            }
+          ],
+          paymentStatus: "paid"
+        })
+      )
     );
   });
 
@@ -1358,18 +1523,20 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
     await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
 
-    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customer: expect.objectContaining({
-          document: "987654321",
-          name: "Carlos Ruiz"
-        }),
-        item: expect.objectContaining({
-          quantity: 3,
-          totalMinor: 13500
-        }),
-        paymentStatus: "pending"
-      })
+    await waitFor(() =>
+      expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            document: "987654321",
+            name: "Carlos Ruiz"
+          }),
+          item: expect.objectContaining({
+            quantity: 3,
+            totalMinor: 13500
+          }),
+          paymentStatus: "pending"
+        })
+      )
     );
   });
 });
