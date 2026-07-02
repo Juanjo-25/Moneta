@@ -537,7 +537,7 @@ describe("App navigation", () => {
     expect(within(salesTable).getByText(/\$\s*3\.850/)).toBeTruthy();
   });
 
-  it("shows margin summary and per-product aggregates in reportes", async () => {
+  it("shows a general profitability dashboard in reportes", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -557,11 +557,124 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
 
-    expect(screen.getByText("Utilidad bruta")).toBeTruthy();
-    const summary = screen.getByLabelText("Resumen margen comercial");
-    expect(within(summary).getByText(/\$\s*2\.600/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Abrir detalle de margen por producto" })).toBeTruthy();
-    expect(screen.queryByRole("table", { name: "Margen por producto" })).toBeNull();
+    expect(screen.getByText("Margen bruto")).toBeTruthy();
+    expect(screen.getByText("Margen neto")).toBeTruthy();
+    const summary = screen.getByLabelText("Resumen rentabilidad general");
+    const grossMarginCard = within(summary).getByText("Margen bruto").closest(".summary-card");
+    expect(grossMarginCard).toBeTruthy();
+    expect(within(grossMarginCard as HTMLElement).getByText(/\$\s*2\.600/)).toBeTruthy();
+    expect(screen.getByLabelText("Grafico cascada de utilidad")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Detalle margen por producto" })).toBeNull();
+  });
+
+  it("shows report tabs and rentabilidad subviews separately", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+
+    const submenu = screen.getByLabelText("Tipos de reportes");
+    expect(
+      within(submenu).getByRole("button", { name: "Rentabilidad" }).getAttribute("aria-selected")
+    ).toBe("true");
+    expect(within(submenu).getByRole("button", { name: "DSO" })).toBeTruthy();
+    expect(within(submenu).getByRole("button", { name: "Flujo de caja" })).toBeTruthy();
+
+    const profitabilityMenu = screen.getByLabelText("Tipos de rentabilidad");
+    expect(
+      within(profitabilityMenu)
+        .getByRole("button", { name: "Dashboard general" })
+        .getAttribute("aria-selected")
+    ).toBe("true");
+    expect(within(profitabilityMenu).getByRole("button", { name: "Clientes" })).toBeTruthy();
+    expect(within(profitabilityMenu).getByRole("button", { name: "Producto" })).toBeTruthy();
+    expect(within(profitabilityMenu).getByRole("button", { name: "Ventas" })).toBeTruthy();
+
+    await user.click(within(profitabilityMenu).getByRole("button", { name: "Clientes" }));
+
+    expect(
+      within(profitabilityMenu).getByRole("button", { name: "Clientes" }).getAttribute("aria-selected")
+    ).toBe("true");
+    expect(screen.getByLabelText("Grafico margen por cliente")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Margen por venta" })).toBeNull();
+  });
+
+  it("shows dso global and top clients by receivable impact", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+
+    try {
+      nowSpy.mockReturnValue(new Date("2026-07-02T10:00:00.000Z").getTime());
+      const user = userEvent.setup();
+      render(<App />);
+
+      await createProductFixture(user);
+      await user.click(screen.getByRole("button", { name: "Ventas" }));
+
+      await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente A");
+      await user.type(screen.getByLabelText("NIT o C.C."), "100");
+      await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+      await user.selectOptions(
+        screen.getByLabelText("Producto"),
+        screen.getByRole("option", { name: "Arroz libra" })
+      );
+      await user.type(screen.getByLabelText("Cantidad"), "2");
+      await user.click(screen.getByLabelText("Pendiente"));
+      await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-30");
+      await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+      nowSpy.mockReturnValue(new Date("2026-07-12T10:00:00.000Z").getTime());
+
+      await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente B");
+      await user.type(screen.getByLabelText("NIT o C.C."), "200");
+      await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+      await user.selectOptions(
+        screen.getByLabelText("Producto"),
+        screen.getByRole("option", { name: "Arroz libra" })
+      );
+      await user.type(screen.getByLabelText("Cantidad"), "1");
+      await user.click(screen.getByLabelText("Pendiente"));
+      await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-08-05");
+      await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+      nowSpy.mockReturnValue(new Date("2026-07-22T10:00:00.000Z").getTime());
+
+      await user.click(screen.getByRole("button", { name: "Reportes" }));
+      await user.click(
+        within(screen.getByLabelText("Tipos de reportes")).getByRole("button", { name: "DSO" })
+      );
+
+      expect(screen.getByRole("heading", { name: "DSO" })).toBeTruthy();
+      expect(screen.getByText("16.7 dias")).toBeTruthy();
+
+      const dsoTable = screen.getByRole("table", { name: "Impacto DSO por cliente" });
+      const rows = within(dsoTable).getAllByRole("row");
+      expect(rows[1]?.textContent).toContain("Cliente A");
+      expect(rows[1]?.textContent).toContain("$ 9.000");
+      expect(rows[1]?.textContent).toContain("20.0 dias");
+      expect(rows[1]?.textContent).toContain("66.7%");
+      expect(rows[2]?.textContent).toContain("Cliente B");
+      expect(rows[2]?.textContent).toContain("$ 4.500");
+      expect(rows[2]?.textContent).toContain("10.0 dias");
+      expect(rows[2]?.textContent).toContain("33.3%");
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("shows separate margin rows by client and sale when the same product is sold at different prices", async () => {
@@ -597,13 +710,18 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Clientes" })
+    );
 
     expect(screen.getByRole("button", { name: "Abrir detalle de margen por cliente" })).toBeTruthy();
-    expect(screen.queryByRole("table", { name: "Margen por cliente" })).toBeNull();
+    expect(screen.queryByRole("table", { name: "Detalle margen por cliente" })).toBeNull();
 
-    const salesTable = screen.getByRole("table", { name: "Margen por venta" });
-    expect(within(salesTable).getAllByText(/\$\s*4\.500/).length).toBeGreaterThan(0);
-    expect(within(salesTable).getByText(/\$\s*3\.850/)).toBeTruthy();
+    await user.click(
+      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Ventas" })
+    );
+    expect(screen.getByLabelText("Grafico margen por venta")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Margen por venta" })).toBeNull();
   });
 
   it("opens a report detail subview from the product margin chart and returns to summary", async () => {
@@ -625,6 +743,9 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Producto" })
+    );
     await user.click(screen.getByRole("button", { name: "Abrir detalle de margen por producto" }));
 
     expect(screen.getByRole("heading", { name: "Margen por producto" })).toBeTruthy();
@@ -637,7 +758,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Volver a resumen" }));
 
     expect(screen.getByRole("button", { name: "Abrir detalle de margen por producto" })).toBeTruthy();
-    expect(screen.getByRole("table", { name: "Margen por venta" })).toBeTruthy();
+    expect(screen.getByLabelText("Grafico margen por producto")).toBeTruthy();
   });
 
   it("opens a sale margin detail subview with total and per-product breakdown", async () => {
@@ -668,6 +789,10 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Ventas" })
+    );
+    await user.click(screen.getByRole("button", { name: "Abrir detalle de margen por venta" }));
     await user.click(screen.getByRole("button", { name: /Ver detalle de venta sale-/ }));
 
     expect(screen.getByRole("heading", { name: "Margen por venta" })).toBeTruthy();
@@ -684,7 +809,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Volver a resumen" }));
 
-    expect(screen.getByRole("table", { name: "Margen por venta" })).toBeTruthy();
+    expect(screen.getByRole("table", { name: "Detalle margen por venta" })).toBeTruthy();
   });
 
   it("sorts cartera rows by due date and labels overdue and upcoming invoices", async () => {

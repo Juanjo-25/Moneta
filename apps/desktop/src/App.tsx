@@ -85,6 +85,7 @@ type SaleRecord = {
   totalMinor: number;
   lines: SaleLineRecord[];
   paymentStatus: "paid" | "pending";
+  occurredAtMs: number;
   occurredAtLabel: string;
 };
 
@@ -414,6 +415,10 @@ function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+function formatDays(value: number): string {
+  return `${value.toFixed(1)} dias`;
+}
+
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",
@@ -492,7 +497,25 @@ type SaleMarginRow = {
   saleId: string;
 };
 
-type ReportDetailView = "product" | "customer" | "sale" | null;
+type ReportDetailView = "product" | "customer" | "sales" | "sale" | null;
+type ReportTab = "profitability" | "dso" | "cashflow" | "waterfall" | "variance";
+type ProfitabilityTab = "overview" | "customer" | "product" | "sales";
+
+type DsoSummary = {
+  activeReceivablesMinor: number;
+  clientCount: number;
+  dsoDays: number;
+  openInvoiceCount: number;
+};
+
+type DsoClientRow = {
+  averageOutstandingDays: number;
+  customerId: string;
+  customerName: string;
+  invoiceCount: number;
+  participationPercent: number;
+  receivableMinor: number;
+};
 
 function parseLocalDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -689,6 +712,99 @@ function buildSaleMarginRows(sales: SaleRecord[]): SaleMarginRow[] {
       saleId: sale.id
     };
   });
+}
+
+function buildDsoClientRows(input: {
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+  todayMs?: number;
+}): DsoClientRow[] {
+  const todayMs = input.todayMs ?? Date.now();
+  const saleById = new Map(input.sales.map((sale) => [sale.id, sale]));
+  const customerMap = new Map<
+    string,
+    {
+      customerId: string;
+      customerName: string;
+      invoiceCount: number;
+      receivableMinor: number;
+      weightedOutstandingDays: number;
+    }
+  >();
+
+  input.receivables.forEach((receivable) => {
+    const sale = saleById.get(receivable.saleId);
+
+    if (!sale) {
+      return;
+    }
+
+    const outstandingDays = Math.max(
+      (todayMs - sale.occurredAtMs) / (24 * 60 * 60 * 1000),
+      0
+    );
+    const currentRow = customerMap.get(receivable.customerId) ?? {
+      customerId: receivable.customerId,
+      customerName: receivable.customerName,
+      invoiceCount: 0,
+      receivableMinor: 0,
+      weightedOutstandingDays: 0
+    };
+
+    currentRow.invoiceCount += 1;
+    currentRow.receivableMinor += receivable.amountMinor;
+    currentRow.weightedOutstandingDays += outstandingDays * receivable.amountMinor;
+
+    customerMap.set(receivable.customerId, currentRow);
+  });
+
+  const totalReceivableMinor = [...customerMap.values()].reduce(
+    (sum, row) => sum + row.receivableMinor,
+    0
+  );
+
+  return [...customerMap.values()]
+    .map((row) => ({
+      averageOutstandingDays:
+        row.receivableMinor > 0 ? row.weightedOutstandingDays / row.receivableMinor : 0,
+      customerId: row.customerId,
+      customerName: row.customerName,
+      invoiceCount: row.invoiceCount,
+      participationPercent:
+        totalReceivableMinor > 0 ? (row.receivableMinor / totalReceivableMinor) * 100 : 0,
+      receivableMinor: row.receivableMinor
+    }))
+    .sort((left, right) => right.receivableMinor - left.receivableMinor);
+}
+
+function buildDsoSummary(input: {
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+  todayMs?: number;
+}): DsoSummary {
+  const clientRows = buildDsoClientRows(input);
+  const activeReceivablesMinor = clientRows.reduce((sum, row) => sum + row.receivableMinor, 0);
+
+  if (activeReceivablesMinor <= 0) {
+    return {
+      activeReceivablesMinor: 0,
+      clientCount: 0,
+      dsoDays: 0,
+      openInvoiceCount: 0
+    };
+  }
+
+  const weightedDays = clientRows.reduce(
+    (sum, row) => sum + row.averageOutstandingDays * row.receivableMinor,
+    0
+  );
+
+  return {
+    activeReceivablesMinor,
+    clientCount: clientRows.length,
+    dsoDays: weightedDays / activeReceivablesMinor,
+    openInvoiceCount: clientRows.reduce((sum, row) => sum + row.invoiceCount, 0)
+  };
 }
 
 function getSupplierPayableStatus(input: {
@@ -916,7 +1032,8 @@ export function App() {
     }>;
     paymentStatus: "paid" | "pending";
   }): string | null {
-    const occurredAt = new Date();
+    const occurredAtMs = Date.now();
+    const occurredAt = new Date(occurredAtMs);
     const requestedByProduct = input.lines.reduce((requested, line) => {
       requested.set(
         line.product.id,
@@ -962,6 +1079,7 @@ export function App() {
         customerName: input.customer.name,
         id: saleId,
         lines,
+        occurredAtMs,
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         paymentStatus: input.paymentStatus,
         productId: firstLine.productId,
@@ -1308,7 +1426,7 @@ function SectionContent({
   }
 
   if (section.id === "reports") {
-    return <ReportsSection sales={sales} />;
+    return <ReportsSection receivables={receivables} sales={sales} />;
   }
 
   return (
@@ -2405,23 +2523,16 @@ function PayablesTable({
 }
 
 type ReportsSectionProps = {
+  receivables: ReceivableRecord[];
   sales: SaleRecord[];
 };
 
-function ReportsSection({ sales }: ReportsSectionProps) {
+function ReportsSection({ receivables, sales }: ReportsSectionProps) {
+  const [activeReportTab, setActiveReportTab] = useState<ReportTab>("profitability");
+  const [activeProfitabilityTab, setActiveProfitabilityTab] =
+    useState<ProfitabilityTab>("overview");
   const [detailView, setDetailView] = useState<ReportDetailView>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
-
-  if (sales.length === 0) {
-    return (
-      <section className="section-panel">
-        <div className="empty-state section-empty">
-          <strong>Sin ventas para analizar</strong>
-          <span>Registra ventas para habilitar los reportes de margen.</span>
-        </div>
-      </section>
-    );
-  }
 
   const summary = buildMarginSummary(sales);
   const productRows = buildProductMarginRows(sales);
@@ -2429,35 +2540,206 @@ function ReportsSection({ sales }: ReportsSectionProps) {
   const saleRows = buildSaleMarginRows(sales);
   const productMaxMargin = productRows[0]?.marginMinor ?? 0;
   const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
+  const saleMaxMargin = saleRows[0]?.marginMinor ?? 0;
   const selectedSale = selectedSaleId
     ? sales.find((sale) => sale.id === selectedSaleId) ?? null
     : null;
+  const dsoSummary = buildDsoSummary({ receivables, sales });
+  const dsoClientRows = buildDsoClientRows({ receivables, sales });
+  const netMarginMinor = summary.marginMinor;
+  const topCustomerRows = customerRows.slice(0, 10);
+  const topProductRows = productRows.slice(0, 10);
+  const topSaleRows = saleRows.slice(0, 10);
+
+  const reportTabs: Array<{ id: ReportTab; label: string; title: string }> = [
+    { id: "profitability", label: "Rentabilidad", title: "Rentabilidad" },
+    { id: "dso", label: "DSO", title: "DSO" },
+    { id: "cashflow", label: "Flujo de caja", title: "Flujo de caja" },
+    { id: "waterfall", label: "Cascada", title: "Cascada" },
+    { id: "variance", label: "Variacion directa", title: "Variacion directa" }
+  ];
+
+  const profitabilityTabs: Array<{ id: ProfitabilityTab; label: string }> = [
+    { id: "overview", label: "Dashboard general" },
+    { id: "customer", label: "Clientes" },
+    { id: "product", label: "Producto" },
+    { id: "sales", label: "Ventas" }
+  ];
+
+  function selectReportTab(tab: ReportTab) {
+    setActiveReportTab(tab);
+    setDetailView(null);
+    setSelectedSaleId(null);
+  }
+
+  function selectProfitabilityTab(tab: ProfitabilityTab) {
+    setActiveProfitabilityTab(tab);
+    setDetailView(null);
+    setSelectedSaleId(null);
+  }
+
+  function renderProfitabilitySummary() {
+    return (
+      <div className="cartera-summary" aria-label="Resumen rentabilidad general">
+        <div className="summary-card">
+          <span>Ingresos totales</span>
+          <strong>{formatCurrency(summary.revenueMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Costo de ventas</span>
+          <strong>{formatCurrency(summary.costMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Margen bruto</span>
+          <strong>{formatCurrency(summary.marginMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Margen neto</span>
+          <strong>{formatCurrency(netMarginMinor)}</strong>
+        </div>
+        <div className="summary-card">
+          <span>% margen</span>
+          <strong>{formatPercent(summary.marginPercent)}</strong>
+        </div>
+      </div>
+    );
+  }
+
+  function renderReportTabs() {
+    return (
+      <div className="reports-submenu" aria-label="Tipos de reportes">
+        {reportTabs.map((tab) => (
+          <button
+            aria-selected={activeReportTab === tab.id}
+            className={activeReportTab === tab.id ? "active" : ""}
+            key={tab.id}
+            onClick={() => selectReportTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  function renderProfitabilityTabs() {
+    return (
+      <div className="reports-submenu" aria-label="Tipos de rentabilidad">
+        {profitabilityTabs.map((tab) => (
+          <button
+            aria-selected={activeProfitabilityTab === tab.id}
+            className={activeProfitabilityTab === tab.id ? "active" : ""}
+            key={tab.id}
+            onClick={() => selectProfitabilityTab(tab.id)}
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  if (activeReportTab === "dso") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <div className="cartera-summary" aria-label="Resumen DSO">
+          <div className="summary-card">
+            <span>DSO global</span>
+            <strong>{formatDays(dsoSummary.dsoDays)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Cartera abierta</span>
+            <strong>{formatCurrency(dsoSummary.activeReceivablesMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Clientes con saldo</span>
+            <strong>{String(dsoSummary.clientCount)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Facturas abiertas</span>
+            <strong>{String(dsoSummary.openInvoiceCount)}</strong>
+          </div>
+        </div>
+
+        {dsoClientRows.length === 0 ? (
+          <div className="empty-state section-empty">
+            <strong>Sin cartera pendiente para DSO</strong>
+            <span>Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo.</span>
+          </div>
+        ) : (
+          <section className="report-detail-panel">
+            <div className="report-detail-header">
+              <div>
+                <h2>DSO</h2>
+                <p>Top clientes que mas empujan el promedio actual de cobro.</p>
+              </div>
+            </div>
+
+            <table className="data-table" aria-label="Impacto DSO por cliente">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Saldo pendiente</th>
+                  <th>Participacion</th>
+                  <th>DSO cliente</th>
+                  <th>Facturas abiertas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dsoClientRows.map((row) => (
+                  <tr key={row.customerId}>
+                    <td>{row.customerName}</td>
+                    <td>{formatCurrency(row.receivableMinor)}</td>
+                    <td>{formatPercent(row.participationPercent)}</td>
+                    <td>{formatDays(row.averageOutstandingDays)}</td>
+                    <td>{row.invoiceCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+      </section>
+    );
+  }
+
+  if (activeReportTab !== "profitability") {
+    const selectedTab = reportTabs.find((tab) => tab.id === activeReportTab) ?? reportTabs[0]!;
+
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <section className="report-placeholder-panel">
+          <h2>{selectedTab.title}</h2>
+          <strong>Proximamente</strong>
+          <span>Este reporte aparecera aqui cuando terminemos su implementacion.</span>
+        </section>
+      </section>
+    );
+  }
+
+  if (sales.length === 0) {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <div className="empty-state section-empty">
+          <strong>Sin ventas para analizar</strong>
+          <span>Registra ventas para habilitar los reportes de rentabilidad.</span>
+        </div>
+      </section>
+    );
+  }
 
   if (detailView === "product") {
     return (
       <section className="reports-layout">
-        <div className="cartera-summary" aria-label="Resumen margen comercial">
-          <div className="summary-card">
-            <span>Ventas analizadas</span>
-            <strong>{formatCurrency(summary.revenueMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Costo de ventas</span>
-            <strong>{formatCurrency(summary.costMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Utilidad bruta</span>
-            <strong>{formatCurrency(summary.marginMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>% margen bruto</span>
-            <strong>{formatPercent(summary.marginPercent)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Numero de ventas</span>
-            <strong>{String(summary.salesCount)}</strong>
-          </div>
-        </div>
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
 
         <section className="report-detail-panel">
           <div className="report-detail-header">
@@ -2519,28 +2801,9 @@ function ReportsSection({ sales }: ReportsSectionProps) {
   if (detailView === "customer") {
     return (
       <section className="reports-layout">
-        <div className="cartera-summary" aria-label="Resumen margen comercial">
-          <div className="summary-card">
-            <span>Ventas analizadas</span>
-            <strong>{formatCurrency(summary.revenueMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Costo de ventas</span>
-            <strong>{formatCurrency(summary.costMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Utilidad bruta</span>
-            <strong>{formatCurrency(summary.marginMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>% margen bruto</span>
-            <strong>{formatPercent(summary.marginPercent)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Numero de ventas</span>
-            <strong>{String(summary.salesCount)}</strong>
-          </div>
-        </div>
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
 
         <section className="report-detail-panel">
           <div className="report-detail-header">
@@ -2599,6 +2862,71 @@ function ReportsSection({ sales }: ReportsSectionProps) {
     );
   }
 
+  if (detailView === "sales") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
+
+        <section className="report-detail-panel">
+          <div className="report-detail-header">
+            <button className="table-action" onClick={() => setDetailView(null)} type="button">
+              Volver a resumen
+            </button>
+            <div>
+              <h2>Margen por venta</h2>
+              <p>Rentabilidad total por venta y acceso al detalle por producto de cada factura.</p>
+            </div>
+          </div>
+
+          <table className="data-table" aria-label="Detalle margen por venta">
+            <thead>
+              <tr>
+                <th>Venta</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Estado</th>
+                <th>Ventas</th>
+                <th>Costo</th>
+                <th>Utilidad</th>
+                <th>% margen</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {saleRows.map((row) => (
+                <tr key={row.saleId}>
+                  <td>{row.saleId}</td>
+                  <td>{row.occurredAtLabel}</td>
+                  <td>{row.customerName}</td>
+                  <td>{row.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                  <td>
+                    <button
+                      aria-label={`Ver detalle de venta ${row.saleId}`}
+                      className="table-action"
+                      onClick={() => {
+                        setSelectedSaleId(row.saleId);
+                        setDetailView("sale");
+                      }}
+                      type="button"
+                    >
+                      Ver detalle
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </section>
+    );
+  }
+
   if (detailView === "sale" && selectedSale) {
     const selectedSaleCostMinor = selectedSale.lines.reduce((sum, line) => sum + line.costMinor, 0);
     const selectedSaleMarginMinor = selectedSale.lines.reduce(
@@ -2610,35 +2938,16 @@ function ReportsSection({ sales }: ReportsSectionProps) {
 
     return (
       <section className="reports-layout">
-        <div className="cartera-summary" aria-label="Resumen margen comercial">
-          <div className="summary-card">
-            <span>Ventas analizadas</span>
-            <strong>{formatCurrency(summary.revenueMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Costo de ventas</span>
-            <strong>{formatCurrency(summary.costMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Utilidad bruta</span>
-            <strong>{formatCurrency(summary.marginMinor)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>% margen bruto</span>
-            <strong>{formatPercent(summary.marginPercent)}</strong>
-          </div>
-          <div className="summary-card">
-            <span>Numero de ventas</span>
-            <strong>{String(summary.salesCount)}</strong>
-          </div>
-        </div>
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        {renderProfitabilitySummary()}
 
         <section className="report-detail-panel">
           <div className="report-detail-header">
             <button
               className="table-action"
               onClick={() => {
-                setDetailView(null);
+                setDetailView("sales");
                 setSelectedSaleId(null);
               }}
               type="button"
@@ -2707,71 +3016,17 @@ function ReportsSection({ sales }: ReportsSectionProps) {
     );
   }
 
-  return (
-    <section className="reports-layout">
-      <div className="cartera-summary" aria-label="Resumen margen comercial">
-        <div className="summary-card">
-          <span>Ventas analizadas</span>
-          <strong>{formatCurrency(summary.revenueMinor)}</strong>
-        </div>
-        <div className="summary-card">
-          <span>Costo de ventas</span>
-          <strong>{formatCurrency(summary.costMinor)}</strong>
-        </div>
-        <div className="summary-card">
-          <span>Utilidad bruta</span>
-          <strong>{formatCurrency(summary.marginMinor)}</strong>
-        </div>
-        <div className="summary-card">
-          <span>% margen bruto</span>
-          <strong>{formatPercent(summary.marginPercent)}</strong>
-        </div>
-        <div className="summary-card">
-          <span>Numero de ventas</span>
-          <strong>{String(summary.salesCount)}</strong>
-        </div>
-      </div>
-
-      <div className="reports-grid">
-        <section className="report-panel">
+  if (activeProfitabilityTab === "customer") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <section className="report-panel report-panel-single">
           <div className="report-panel-header">
-            <h2>Margen por producto</h2>
-            <button
-              className="table-action"
-              onClick={() => setDetailView("product")}
-              type="button"
-            >
-              Ver detalle
-            </button>
-          </div>
-          <button
-            aria-label="Abrir detalle de margen por producto"
-            className="report-chart-button"
-            onClick={() => setDetailView("product")}
-            type="button"
-          >
-            <div className="report-chart" aria-label="Grafico margen por producto">
-              {productRows.slice(0, 5).map((row) => (
-                <div className="report-bar-row" key={row.productId}>
-                  <span>{row.productName}</span>
-                  <div className="report-bar-track">
-                    <div
-                      className="report-bar-fill"
-                      style={{
-                        width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
-                      }}
-                    />
-                  </div>
-                  <strong>{formatCurrency(row.marginMinor)}</strong>
-                </div>
-              ))}
+            <div>
+              <h2>Margen por cliente</h2>
+              <p>Top clientes ordenados por utilidad real acumulada.</p>
             </div>
-          </button>
-        </section>
-
-        <section className="report-panel">
-          <div className="report-panel-header">
-            <h2>Margen por cliente</h2>
             <button
               className="table-action"
               onClick={() => setDetailView("customer")}
@@ -2787,7 +3042,7 @@ function ReportsSection({ sales }: ReportsSectionProps) {
             type="button"
           >
             <div className="report-chart" aria-label="Grafico margen por cliente">
-              {customerRows.slice(0, 5).map((row) => (
+              {topCustomerRows.map((row) => (
                 <div className="report-bar-row" key={row.customerId}>
                   <span>{row.customerName}</span>
                   <div className="report-bar-track">
@@ -2804,50 +3059,137 @@ function ReportsSection({ sales }: ReportsSectionProps) {
             </div>
           </button>
         </section>
-      </div>
+      </section>
+    );
+  }
 
-      <table className="data-table" aria-label="Margen por venta">
-        <thead>
-          <tr>
-            <th>Venta</th>
-            <th>Fecha</th>
-            <th>Cliente</th>
-            <th>Estado</th>
-            <th>Ventas</th>
-            <th>Costo</th>
-            <th>Utilidad</th>
-            <th>% margen</th>
-            <th>Accion</th>
-          </tr>
-        </thead>
-        <tbody>
-          {saleRows.map((row) => (
-            <tr key={row.saleId}>
-              <td>{row.saleId}</td>
-              <td>{row.occurredAtLabel}</td>
-              <td>{row.customerName}</td>
-              <td>{row.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
-              <td>{formatCurrency(row.revenueMinor)}</td>
-              <td>{formatCurrency(row.costMinor)}</td>
-              <td>{formatCurrency(row.marginMinor)}</td>
-              <td>{formatPercent(row.marginPercent)}</td>
-              <td>
-                <button
-                  aria-label={`Ver detalle de venta ${row.saleId}`}
-                  className="table-action"
-                  onClick={() => {
-                    setSelectedSaleId(row.saleId);
-                    setDetailView("sale");
-                  }}
-                  type="button"
-                >
-                  Ver detalle
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  if (activeProfitabilityTab === "product") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <section className="report-panel report-panel-single">
+          <div className="report-panel-header">
+            <div>
+              <h2>Margen por producto</h2>
+              <p>Productos ordenados por utilidad y volumen vendido.</p>
+            </div>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("product")}
+              type="button"
+            >
+              Ver detalle
+            </button>
+          </div>
+          <button
+            aria-label="Abrir detalle de margen por producto"
+            className="report-chart-button"
+            onClick={() => setDetailView("product")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por producto">
+              {topProductRows.map((row) => (
+                <div className="report-bar-row" key={row.productId}>
+                  <span>{row.productName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
+              ))}
+            </div>
+          </button>
+        </section>
+      </section>
+    );
+  }
+
+  if (activeProfitabilityTab === "sales") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderProfitabilityTabs()}
+        <section className="report-panel report-panel-single">
+          <div className="report-panel-header">
+            <div>
+              <h2>Margen por venta</h2>
+              <p>Rentabilidad por venta completa, con acceso al desglose por linea.</p>
+            </div>
+            <button
+              className="table-action"
+              onClick={() => setDetailView("sales")}
+              type="button"
+            >
+              Ver detalle
+            </button>
+          </div>
+          <button
+            aria-label="Abrir detalle de margen por venta"
+            className="report-chart-button"
+            onClick={() => setDetailView("sales")}
+            type="button"
+          >
+            <div className="report-chart" aria-label="Grafico margen por venta">
+              {topSaleRows.map((row) => (
+                <div className="report-bar-row" key={row.saleId}>
+                  <span>{row.customerName}</span>
+                  <div className="report-bar-track">
+                    <div
+                      className="report-bar-fill"
+                      style={{
+                        width: `${saleMaxMargin > 0 ? (row.marginMinor / saleMaxMargin) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                  <strong>{formatCurrency(row.marginMinor)}</strong>
+                </div>
+              ))}
+            </div>
+          </button>
+        </section>
+      </section>
+    );
+  }
+
+  return (
+    <section className="reports-layout">
+      {renderReportTabs()}
+      {renderProfitabilityTabs()}
+      {renderProfitabilitySummary()}
+
+      <section className="report-detail-panel">
+        <div className="report-detail-header">
+          <div>
+            <h2>Estado de perdidas y ganancias</h2>
+            <p>Vista macro de ingresos, costo de ventas y utilidad final del periodo analizado.</p>
+          </div>
+        </div>
+
+        <div className="report-waterfall" aria-label="Grafico cascada de utilidad">
+          <div className="report-waterfall-step">
+            <span>Ingresos</span>
+            <strong>{formatCurrency(summary.revenueMinor)}</strong>
+          </div>
+          <div className="report-waterfall-step report-waterfall-step-negative">
+            <span>Costo de ventas</span>
+            <strong>{formatCurrency(summary.costMinor)}</strong>
+          </div>
+          <div className="report-waterfall-step">
+            <span>Utilidad bruta</span>
+            <strong>{formatCurrency(summary.marginMinor)}</strong>
+          </div>
+          <div className="report-waterfall-step">
+            <span>Utilidad neta</span>
+            <strong>{formatCurrency(netMarginMinor)}</strong>
+          </div>
+        </div>
+      </section>
     </section>
   );
 }
