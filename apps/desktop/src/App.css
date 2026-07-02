@@ -782,6 +782,10 @@ button {
   background: #0f766e;
 }
 
+.report-bar-fill-negative {
+  background: #dc2626;
+}
+
 .report-detail-panel {
   display: grid;
   gap: 18px;
@@ -828,6 +832,42 @@ button {
 
 .report-bar-row-detail {
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
+}
+
+.cashflow-chart-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.cashflow-chart-row > span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cashflow-chart-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.cashflow-bar-group {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.cashflow-bar-group small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cashflow-bar-group strong {
+  color: #0f172a;
+  font-size: 13px;
 }
 
 .report-waterfall {

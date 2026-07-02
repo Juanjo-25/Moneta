@@ -6,7 +6,7 @@ import {
   type HTMLAttributes,
   type HTMLInputTypeAttribute
 } from "react";
-import { generateInvoicePdf, type InvoicePdfResult } from "./invoice-pdf";
+import type { InvoicePdfResult } from "./invoice-pdf";
 
 type SectionId =
   | "dashboard"
@@ -130,6 +130,7 @@ type PurchaseRecord = {
   invoiceNumber: string;
   issuedAt: string;
   dueAt: string;
+  occurredAtMs: number;
   productId: string;
   productName: string;
   quantity: number;
@@ -153,6 +154,17 @@ type SupplierPayableRecord = {
   balanceMinor: number;
   dueAt: string;
   status: SupplierPayableStatus;
+};
+
+type SupplierPaymentRecord = {
+  id: string;
+  payableId: string;
+  purchaseId: string;
+  supplierId: string;
+  supplierName: string;
+  amountMinor: number;
+  paidAtMs: number;
+  paidAtLabel: string;
 };
 
 type ProductFormState = {
@@ -419,6 +431,32 @@ function formatDays(value: number): string {
   return `${value.toFixed(1)} dias`;
 }
 
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateLabel(date: Date): string {
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatLocalDateLabel(value: string): string {
+  const parsed = parseLocalDate(value);
+
+  if (!parsed) {
+    return value || "Sin fecha";
+  }
+
+  return formatDateLabel(parsed);
+}
+
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",
@@ -498,7 +536,7 @@ type SaleMarginRow = {
 };
 
 type ReportDetailView = "product" | "customer" | "sales" | "sale" | null;
-type ReportTab = "profitability" | "dso" | "cashflow" | "waterfall" | "variance";
+type ReportTab = "profitability" | "dso" | "cashflow" | "variance";
 type ProfitabilityTab = "overview" | "customer" | "product" | "sales";
 
 type DsoSummary = {
@@ -515,6 +553,59 @@ type DsoClientRow = {
   invoiceCount: number;
   participationPercent: number;
   receivableMinor: number;
+};
+
+type CashflowEntry = {
+  id: string;
+  dateLabel: string;
+  dateSortMs: number;
+  inflowMinor: number;
+  outflowMinor: number;
+  netMinor: number;
+  originLabel: string;
+  partyName: string;
+  type: "real" | "projected";
+  typeLabel: string;
+};
+
+type CashflowSummary = {
+  projectedInflowMinor: number;
+  projectedNetMinor: number;
+  projectedOutflowMinor: number;
+  realInflowMinor: number;
+  realNetMinor: number;
+  realOutflowMinor: number;
+};
+
+type CashflowPeriodRow = {
+  dateLabel: string;
+  dateSortMs: number;
+  projectedInflowMinor: number;
+  projectedNetMinor: number;
+  projectedOutflowMinor: number;
+  realInflowMinor: number;
+  realNetMinor: number;
+  realOutflowMinor: number;
+};
+
+type UtilityPeriodRow = {
+  dateKey: string;
+  dateLabel: string;
+  dateSortMs: number;
+  marginMinor: number;
+  marginPercent: number;
+  salesCount: number;
+  costMinor: number;
+  revenueMinor: number;
+};
+
+type UtilitySummary = {
+  totalMarginMinor: number;
+  averageMarginMinor: number;
+  bestPeriodLabel: string;
+  bestPeriodMarginMinor: number;
+  worstPeriodLabel: string;
+  worstPeriodMarginMinor: number;
 };
 
 function parseLocalDate(value: string): Date | null {
@@ -807,6 +898,227 @@ function buildDsoSummary(input: {
   };
 }
 
+function buildCashflowEntries(input: {
+  purchases: PurchaseRecord[];
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+  supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
+}): CashflowEntry[] {
+  const entries: CashflowEntry[] = [];
+
+  input.sales.forEach((sale) => {
+    if (sale.paymentStatus === "paid") {
+      const occurredAt = new Date(sale.occurredAtMs);
+      entries.push({
+        dateLabel: formatDateLabel(occurredAt),
+        dateSortMs: sale.occurredAtMs,
+        id: `cashflow-sale-${sale.id}`,
+        inflowMinor: sale.totalMinor,
+        netMinor: sale.totalMinor,
+        originLabel: "Venta pagada",
+        outflowMinor: 0,
+        partyName: sale.customerName,
+        type: "real",
+        typeLabel: "Real"
+      });
+    }
+  });
+
+  input.purchases.forEach((purchase) => {
+    if (purchase.paymentStatus === "paid") {
+      const occurredAt = new Date(purchase.occurredAtMs);
+      entries.push({
+        dateLabel: formatDateLabel(occurredAt),
+        dateSortMs: purchase.occurredAtMs,
+        id: `cashflow-purchase-${purchase.id}`,
+        inflowMinor: 0,
+        netMinor: -purchase.totalMinor,
+        originLabel: "Compra pagada",
+        outflowMinor: purchase.totalMinor,
+        partyName: purchase.supplierName,
+        type: "real",
+        typeLabel: "Real"
+      });
+    }
+  });
+
+  input.supplierPayments.forEach((payment) => {
+    const paidAt = new Date(payment.paidAtMs);
+    entries.push({
+      dateLabel: formatDateLabel(paidAt),
+      dateSortMs: payment.paidAtMs,
+      id: payment.id,
+      inflowMinor: 0,
+      netMinor: -payment.amountMinor,
+      originLabel: "Abono proveedor",
+      outflowMinor: payment.amountMinor,
+      partyName: payment.supplierName,
+      type: "real",
+      typeLabel: "Real"
+    });
+  });
+
+  input.receivables.forEach((receivable) => {
+    const dueAtMs = parseLocalDate(receivable.dueAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+    entries.push({
+      dateLabel: formatLocalDateLabel(receivable.dueAt),
+      dateSortMs: dueAtMs,
+      id: `cashflow-receivable-${receivable.id}`,
+      inflowMinor: receivable.amountMinor,
+      netMinor: receivable.amountMinor,
+      originLabel: "Cuenta por cobrar",
+      outflowMinor: 0,
+      partyName: receivable.customerName,
+      type: "projected",
+      typeLabel: "Proyectado"
+    });
+  });
+
+  input.supplierPayables
+    .filter((payable) => payable.balanceMinor > 0)
+    .forEach((payable) => {
+      const dueAtMs = parseLocalDate(payable.dueAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+      entries.push({
+        dateLabel: formatLocalDateLabel(payable.dueAt),
+        dateSortMs: dueAtMs,
+        id: `cashflow-payable-${payable.id}`,
+        inflowMinor: 0,
+        netMinor: -payable.balanceMinor,
+        originLabel: "Cuenta por pagar",
+        outflowMinor: payable.balanceMinor,
+        partyName: payable.supplierName,
+        type: "projected",
+        typeLabel: "Proyectado"
+      });
+    });
+
+  return entries.sort((left, right) => left.dateSortMs - right.dateSortMs);
+}
+
+function buildCashflowSummary(entries: CashflowEntry[]): CashflowSummary {
+  return entries.reduce<CashflowSummary>(
+    (summary, entry) => {
+      if (entry.type === "real") {
+        summary.realInflowMinor += entry.inflowMinor;
+        summary.realOutflowMinor += entry.outflowMinor;
+        summary.realNetMinor += entry.netMinor;
+      } else {
+        summary.projectedInflowMinor += entry.inflowMinor;
+        summary.projectedOutflowMinor += entry.outflowMinor;
+        summary.projectedNetMinor += entry.netMinor;
+      }
+
+      return summary;
+    },
+    {
+      projectedInflowMinor: 0,
+      projectedNetMinor: 0,
+      projectedOutflowMinor: 0,
+      realInflowMinor: 0,
+      realNetMinor: 0,
+      realOutflowMinor: 0
+    }
+  );
+}
+
+function buildCashflowPeriodRows(entries: CashflowEntry[]): CashflowPeriodRow[] {
+  const periodMap = new Map<string, CashflowPeriodRow>();
+
+  entries.forEach((entry) => {
+    const key = `${entry.dateSortMs}-${entry.dateLabel}`;
+    const currentRow = periodMap.get(key) ?? {
+      dateLabel: entry.dateLabel,
+      dateSortMs: entry.dateSortMs,
+      projectedInflowMinor: 0,
+      projectedNetMinor: 0,
+      projectedOutflowMinor: 0,
+      realInflowMinor: 0,
+      realNetMinor: 0,
+      realOutflowMinor: 0
+    };
+
+    if (entry.type === "real") {
+      currentRow.realInflowMinor += entry.inflowMinor;
+      currentRow.realOutflowMinor += entry.outflowMinor;
+      currentRow.realNetMinor += entry.netMinor;
+    } else {
+      currentRow.projectedInflowMinor += entry.inflowMinor;
+      currentRow.projectedOutflowMinor += entry.outflowMinor;
+      currentRow.projectedNetMinor += entry.netMinor;
+    }
+
+    periodMap.set(key, currentRow);
+  });
+
+  return [...periodMap.values()].sort((left, right) => left.dateSortMs - right.dateSortMs);
+}
+
+function buildUtilityPeriodRows(sales: SaleRecord[]): UtilityPeriodRow[] {
+  const periodMap = new Map<string, UtilityPeriodRow>();
+
+  sales.forEach((sale) => {
+    const occurredAt = new Date(sale.occurredAtMs);
+    const dateKey = formatDateKey(occurredAt);
+    const dateSortMs = new Date(
+      occurredAt.getFullYear(),
+      occurredAt.getMonth(),
+      occurredAt.getDate()
+    ).getTime();
+    const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    const marginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
+    const currentRow = periodMap.get(dateKey) ?? {
+      costMinor: 0,
+      dateKey,
+      dateLabel: formatDateLabel(occurredAt),
+      dateSortMs,
+      marginMinor: 0,
+      marginPercent: 0,
+      revenueMinor: 0,
+      salesCount: 0
+    };
+
+    currentRow.salesCount += 1;
+    currentRow.revenueMinor += sale.totalMinor;
+    currentRow.costMinor += costMinor;
+    currentRow.marginMinor += marginMinor;
+    currentRow.marginPercent =
+      currentRow.revenueMinor > 0
+        ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
+        : 0;
+
+    periodMap.set(dateKey, currentRow);
+  });
+
+  return [...periodMap.values()].sort((left, right) => left.dateSortMs - right.dateSortMs);
+}
+
+function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
+  if (periodRows.length === 0) {
+    return {
+      averageMarginMinor: 0,
+      bestPeriodLabel: "-",
+      bestPeriodMarginMinor: 0,
+      totalMarginMinor: 0,
+      worstPeriodLabel: "-",
+      worstPeriodMarginMinor: 0
+    };
+  }
+
+  const totalMarginMinor = periodRows.reduce((sum, row) => sum + row.marginMinor, 0);
+  const bestPeriod = [...periodRows].sort((left, right) => right.marginMinor - left.marginMinor)[0]!;
+  const worstPeriod = [...periodRows].sort((left, right) => left.marginMinor - right.marginMinor)[0]!;
+
+  return {
+    averageMarginMinor: totalMarginMinor / periodRows.length,
+    bestPeriodLabel: bestPeriod.dateLabel,
+    bestPeriodMarginMinor: bestPeriod.marginMinor,
+    totalMarginMinor,
+    worstPeriodLabel: worstPeriod.dateLabel,
+    worstPeriodMarginMinor: worstPeriod.marginMinor
+  };
+}
+
 function getSupplierPayableStatus(input: {
   originalAmountMinor: number;
   paidAmountMinor: number;
@@ -832,6 +1144,7 @@ export function App() {
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [supplierPayables, setSupplierPayables] = useState<SupplierPayableRecord[]>([]);
+  const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
   const [productFormVisible, setProductFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
@@ -961,6 +1274,7 @@ export function App() {
         invoiceNumber: input.invoiceNumber,
         issuedAt: input.issuedAt,
         lines,
+        occurredAtMs: occurredAt.getTime(),
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         paymentStatus: input.paymentStatus,
         productId: firstLine.productId,
@@ -995,6 +1309,27 @@ export function App() {
   }
 
   function registerSupplierPayment(input: { payableId: string; amountMinor: number }) {
+    const selectedPayable =
+      supplierPayables.find((payable) => payable.id === input.payableId) ?? null;
+
+    if (selectedPayable) {
+      const paidAt = new Date();
+
+      setSupplierPayments((currentPayments) => [
+        {
+          amountMinor: input.amountMinor,
+          id: `supplier-payment-${Date.now()}`,
+          paidAtLabel: formatOccurredAtLabel(paidAt),
+          paidAtMs: paidAt.getTime(),
+          payableId: selectedPayable.id,
+          purchaseId: selectedPayable.purchaseId,
+          supplierId: selectedPayable.supplierId,
+          supplierName: selectedPayable.supplierName
+        },
+        ...currentPayments
+      ]);
+    }
+
     setSupplierPayables((currentPayables) =>
       currentPayables.map((payable) => {
         if (payable.id !== input.payableId) {
@@ -1219,6 +1554,7 @@ export function App() {
             sales={sales}
             section={activeSection}
             supplierPayables={supplierPayables}
+            supplierPayments={supplierPayments}
             suppliers={suppliers}
           />
         )}
@@ -1347,6 +1683,7 @@ type SectionContentProps = {
   sales: SaleRecord[];
   section: SectionConfig;
   supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
   suppliers: SupplierRecord[];
 };
 
@@ -1367,6 +1704,7 @@ function SectionContent({
   sales,
   section,
   supplierPayables,
+  supplierPayments,
   suppliers
 }: SectionContentProps) {
   if (section.id === "products") {
@@ -1426,7 +1764,15 @@ function SectionContent({
   }
 
   if (section.id === "reports") {
-    return <ReportsSection receivables={receivables} sales={sales} />;
+    return (
+      <ReportsSection
+        purchases={purchases}
+        receivables={receivables}
+        sales={sales}
+        supplierPayables={supplierPayables}
+        supplierPayments={supplierPayments}
+      />
+    );
   }
 
   return (
@@ -2523,11 +2869,20 @@ function PayablesTable({
 }
 
 type ReportsSectionProps = {
+  purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
+  supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
 };
 
-function ReportsSection({ receivables, sales }: ReportsSectionProps) {
+function ReportsSection({
+  purchases,
+  receivables,
+  sales,
+  supplierPayables,
+  supplierPayments
+}: ReportsSectionProps) {
   const [activeReportTab, setActiveReportTab] = useState<ReportTab>("profitability");
   const [activeProfitabilityTab, setActiveProfitabilityTab] =
     useState<ProfitabilityTab>("overview");
@@ -2546,6 +2901,25 @@ function ReportsSection({ receivables, sales }: ReportsSectionProps) {
     : null;
   const dsoSummary = buildDsoSummary({ receivables, sales });
   const dsoClientRows = buildDsoClientRows({ receivables, sales });
+  const cashflowEntries = buildCashflowEntries({
+    purchases,
+    receivables,
+    sales,
+    supplierPayables,
+    supplierPayments
+  });
+  const cashflowSummary = buildCashflowSummary(cashflowEntries);
+  const cashflowPeriodRows = buildCashflowPeriodRows(cashflowEntries);
+  const cashflowMaxNet = Math.max(
+    1,
+    ...cashflowPeriodRows.flatMap((row) => [
+      Math.abs(row.realNetMinor),
+      Math.abs(row.projectedNetMinor)
+    ])
+  );
+  const utilityPeriodRows = buildUtilityPeriodRows(sales);
+  const utilitySummary = buildUtilitySummary(utilityPeriodRows);
+  const utilityMaxMargin = Math.max(1, ...utilityPeriodRows.map((row) => Math.abs(row.marginMinor)));
   const netMarginMinor = summary.marginMinor;
   const topCustomerRows = customerRows.slice(0, 10);
   const topProductRows = productRows.slice(0, 10);
@@ -2555,8 +2929,7 @@ function ReportsSection({ receivables, sales }: ReportsSectionProps) {
     { id: "profitability", label: "Rentabilidad", title: "Rentabilidad" },
     { id: "dso", label: "DSO", title: "DSO" },
     { id: "cashflow", label: "Flujo de caja", title: "Flujo de caja" },
-    { id: "waterfall", label: "Cascada", title: "Cascada" },
-    { id: "variance", label: "Variacion directa", title: "Variacion directa" }
+    { id: "variance", label: "Utilidades", title: "Utilidades" }
   ];
 
   const profitabilityTabs: Array<{ id: ProfitabilityTab; label: string }> = [
@@ -2701,6 +3074,197 @@ function ReportsSection({ receivables, sales }: ReportsSectionProps) {
               </tbody>
             </table>
           </section>
+        )}
+      </section>
+    );
+  }
+
+  if (activeReportTab === "cashflow") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <div className="cartera-summary" aria-label="Resumen flujo de caja">
+          <div className="summary-card">
+            <span>Entradas reales</span>
+            <strong>{formatCurrency(cashflowSummary.realInflowMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Salidas reales</span>
+            <strong>{formatCurrency(cashflowSummary.realOutflowMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Flujo neto real</span>
+            <strong>{formatCurrency(cashflowSummary.realNetMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Flujo neto proyectado</span>
+            <strong>{formatCurrency(cashflowSummary.projectedNetMinor)}</strong>
+          </div>
+        </div>
+
+        {cashflowEntries.length === 0 ? (
+          <div className="empty-state section-empty">
+            <strong>Sin movimientos para flujo de caja</strong>
+            <span>Registra ventas, compras o cartera pendiente para activar este reporte.</span>
+          </div>
+        ) : (
+          <>
+            <section className="report-detail-panel">
+              <div className="report-detail-header">
+                <div>
+                  <h2>Flujo de caja</h2>
+                  <p>Comparativo entre movimientos reales y compromisos proyectados por fecha.</p>
+                </div>
+              </div>
+
+              <div className="report-chart report-chart-detail" aria-label="Grafico flujo de caja comparativo">
+                {cashflowPeriodRows.map((row) => (
+                  <div className="cashflow-chart-row" key={`${row.dateSortMs}-${row.dateLabel}`}>
+                    <span>{row.dateLabel}</span>
+                    <div className="cashflow-chart-bars">
+                      <div className="cashflow-bar-group">
+                        <small>Real</small>
+                        <div className="report-bar-track">
+                          <div
+                            className={`report-bar-fill ${row.realNetMinor < 0 ? "report-bar-fill-negative" : ""}`}
+                            style={{ width: `${(Math.abs(row.realNetMinor) / cashflowMaxNet) * 100}%` }}
+                          />
+                        </div>
+                        <strong>{formatCurrency(row.realNetMinor)}</strong>
+                      </div>
+                      <div className="cashflow-bar-group">
+                        <small>Proyectado</small>
+                        <div className="report-bar-track">
+                          <div
+                            className={`report-bar-fill ${row.projectedNetMinor < 0 ? "report-bar-fill-negative" : ""}`}
+                            style={{
+                              width: `${(Math.abs(row.projectedNetMinor) / cashflowMaxNet) * 100}%`
+                            }}
+                          />
+                        </div>
+                        <strong>{formatCurrency(row.projectedNetMinor)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <table className="data-table" aria-label="Detalle flujo de caja">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Origen</th>
+                  <th>Tercero</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Neto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cashflowEntries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.dateLabel}</td>
+                    <td>{entry.typeLabel}</td>
+                    <td>{entry.originLabel}</td>
+                    <td>{entry.partyName}</td>
+                    <td>{formatCurrency(entry.inflowMinor)}</td>
+                    <td>{formatCurrency(entry.outflowMinor)}</td>
+                    <td>{formatCurrency(entry.netMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </section>
+    );
+  }
+
+  if (activeReportTab === "variance") {
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <div className="cartera-summary" aria-label="Resumen utilidades">
+          <div className="summary-card">
+            <span>Utilidad total</span>
+            <strong>{formatCurrency(utilitySummary.totalMarginMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Promedio por periodo</span>
+            <strong>{formatCurrency(utilitySummary.averageMarginMinor)}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Mejor periodo</span>
+            <strong>
+              {utilitySummary.bestPeriodLabel} · {formatCurrency(utilitySummary.bestPeriodMarginMinor)}
+            </strong>
+          </div>
+          <div className="summary-card">
+            <span>Peor periodo</span>
+            <strong>
+              {utilitySummary.worstPeriodLabel} · {formatCurrency(utilitySummary.worstPeriodMarginMinor)}
+            </strong>
+          </div>
+        </div>
+
+        {utilityPeriodRows.length === 0 ? (
+          <div className="empty-state section-empty">
+            <strong>Sin utilidades para analizar</strong>
+            <span>Registra ventas para construir la utilidad por periodo.</span>
+          </div>
+        ) : (
+          <>
+            <section className="report-detail-panel">
+              <div className="report-detail-header">
+                <div>
+                  <h2>Utilidades</h2>
+                  <p>Utilidad total por dia con ventas, costo y margen consolidado.</p>
+                </div>
+              </div>
+
+              <div className="report-chart report-chart-detail" aria-label="Grafico utilidades por periodo">
+                {utilityPeriodRows.map((row) => (
+                  <div className="report-bar-row report-bar-row-detail" key={row.dateKey}>
+                    <span>{row.dateLabel}</span>
+                    <div className="report-bar-track">
+                      <div
+                        className="report-bar-fill"
+                        style={{ width: `${(Math.abs(row.marginMinor) / utilityMaxMargin) * 100}%` }}
+                      />
+                    </div>
+                    <strong>{formatCurrency(row.marginMinor)}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <table className="data-table" aria-label="Detalle utilidades por periodo">
+              <thead>
+                <tr>
+                  <th>Periodo</th>
+                  <th>Ventas</th>
+                  <th>Costo</th>
+                  <th>Utilidad</th>
+                  <th>% margen</th>
+                  <th>Numero de ventas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {utilityPeriodRows.map((row) => (
+                  <tr key={row.dateKey}>
+                    <td>{row.dateLabel}</td>
+                    <td>{formatCurrency(row.revenueMinor)}</td>
+                    <td>{formatCurrency(row.costMinor)}</td>
+                    <td>{formatCurrency(row.marginMinor)}</td>
+                    <td>{formatPercent(row.marginPercent)}</td>
+                    <td>{row.salesCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
     );
@@ -3458,8 +4022,9 @@ function SalesSection({
     setCustomerFormVisible(false);
   }
 
-  function generateInvoiceForSale(sale: SaleRecord) {
+  async function generateInvoiceForSale(sale: SaleRecord) {
     try {
+      const { generateInvoicePdf } = await import("./invoice-pdf");
       const invoice = generateInvoicePdf({
         customer: {
           address: sale.customer.address,
@@ -3705,7 +4270,7 @@ function SalesSection({
             </thead>
             <tbody>
               {sales.map((sale) => (
-                <tr key={sale.id}>
+              <tr key={sale.id}>
                   <td>{sale.occurredAtLabel}</td>
                   <td>{sale.customerName}</td>
                   <td>{sale.productName}</td>
@@ -3715,7 +4280,9 @@ function SalesSection({
                   <td>
                     <button
                       className="table-action"
-                      onClick={() => generateInvoiceForSale(sale)}
+                      onClick={() => {
+                        void generateInvoiceForSale(sale);
+                      }}
                       type="button"
                     >
                       Generar factura PDF
