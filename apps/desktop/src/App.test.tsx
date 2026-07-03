@@ -1458,6 +1458,72 @@ describe("App navigation", () => {
     expect(screen.getByRole("heading", { name: "Ana Perez SAS" })).toBeTruthy();
   });
 
+  it("deactivates a customer and hides it from new sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+
+    expect(screen.getByText("Inactivo")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.queryByRole("option", { name: "Ana Perez - 123456789" })).toBeNull();
+  });
+
+  it("reactivates a customer and shows it for new sales again", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Reactivar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+
+    expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
+  });
+
+  it("rejects a sale when the selected customer becomes inactive", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    expect(
+      screen.getByText(
+        "El cliente seleccionado esta inactivo. Reactivalo para registrar nuevas ventas."
+      )
+    ).toBeTruthy();
+  });
+
   it("keeps old invoice customer data after editing the current customer", async () => {
     const user = userEvent.setup();
 
