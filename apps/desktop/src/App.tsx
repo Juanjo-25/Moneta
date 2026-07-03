@@ -1254,6 +1254,23 @@ export function App() {
     return customer;
   }
 
+  function updateCustomer(customerId: string, input: CustomerFormState) {
+    setCustomers((currentCustomers) =>
+      currentCustomers.map((customer) =>
+        customer.id === customerId
+          ? {
+              ...customer,
+              address: input.address.trim(),
+              city: input.city.trim(),
+              document: input.document.trim(),
+              email: input.email.trim(),
+              name: input.name.trim()
+            }
+          : customer
+      )
+    );
+  }
+
   function validateCustomer(
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -1592,6 +1609,7 @@ export function App() {
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}
             onValidateCustomer={validateCustomer}
+            onUpdateCustomer={updateCustomer}
             onCloseProductForm={() => setProductFormVisible(false)}
             productFormVisible={productFormVisible}
             products={products}
@@ -1725,6 +1743,7 @@ type SectionContentProps = {
     input: CustomerFormState,
     currentCustomerId?: string | undefined
   ) => CustomerFormErrors;
+  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
   onCloseProductForm: () => void;
   productFormVisible: boolean;
   products: ProductRecord[];
@@ -1747,6 +1766,7 @@ function SectionContent({
   onRegisterPendingSale,
   onRegisterSupplierPayment,
   onValidateCustomer,
+  onUpdateCustomer,
   onCloseProductForm,
   productFormVisible,
   products,
@@ -1801,6 +1821,7 @@ function SectionContent({
       <CustomersSection
         customers={customers}
         onCreateCustomer={onCreateCustomer}
+        onUpdateCustomer={onUpdateCustomer}
         onValidateCustomer={onValidateCustomer}
         receivables={receivables}
         sales={sales}
@@ -1852,6 +1873,7 @@ function SectionContent({
 type CustomersSectionProps = {
   customers: CustomerRecord[];
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -1863,6 +1885,7 @@ type CustomersSectionProps = {
 function CustomersSection({
   customers,
   onCreateCustomer,
+  onUpdateCustomer,
   onValidateCustomer,
   receivables,
   sales
@@ -1870,6 +1893,10 @@ function CustomersSection({
   const [formVisible, setFormVisible] = useState(false);
   const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [errors, setErrors] = useState<CustomerFormErrors>({});
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<CustomerFormState>(emptyCustomerForm);
+  const [editErrors, setEditErrors] = useState<CustomerFormErrors>({});
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredCustomers = customers.filter((customer) => {
@@ -1885,10 +1912,44 @@ function CustomersSection({
       customer.email
     ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
   });
+  const selectedCustomer =
+    filteredCustomers.find((customer) => customer.id === selectedCustomerId) ??
+    customers.find((customer) => customer.id === selectedCustomerId) ??
+    null;
+  const editingCustomer = editingCustomerId === selectedCustomer?.id ? selectedCustomer : null;
+
+  function getCustomerFormState(customer: CustomerRecord): CustomerFormState {
+    return {
+      address: customer.address,
+      city: customer.city,
+      document: customer.document,
+      email: customer.email,
+      name: customer.name
+    };
+  }
 
   function updateField(field: keyof CustomerFormState, value: string) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function updateEditField(field: keyof CustomerFormState, value: string) {
+    setEditForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setEditErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function selectCustomer(customer: CustomerRecord) {
+    setSelectedCustomerId(customer.id);
+    setEditingCustomerId(null);
+    setEditForm(getCustomerFormState(customer));
+    setEditErrors({});
+    setFormVisible(false);
+  }
+
+  function startEditingCustomer(customer: CustomerRecord) {
+    setEditingCustomerId(customer.id);
+    setEditForm(getCustomerFormState(customer));
+    setEditErrors({});
   }
 
   function submitCustomer(event: FormEvent<HTMLFormElement>) {
@@ -1908,6 +1969,26 @@ function CustomersSection({
     setFormVisible(false);
   }
 
+  function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingCustomer) {
+      return;
+    }
+
+    const nextErrors = onValidateCustomer(editForm, editingCustomer.id);
+
+    setEditErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    onUpdateCustomer(editingCustomer.id, editForm);
+    setEditErrors({});
+    setEditingCustomerId(null);
+  }
+
   return (
     <section className="customers-layout">
       <div className="customers-toolbar">
@@ -1918,7 +1999,11 @@ function CustomersSection({
         />
         <button
           className="primary-action"
-          onClick={() => setFormVisible((visible) => !visible)}
+          onClick={() => {
+            setFormVisible((visible) => !visible);
+            setEditingCustomerId(null);
+            setEditErrors({});
+          }}
           type="button"
         >
           Nuevo cliente
@@ -1985,6 +2070,7 @@ function CustomersSection({
               <th>Total vendido</th>
               <th>Cartera</th>
               <th>Ultima venta</th>
+              <th>Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -2019,12 +2105,79 @@ function CustomersSection({
                   <td>{formatCurrency(totalSoldMinor)}</td>
                   <td>{formatCurrency(receivableMinor)}</td>
                   <td>{lastSale?.occurredAtLabel ?? "Sin ventas"}</td>
+                  <td>
+                    <button
+                      className="table-action"
+                      onClick={() => selectCustomer(customer)}
+                      type="button"
+                    >
+                      Ver cliente {customer.name}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
+
+      {selectedCustomer ? (
+        <section className="section-panel" aria-label="Ficha de cliente">
+          <div className="section-heading">
+            <div>
+              <h2>{selectedCustomer.name}</h2>
+              <p>{selectedCustomer.document}</p>
+            </div>
+            <button
+              className="table-action"
+              onClick={() => startEditingCustomer(selectedCustomer)}
+              type="button"
+            >
+              Editar cliente
+            </button>
+          </div>
+
+          {editingCustomer ? (
+            <form className="customer-form" onSubmit={submitCustomerEdit}>
+              <div className="form-grid">
+                <TextField
+                  error={editErrors.name}
+                  label="Nombre o razon social"
+                  onChange={(value) => updateEditField("name", value)}
+                  value={editForm.name}
+                />
+                <TextField
+                  error={editErrors.document}
+                  label="NIT o C.C."
+                  onChange={(value) => updateEditField("document", value)}
+                  value={editForm.document}
+                />
+                <TextField
+                  error={editErrors.address}
+                  label="Direccion"
+                  onChange={(value) => updateEditField("address", value)}
+                  value={editForm.address}
+                />
+                <TextField
+                  error={editErrors.city}
+                  label="Ciudad"
+                  onChange={(value) => updateEditField("city", value)}
+                  value={editForm.city}
+                />
+                <TextField
+                  error={editErrors.email}
+                  label="Email"
+                  onChange={(value) => updateEditField("email", value)}
+                  value={editForm.email}
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit">Guardar cambios</button>
+              </div>
+            </form>
+          ) : null}
+        </section>
+      ) : null}
     </section>
   );
 }
