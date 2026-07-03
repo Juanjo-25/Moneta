@@ -2,9 +2,11 @@ import {
   useEffect,
   useMemo,
   useState,
+  type Dispatch,
   type FormEvent,
   type HTMLAttributes,
-  type HTMLInputTypeAttribute
+  type HTMLInputTypeAttribute,
+  type SetStateAction
 } from "react";
 import type { InvoicePdfResult } from "./invoice-pdf";
 
@@ -197,6 +199,11 @@ type SalesFormErrors = {
   submit?: string | undefined;
 };
 
+type SalesDraftState = {
+  form: SalesFormState;
+  saleLines: SaleDraftLine[];
+};
+
 type CustomerFormState = {
   name: string;
   document: string;
@@ -282,6 +289,11 @@ const emptySalesForm: SalesFormState = {
   quantity: "",
   unitPrice: "",
   paymentStatus: "paid"
+};
+
+const emptySalesDraft: SalesDraftState = {
+  form: emptySalesForm,
+  saleLines: []
 };
 
 const emptyCustomerForm: CustomerFormState = {
@@ -1176,6 +1188,7 @@ function isLowStock(product: ProductRecord): boolean {
 export function App() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [receivables, setReceivables] = useState<ReceivableRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -1267,6 +1280,14 @@ export function App() {
               name: input.name.trim()
             }
           : customer
+      )
+    );
+  }
+
+  function setCustomerActive(customerId: string, active: boolean) {
+    setCustomers((currentCustomers) =>
+      currentCustomers.map((customer) =>
+        customer.id === customerId ? { ...customer, active } : customer
       )
     );
   }
@@ -1610,13 +1631,16 @@ export function App() {
             onRegisterSupplierPayment={registerSupplierPayment}
             onValidateCustomer={validateCustomer}
             onUpdateCustomer={updateCustomer}
+            onSetCustomerActive={setCustomerActive}
             onCloseProductForm={() => setProductFormVisible(false)}
             productFormVisible={productFormVisible}
             products={products}
             purchases={purchases}
             receivables={receivables}
             sales={sales}
+            salesDraft={salesDraft}
             section={activeSection}
+            onSalesDraftChange={setSalesDraft}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}
             suppliers={suppliers}
@@ -1744,12 +1768,15 @@ type SectionContentProps = {
     currentCustomerId?: string | undefined
   ) => CustomerFormErrors;
   onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
+  onSetCustomerActive: (customerId: string, active: boolean) => void;
   onCloseProductForm: () => void;
+  onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
   productFormVisible: boolean;
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
+  salesDraft: SalesDraftState;
   section: SectionConfig;
   supplierPayables: SupplierPayableRecord[];
   supplierPayments: SupplierPaymentRecord[];
@@ -1767,12 +1794,15 @@ function SectionContent({
   onRegisterSupplierPayment,
   onValidateCustomer,
   onUpdateCustomer,
+  onSetCustomerActive,
   onCloseProductForm,
+  onSalesDraftChange,
   productFormVisible,
   products,
   purchases,
   receivables,
   sales,
+  salesDraft,
   section,
   supplierPayables,
   supplierPayments,
@@ -1812,6 +1842,8 @@ function SectionContent({
         onValidateCustomer={onValidateCustomer}
         products={products}
         sales={sales}
+        salesDraft={salesDraft}
+        onSalesDraftChange={onSalesDraftChange}
       />
     );
   }
@@ -1821,6 +1853,7 @@ function SectionContent({
       <CustomersSection
         customers={customers}
         onCreateCustomer={onCreateCustomer}
+        onSetCustomerActive={onSetCustomerActive}
         onUpdateCustomer={onUpdateCustomer}
         onValidateCustomer={onValidateCustomer}
         receivables={receivables}
@@ -1873,6 +1906,7 @@ function SectionContent({
 type CustomersSectionProps = {
   customers: CustomerRecord[];
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onSetCustomerActive: (customerId: string, active: boolean) => void;
   onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
   onValidateCustomer: (
     input: CustomerFormState,
@@ -1885,6 +1919,7 @@ type CustomersSectionProps = {
 function CustomersSection({
   customers,
   onCreateCustomer,
+  onSetCustomerActive,
   onUpdateCustomer,
   onValidateCustomer,
   receivables,
@@ -2127,14 +2162,26 @@ function CustomersSection({
             <div>
               <h2>{selectedCustomer.name}</h2>
               <p>{selectedCustomer.document}</p>
+              <span>{selectedCustomer.active ? "Estado: Activo" : "Estado: Inactivo"}</span>
             </div>
-            <button
-              className="table-action"
-              onClick={() => startEditingCustomer(selectedCustomer)}
-              type="button"
-            >
-              Editar cliente
-            </button>
+            <div className="form-actions">
+              <button
+                className="table-action"
+                onClick={() => startEditingCustomer(selectedCustomer)}
+                type="button"
+              >
+                Editar cliente
+              </button>
+              <button
+                className="table-action"
+                onClick={() =>
+                  onSetCustomerActive(selectedCustomer.id, !selectedCustomer.active)
+                }
+                type="button"
+              >
+                {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}
+              </button>
+            </div>
           </div>
 
           {editingCustomer ? (
@@ -4189,8 +4236,10 @@ type SalesSectionProps = {
     input: CustomerFormState,
     currentCustomerId?: string | undefined
   ) => CustomerFormErrors;
+  onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
   products: ProductRecord[];
   sales: SaleRecord[];
+  salesDraft: SalesDraftState;
 };
 
 function SalesSection({
@@ -4199,10 +4248,12 @@ function SalesSection({
   onRegisterPaidSale,
   onRegisterPendingSale,
   onValidateCustomer,
+  onSalesDraftChange,
   products,
-  sales
+  sales,
+  salesDraft
 }: SalesSectionProps) {
-  const [form, setForm] = useState<SalesFormState>(emptySalesForm);
+  const { form, saleLines } = salesDraft;
   const [errors, setErrors] = useState<SalesFormErrors>({});
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
   const [customerForm, setCustomerForm] =
@@ -4210,8 +4261,8 @@ function SalesSection({
   const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
-  const [saleLines, setSaleLines] = useState<SaleDraftLine[]>([]);
 
+  const activeCustomers = customers.filter((customer) => customer.active);
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
   const selectedProduct =
@@ -4240,6 +4291,30 @@ function SalesSection({
         : currentForm
     );
   }, [selectedProduct]);
+
+  function setForm(action: SetStateAction<SalesFormState>) {
+    onSalesDraftChange((currentDraft) => ({
+      ...currentDraft,
+      form:
+        typeof action === "function"
+          ? (action as (currentForm: SalesFormState) => SalesFormState)(
+              currentDraft.form
+            )
+          : action
+    }));
+  }
+
+  function setSaleLines(action: SetStateAction<SaleDraftLine[]>) {
+    onSalesDraftChange((currentDraft) => ({
+      ...currentDraft,
+      saleLines:
+        typeof action === "function"
+          ? (action as (currentLines: SaleDraftLine[]) => SaleDraftLine[])(
+              currentDraft.saleLines
+            )
+          : action
+    }));
+  }
 
   function updateField(field: keyof SalesFormState, value: string) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
@@ -4342,6 +4417,9 @@ function SalesSection({
 
     if (!selectedCustomer) {
       nextErrors.customerId = "Debes seleccionar un cliente.";
+    } else if (!selectedCustomer.active) {
+      nextErrors.customerId =
+        "El cliente seleccionado esta inactivo. Reactivalo para registrar nuevas ventas.";
     }
     if (form.paymentStatus === "pending" && form.dueAt.trim() === "") {
       nextErrors.dueAt =
@@ -4467,7 +4545,7 @@ function SalesSection({
               value={form.customerId}
             >
               <option value="">Selecciona un cliente</option>
-              {customers.map((customer) => (
+              {activeCustomers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name} - {customer.document}
                 </option>
