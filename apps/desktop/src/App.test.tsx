@@ -1387,6 +1387,25 @@ describe("App navigation", () => {
     expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
   });
 
+  it("blocks duplicate customer documents from inline sales creation", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez Sucursal");
+    await user.type(screen.getByLabelText("NIT o C.C."), " 123456789 ");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByText("Ya existe un cliente con este NIT o C.C.")).toBeTruthy();
+  });
+
   it("requires customer name and document when creating an inline customer", async () => {
     const user = userEvent.setup();
 

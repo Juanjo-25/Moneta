@@ -44,6 +44,7 @@ type CustomerRecord = {
   name: string;
   document: string;
   address: string;
+  active: boolean;
   city: string;
   email: string;
 };
@@ -206,6 +207,11 @@ type CustomerFormState = {
 
 type CustomerFormErrors = Partial<Record<keyof CustomerFormState, string>>;
 
+type CustomerValidationOptions = {
+  customers: CustomerRecord[];
+  currentCustomerId?: string | undefined;
+};
+
 type SupplierFormState = {
   name: string;
 };
@@ -285,6 +291,38 @@ const emptyCustomerForm: CustomerFormState = {
   email: "",
   name: ""
 };
+
+function normalizeCustomerDocument(document: string): string {
+  return document.trim().toLocaleLowerCase();
+}
+
+function validateCustomerForm(
+  input: CustomerFormState,
+  options: CustomerValidationOptions
+): CustomerFormErrors {
+  const errors: CustomerFormErrors = {};
+  const normalizedDocument = normalizeCustomerDocument(input.document);
+
+  if (input.name.trim() === "") {
+    errors.name = "El nombre del cliente es obligatorio.";
+  }
+
+  if (normalizedDocument === "") {
+    errors.document = "El documento del cliente es obligatorio.";
+  } else {
+    const duplicate = options.customers.some(
+      (customer) =>
+        customer.id !== options.currentCustomerId &&
+        normalizeCustomerDocument(customer.document) === normalizedDocument
+    );
+
+    if (duplicate) {
+      errors.document = "Ya existe un cliente con este NIT o C.C.";
+    }
+  }
+
+  return errors;
+}
 
 const emptySupplierForm: SupplierFormState = {
   name: ""
@@ -1204,6 +1242,7 @@ export function App() {
   function createCustomer(input: CustomerFormState): CustomerRecord {
     const customer = {
       address: input.address.trim(),
+      active: true,
       city: input.city.trim(),
       document: input.document.trim(),
       email: input.email.trim(),
@@ -1214,6 +1253,13 @@ export function App() {
     setCustomers((currentCustomers) => [...currentCustomers, customer]);
 
     return customer;
+  }
+
+  function validateCustomer(
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ): CustomerFormErrors {
+    return validateCustomerForm(input, { customers, currentCustomerId });
   }
 
   function createSupplier(input: SupplierFormState): SupplierRecord {
@@ -1546,6 +1592,7 @@ export function App() {
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}
+            onValidateCustomer={validateCustomer}
             onCloseProductForm={() => setProductFormVisible(false)}
             productFormVisible={productFormVisible}
             products={products}
@@ -1675,6 +1722,10 @@ type SectionContentProps = {
     payableId: string;
     amountMinor: number;
   }) => void;
+  onValidateCustomer: (
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ) => CustomerFormErrors;
   onCloseProductForm: () => void;
   productFormVisible: boolean;
   products: ProductRecord[];
@@ -1696,6 +1747,7 @@ function SectionContent({
   onRegisterPaidSale,
   onRegisterPendingSale,
   onRegisterSupplierPayment,
+  onValidateCustomer,
   onCloseProductForm,
   productFormVisible,
   products,
@@ -1738,6 +1790,7 @@ function SectionContent({
         onCreateCustomer={onCreateCustomer}
         onRegisterPaidSale={onRegisterPaidSale}
         onRegisterPendingSale={onRegisterPendingSale}
+        onValidateCustomer={onValidateCustomer}
         products={products}
         sales={sales}
       />
@@ -3788,6 +3841,10 @@ type SalesSectionProps = {
       totalMinor: number;
     }>;
   }) => string | null;
+  onValidateCustomer: (
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ) => CustomerFormErrors;
   products: ProductRecord[];
   sales: SaleRecord[];
 };
@@ -3797,6 +3854,7 @@ function SalesSection({
   onCreateCustomer,
   onRegisterPaidSale,
   onRegisterPendingSale,
+  onValidateCustomer,
   products,
   sales
 }: SalesSectionProps) {
@@ -3999,14 +4057,7 @@ function SalesSection({
   }
 
   function submitCustomer() {
-    const nextErrors: CustomerFormErrors = {};
-
-    if (customerForm.name.trim() === "") {
-      nextErrors.name = "El nombre del cliente es obligatorio.";
-    }
-    if (customerForm.document.trim() === "") {
-      nextErrors.document = "El documento del cliente es obligatorio.";
-    }
+    const nextErrors = onValidateCustomer(customerForm);
 
     setCustomerErrors(nextErrors);
 
