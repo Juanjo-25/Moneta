@@ -1387,6 +1387,48 @@ describe("App navigation", () => {
     expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
   });
 
+  it("creates a customer from Clientes and lists it with active status", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Comercial Andes");
+    await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
+    await user.type(screen.getByLabelText("Direccion"), "Carrera 45 # 10-20");
+    await user.type(screen.getByLabelText("Ciudad"), "Medellin");
+    await user.type(screen.getByLabelText("Email"), "compras@andes.test");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
+    expect(within(customersTable).getByText("Comercial Andes")).toBeTruthy();
+    expect(within(customersTable).getByText("900123456")).toBeTruthy();
+    expect(within(customersTable).getByText("Activo")).toBeTruthy();
+  });
+
+  it("searches customers by name and document", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Comercial Andes");
+    await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Tienda Sur");
+    await user.type(screen.getByLabelText("NIT o C.C."), "111222333");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    await user.type(screen.getByLabelText("Buscar clientes"), "900123456");
+
+    const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
+    expect(within(customersTable).getByText("Comercial Andes")).toBeTruthy();
+    expect(within(customersTable).queryByText("Tienda Sur")).toBeNull();
+  });
+
   it("blocks duplicate customer documents from inline sales creation", async () => {
     const user = userEvent.setup();
 

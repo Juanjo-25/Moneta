@@ -389,7 +389,6 @@ const navigationItems: SectionConfig[] = [
     label: "Clientes",
     title: "Clientes",
     description: "Contactos y saldos de clientes",
-    primaryAction: "Nuevo cliente",
     emptyTitle: "Sin clientes registrados",
     emptyBody: "Los clientes quedaran disponibles para ventas y cartera."
   },
@@ -1797,6 +1796,18 @@ function SectionContent({
     );
   }
 
+  if (section.id === "customers") {
+    return (
+      <CustomersSection
+        customers={customers}
+        onCreateCustomer={onCreateCustomer}
+        onValidateCustomer={onValidateCustomer}
+        receivables={receivables}
+        sales={sales}
+      />
+    );
+  }
+
   if (section.id === "receivables") {
     return (
       <CarteraDashboardSection
@@ -1834,6 +1845,186 @@ function SectionContent({
         <strong>{section.emptyTitle}</strong>
         <span>{section.emptyBody}</span>
       </div>
+    </section>
+  );
+}
+
+type CustomersSectionProps = {
+  customers: CustomerRecord[];
+  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onValidateCustomer: (
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ) => CustomerFormErrors;
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+};
+
+function CustomersSection({
+  customers,
+  onCreateCustomer,
+  onValidateCustomer,
+  receivables,
+  sales
+}: CustomersSectionProps) {
+  const [formVisible, setFormVisible] = useState(false);
+  const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
+  const [errors, setErrors] = useState<CustomerFormErrors>({});
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredCustomers = customers.filter((customer) => {
+    if (normalizedSearch === "") {
+      return true;
+    }
+
+    return [
+      customer.name,
+      customer.document,
+      customer.address,
+      customer.city,
+      customer.email
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
+  });
+
+  function updateField(field: keyof CustomerFormState, value: string) {
+    setForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function submitCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors = onValidateCustomer(form);
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    onCreateCustomer(form);
+    setForm(emptyCustomerForm);
+    setErrors({});
+    setFormVisible(false);
+  }
+
+  return (
+    <section className="customers-layout">
+      <div className="customers-toolbar">
+        <TextField
+          label="Buscar clientes"
+          onChange={setSearch}
+          value={search}
+        />
+        <button
+          className="primary-action"
+          onClick={() => setFormVisible((visible) => !visible)}
+          type="button"
+        >
+          Nuevo cliente
+        </button>
+      </div>
+
+      {formVisible ? (
+        <form className="customer-form" onSubmit={submitCustomer}>
+          <div className="form-grid">
+            <TextField
+              error={errors.name}
+              label="Nombre o razon social"
+              onChange={(value) => updateField("name", value)}
+              value={form.name}
+            />
+            <TextField
+              error={errors.document}
+              label="NIT o C.C."
+              onChange={(value) => updateField("document", value)}
+              value={form.document}
+            />
+            <TextField
+              error={errors.address}
+              label="Direccion"
+              onChange={(value) => updateField("address", value)}
+              value={form.address}
+            />
+            <TextField
+              error={errors.city}
+              label="Ciudad"
+              onChange={(value) => updateField("city", value)}
+              value={form.city}
+            />
+            <TextField
+              error={errors.email}
+              label="Email"
+              onChange={(value) => updateField("email", value)}
+              value={form.email}
+            />
+          </div>
+          <div className="form-actions">
+            <button type="submit">Guardar cliente</button>
+          </div>
+        </form>
+      ) : null}
+
+      {customers.length === 0 ? (
+        <div className="empty-state section-empty">
+          <strong>Sin clientes registrados</strong>
+          <span>Crea clientes para ventas y cartera.</span>
+        </div>
+      ) : filteredCustomers.length === 0 ? (
+        <div className="empty-state section-empty">
+          <strong>Sin resultados</strong>
+          <span>Ajusta la busqueda para ver mas clientes.</span>
+        </div>
+      ) : (
+        <table className="data-table" aria-label="Clientes registrados">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Documento</th>
+              <th>Estado</th>
+              <th>Total vendido</th>
+              <th>Cartera</th>
+              <th>Ultima venta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCustomers.map((customer) => {
+              const customerReceivables = receivables.filter(
+                (receivable) => receivable.customerId === customer.id
+              );
+              const customerSales = sales.filter(
+                (sale) => sale.customerId === customer.id
+              );
+              const totalSoldMinor = customerSales.reduce(
+                (total, sale) => total + sale.totalMinor,
+                0
+              );
+              const receivableMinor = customerReceivables.reduce(
+                (total, receivable) => total + receivable.amountMinor,
+                0
+              );
+              const lastSale = customerSales.reduce<SaleRecord | null>(
+                (latest, sale) =>
+                  latest === null || sale.occurredAtMs > latest.occurredAtMs
+                    ? sale
+                    : latest,
+                null
+              );
+
+              return (
+                <tr key={customer.id}>
+                  <td>{customer.name}</td>
+                  <td>{customer.document}</td>
+                  <td>{customer.active ? "Activo" : "Inactivo"}</td>
+                  <td>{formatCurrency(totalSoldMinor)}</td>
+                  <td>{formatCurrency(receivableMinor)}</td>
+                  <td>{lastSale?.occurredAtLabel ?? "Sin ventas"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </section>
   );
 }
