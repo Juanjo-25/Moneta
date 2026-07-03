@@ -1422,11 +1422,19 @@ describe("App navigation", () => {
     await user.type(screen.getByLabelText("NIT o C.C."), "111222333");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
-    await user.type(screen.getByLabelText("Buscar clientes"), "900123456");
+    const searchInput = screen.getByLabelText("Buscar clientes");
+
+    await user.type(searchInput, "900123456");
 
     const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
     expect(within(customersTable).getByText("Comercial Andes")).toBeTruthy();
     expect(within(customersTable).queryByText("Tienda Sur")).toBeNull();
+
+    await user.clear(searchInput);
+    await user.type(searchInput, "Tienda");
+
+    expect(within(customersTable).getByText("Tienda Sur")).toBeTruthy();
+    expect(within(customersTable).queryByText("Comercial Andes")).toBeNull();
   });
 
   it("blocks duplicate customer documents from inline sales creation", async () => {
