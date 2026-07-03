@@ -1471,7 +1471,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
     await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
 
-    expect(screen.getByText("Inactivo")).toBeTruthy();
+    expect(within(screen.getByLabelText("Ficha de cliente")).getByText("Inactivo")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     expect(screen.queryByRole("option", { name: "Ana Perez - 123456789" })).toBeNull();
@@ -1493,6 +1493,39 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Ventas" }));
 
     expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
+  });
+
+  it("shows customer file metrics, sales history, and pending receivables", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-15");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Carlos Ruiz" }));
+
+    const customerSummary = screen.getByLabelText("Resumen del cliente");
+    expect(within(customerSummary).getByText("Total vendido")).toBeTruthy();
+    expect(within(customerSummary).getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
+    expect(within(customerSummary).getByText("Ventas")).toBeTruthy();
+    expect(within(customerSummary).getByText("1")).toBeTruthy();
+
+    const salesHistory = screen.getByRole("table", { name: "Historial de ventas del cliente" });
+    expect(within(salesHistory).getByText("Arroz libra")).toBeTruthy();
+    expect(within(salesHistory).getByText("Pendiente")).toBeTruthy();
+
+    const customerReceivables = screen.getByRole("table", { name: "Cartera pendiente del cliente" });
+    expect(within(customerReceivables).getByText("2026-07-15")).toBeTruthy();
   });
 
   it("rejects a sale when the selected customer becomes inactive", async () => {

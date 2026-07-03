@@ -573,6 +573,13 @@ type CustomerMarginRow = {
   revenueMinor: number;
 };
 
+type CustomerSummary = {
+  lastSaleLabel: string;
+  pendingReceivableMinor: number;
+  saleCount: number;
+  totalSoldMinor: number;
+};
+
 type SaleMarginRow = {
   costMinor: number;
   customerName: string;
@@ -803,6 +810,35 @@ function buildProductMarginRows(sales: SaleRecord[]): ProductMarginRow[] {
   });
 
   return [...productMap.values()].sort((left, right) => right.marginMinor - left.marginMinor);
+}
+
+function buildCustomerSummary(input: {
+  customer: CustomerRecord;
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+}): CustomerSummary {
+  const customerSales = input.sales.filter(
+    (sale) => sale.customerId === input.customer.id
+  );
+  const customerReceivables = input.receivables.filter(
+    (receivable) => receivable.customerId === input.customer.id
+  );
+  const lastSale = [...customerSales].sort(
+    (left, right) => right.occurredAtMs - left.occurredAtMs
+  )[0];
+
+  return {
+    lastSaleLabel: lastSale?.occurredAtLabel ?? "Sin ventas",
+    pendingReceivableMinor: customerReceivables.reduce(
+      (total, receivable) => total + receivable.amountMinor,
+      0
+    ),
+    saleCount: customerSales.length,
+    totalSoldMinor: customerSales.reduce(
+      (total, sale) => total + sale.totalMinor,
+      0
+    )
+  };
 }
 
 function buildCustomerMarginRows(sales: SaleRecord[]): CustomerMarginRow[] {
@@ -1952,6 +1988,15 @@ function CustomersSection({
     customers.find((customer) => customer.id === selectedCustomerId) ??
     null;
   const editingCustomer = editingCustomerId === selectedCustomer?.id ? selectedCustomer : null;
+  const selectedCustomerSales = selectedCustomer
+    ? sales.filter((sale) => sale.customerId === selectedCustomer.id)
+    : [];
+  const selectedCustomerReceivables = selectedCustomer
+    ? receivables.filter((receivable) => receivable.customerId === selectedCustomer.id)
+    : [];
+  const selectedCustomerSummary = selectedCustomer
+    ? buildCustomerSummary({ customer: selectedCustomer, receivables, sales })
+    : null;
 
   function getCustomerFormState(customer: CustomerRecord): CustomerFormState {
     return {
@@ -2110,36 +2155,16 @@ function CustomersSection({
           </thead>
           <tbody>
             {filteredCustomers.map((customer) => {
-              const customerReceivables = receivables.filter(
-                (receivable) => receivable.customerId === customer.id
-              );
-              const customerSales = sales.filter(
-                (sale) => sale.customerId === customer.id
-              );
-              const totalSoldMinor = customerSales.reduce(
-                (total, sale) => total + sale.totalMinor,
-                0
-              );
-              const receivableMinor = customerReceivables.reduce(
-                (total, receivable) => total + receivable.amountMinor,
-                0
-              );
-              const lastSale = customerSales.reduce<SaleRecord | null>(
-                (latest, sale) =>
-                  latest === null || sale.occurredAtMs > latest.occurredAtMs
-                    ? sale
-                    : latest,
-                null
-              );
+              const summary = buildCustomerSummary({ customer, receivables, sales });
 
               return (
                 <tr key={customer.id}>
                   <td>{customer.name}</td>
                   <td>{customer.document}</td>
                   <td>{customer.active ? "Activo" : "Inactivo"}</td>
-                  <td>{formatCurrency(totalSoldMinor)}</td>
-                  <td>{formatCurrency(receivableMinor)}</td>
-                  <td>{lastSale?.occurredAtLabel ?? "Sin ventas"}</td>
+                  <td>{formatCurrency(summary.totalSoldMinor)}</td>
+                  <td>{formatCurrency(summary.pendingReceivableMinor)}</td>
+                  <td>{summary.lastSaleLabel}</td>
                   <td>
                     <button
                       className="table-action"
@@ -2157,12 +2182,18 @@ function CustomersSection({
       )}
 
       {selectedCustomer ? (
-        <section className="section-panel" aria-label="Ficha de cliente">
+        <section className="customer-file" aria-label="Ficha de cliente">
           <div className="section-heading">
             <div>
               <h2>{selectedCustomer.name}</h2>
               <p>{selectedCustomer.document}</p>
-              <span>{selectedCustomer.active ? "Estado: Activo" : "Estado: Inactivo"}</span>
+              <span
+                className={
+                  selectedCustomer.active ? "status-pill active" : "status-pill inactive"
+                }
+              >
+                {selectedCustomer.active ? "Activo" : "Inactivo"}
+              </span>
             </div>
             <div className="form-actions">
               <button
@@ -2222,6 +2253,78 @@ function CustomersSection({
                 <button type="submit">Guardar cambios</button>
               </div>
             </form>
+          ) : null}
+
+          {selectedCustomerSummary ? (
+            <div className="customer-summary" aria-label="Resumen del cliente">
+              <div className="summary-card">
+                <span>Total vendido</span>
+                <strong>{formatCurrency(selectedCustomerSummary.totalSoldMinor)}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Ventas</span>
+                <strong>{selectedCustomerSummary.saleCount}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Cartera pendiente</span>
+                <strong>
+                  {formatCurrency(selectedCustomerSummary.pendingReceivableMinor)}
+                </strong>
+              </div>
+              <div className="summary-card">
+                <span>Ultima venta</span>
+                <strong>{selectedCustomerSummary.lastSaleLabel}</strong>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedCustomerSales.length > 0 ? (
+            <table className="data-table" aria-label="Historial de ventas del cliente">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Estado</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedCustomerSales.map((sale) => (
+                  <tr key={sale.id}>
+                    <td>{sale.occurredAtLabel}</td>
+                    <td>{sale.productName}</td>
+                    <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                    <td>{formatCurrency(sale.totalMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state section-empty">
+              <strong>Sin ventas del cliente</strong>
+              <span>Las ventas apareceran cuando se registren movimientos.</span>
+            </div>
+          )}
+
+          {selectedCustomerReceivables.length > 0 ? (
+            <table className="data-table" aria-label="Cartera pendiente del cliente">
+              <thead>
+                <tr>
+                  <th>Venta</th>
+                  <th>Vencimiento</th>
+                  <th>Saldo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedCustomerReceivables.map((receivable) => (
+                  <tr key={receivable.id}>
+                    <td>{receivable.saleId}</td>
+                    <td>{receivable.dueAt || "Sin vencimiento"}</td>
+                    <td>{formatCurrency(receivable.amountMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : null}
         </section>
       ) : null}
