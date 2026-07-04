@@ -1091,6 +1091,85 @@ describe("App navigation", () => {
     expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
   });
 
+  it("creates a supplier profile with an Antioquia municipality", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Distribuidora Oriente");
+    await user.type(screen.getByLabelText("NIT o C.C. proveedor"), "900123456");
+    await user.type(screen.getByLabelText("Telefono proveedor"), "6044440000");
+    await user.type(screen.getByLabelText("Email proveedor"), "compras@oriente.test");
+    await user.type(screen.getByLabelText("Direccion proveedor"), "Calle 10 #20-30");
+    await user.selectOptions(
+      screen.getByLabelText("Municipio"),
+      screen.getByRole("option", { name: "Rionegro" })
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    const suppliersTable = screen.getByRole("table", { name: "Proveedores registrados" });
+    expect(within(suppliersTable).getByText("Distribuidora Oriente")).toBeTruthy();
+    expect(within(suppliersTable).getByText("900123456")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Rionegro")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Activo")).toBeTruthy();
+  });
+
+  it("defaults supplier department to Antioquia and allows manual department and municipality", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+
+    const departmentInput = screen.getByLabelText("Departamento") as HTMLInputElement;
+    expect(departmentInput.value).toBe("Antioquia");
+
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Externo");
+    await user.clear(departmentInput);
+    await user.type(departmentInput, "Choco");
+    await user.type(screen.getByLabelText("Municipio"), "Quibdo");
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    const suppliersTable = screen.getByRole("table", { name: "Proveedores registrados" });
+    expect(within(suppliersTable).getByText("Proveedor Externo")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Choco")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Quibdo")).toBeTruthy();
+  });
+
+  it("edits an existing supplier profile", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Inicial");
+    await user.selectOptions(
+      screen.getByLabelText("Municipio"),
+      screen.getByRole("option", { name: "Medellin" })
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    await user.click(screen.getByRole("button", { name: "Editar proveedor Proveedor Inicial" }));
+    await user.clear(screen.getByLabelText("Nombre proveedor"));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Actualizado");
+    await user.type(screen.getByLabelText("Telefono proveedor"), "3005550101");
+    await user.selectOptions(
+      screen.getByLabelText("Municipio"),
+      screen.getByRole("option", { name: "Envigado" })
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar cambios proveedor" }));
+
+    const suppliersTable = screen.getByRole("table", { name: "Proveedores registrados" });
+    expect(within(suppliersTable).queryByText("Proveedor Inicial")).toBeNull();
+    expect(within(suppliersTable).getByText("Proveedor Actualizado")).toBeTruthy();
+    expect(within(suppliersTable).getByText("3005550101")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Envigado")).toBeTruthy();
+  });
+
   it("registers a paid purchase, increases stock, and lists the invoice", async () => {
     const user = userEvent.setup();
 

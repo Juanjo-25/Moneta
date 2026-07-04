@@ -104,7 +104,14 @@ type ReceivableRecord = {
 
 type SupplierRecord = {
   id: string;
+  active: boolean;
+  address: string;
+  city: string;
+  department: string;
+  document: string;
+  email: string;
   name: string;
+  phone: string;
 };
 
 type PurchasePaymentStatus = "paid" | "pending";
@@ -220,7 +227,13 @@ type CustomerValidationOptions = {
 };
 
 type SupplierFormState = {
+  address: string;
+  city: string;
+  department: string;
+  document: string;
+  email: string;
   name: string;
+  phone: string;
 };
 
 type SupplierFormErrors = Partial<Record<keyof SupplierFormState, string>>;
@@ -337,8 +350,142 @@ function validateCustomerForm(
 }
 
 const emptySupplierForm: SupplierFormState = {
-  name: ""
+  address: "",
+  city: "",
+  department: "Antioquia",
+  document: "",
+  email: "",
+  name: "",
+  phone: ""
 };
+
+const antioquiaMunicipalities = [
+  "Abejorral",
+  "Abriaqui",
+  "Alejandria",
+  "Amaga",
+  "Amalfi",
+  "Andes",
+  "Angelopolis",
+  "Angostura",
+  "Anori",
+  "Anza",
+  "Apartado",
+  "Arboletes",
+  "Argelia",
+  "Armenia",
+  "Barbosa",
+  "Bello",
+  "Belmira",
+  "Betania",
+  "Betulia",
+  "Briceño",
+  "Buritica",
+  "Caceres",
+  "Caicedo",
+  "Caldas",
+  "Campamento",
+  "Cañasgordas",
+  "Caracoli",
+  "Caramanta",
+  "Carepa",
+  "Carolina del Principe",
+  "Caucasia",
+  "Chigorodo",
+  "Cisneros",
+  "Ciudad Bolivar",
+  "Cocorna",
+  "Concepcion",
+  "Concordia",
+  "Copacabana",
+  "Dabeiba",
+  "Donmatias",
+  "Ebejico",
+  "El Bagre",
+  "El Carmen de Viboral",
+  "El Peñol",
+  "El Retiro",
+  "El Santuario",
+  "Entrerrios",
+  "Envigado",
+  "Fredonia",
+  "Frontino",
+  "Giraldo",
+  "Girardota",
+  "Gomez Plata",
+  "Granada",
+  "Guadalupe",
+  "Guarne",
+  "Guatape",
+  "Heliconia",
+  "Hispania",
+  "Itagui",
+  "Ituango",
+  "Jardin",
+  "Jerico",
+  "La Ceja",
+  "La Estrella",
+  "La Pintada",
+  "La Union",
+  "Liborina",
+  "Maceo",
+  "Marinilla",
+  "Medellin",
+  "Montebello",
+  "Murindo",
+  "Mutata",
+  "Nariño",
+  "Nechi",
+  "Necocli",
+  "Olaya",
+  "Peque",
+  "Pueblorrico",
+  "Puerto Berrio",
+  "Puerto Nare",
+  "Puerto Triunfo",
+  "Remedios",
+  "Rionegro",
+  "Sabanalarga",
+  "Sabaneta",
+  "Salgar",
+  "San Andres de Cuerquia",
+  "San Carlos",
+  "San Francisco",
+  "San Jeronimo",
+  "San Jose de la Montaña",
+  "San Juan de Uraba",
+  "San Luis",
+  "San Pedro de los Milagros",
+  "San Pedro de Uraba",
+  "San Rafael",
+  "San Roque",
+  "San Vicente Ferrer",
+  "Santa Barbara",
+  "Santa Fe de Antioquia",
+  "Santa Rosa de Osos",
+  "Santo Domingo",
+  "Segovia",
+  "Sonson",
+  "Sopetran",
+  "Tamesis",
+  "Taraza",
+  "Tarso",
+  "Titiribi",
+  "Toledo",
+  "Turbo",
+  "Uramita",
+  "Urrao",
+  "Valdivia",
+  "Valparaiso",
+  "Vegachi",
+  "Venecia",
+  "Vigia del Fuerte",
+  "Yali",
+  "Yarumal",
+  "Yolombo",
+  "Yondo",
+  "Zaragoza"
+];
 
 const emptyPurchaseForm: PurchaseFormState = {
   dueAt: "",
@@ -1232,6 +1379,7 @@ export function App() {
   const [supplierPayables, setSupplierPayables] = useState<SupplierPayableRecord[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
   const [productFormVisible, setProductFormVisible] = useState(false);
+  const [supplierFormVisible, setSupplierFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
     () =>
@@ -1277,6 +1425,11 @@ export function App() {
 
     if (activeSection.id === "products") {
       setProductFormVisible((visible) => !visible);
+      return;
+    }
+
+    if (activeSection.id === "suppliers") {
+      setSupplierFormVisible((visible) => !visible);
       return;
     }
 
@@ -1337,13 +1490,47 @@ export function App() {
 
   function createSupplier(input: SupplierFormState): SupplierRecord {
     const supplier = {
+      active: true,
+      address: input.address.trim(),
+      city: input.city.trim(),
+      department: input.department.trim() || "Antioquia",
+      document: input.document.trim(),
+      email: input.email.trim(),
       id: `supplier-${Date.now()}`,
-      name: input.name.trim()
+      name: input.name.trim(),
+      phone: input.phone.trim()
     };
 
     setSuppliers((currentSuppliers) => [...currentSuppliers, supplier]);
 
     return supplier;
+  }
+
+  function updateSupplier(supplierId: string, input: SupplierFormState) {
+    setSuppliers((currentSuppliers) =>
+      currentSuppliers.map((supplier) =>
+        supplier.id === supplierId
+          ? {
+              ...supplier,
+              address: input.address.trim(),
+              city: input.city.trim(),
+              department: input.department.trim() || "Antioquia",
+              document: input.document.trim(),
+              email: input.email.trim(),
+              name: input.name.trim(),
+              phone: input.phone.trim()
+            }
+          : supplier
+      )
+    );
+  }
+
+  function setSupplierActive(supplierId: string, active: boolean) {
+    setSuppliers((currentSuppliers) =>
+      currentSuppliers.map((supplier) =>
+        supplier.id === supplierId ? { ...supplier, active } : supplier
+      )
+    );
   }
 
   function registerPurchaseInSession(input: {
@@ -1661,6 +1848,8 @@ export function App() {
             onCreateCustomer={createCustomer}
             onCreateProduct={createProduct}
             onCreateSupplier={createSupplier}
+            onUpdateSupplier={updateSupplier}
+            onSetSupplierActive={setSupplierActive}
             onRegisterPurchase={registerPurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
@@ -1669,7 +1858,9 @@ export function App() {
             onUpdateCustomer={updateCustomer}
             onSetCustomerActive={setCustomerActive}
             onCloseProductForm={() => setProductFormVisible(false)}
+            onCloseSupplierForm={() => setSupplierFormVisible(false)}
             productFormVisible={productFormVisible}
+            supplierFormVisible={supplierFormVisible}
             products={products}
             purchases={purchases}
             receivables={receivables}
@@ -1756,6 +1947,8 @@ type SectionContentProps = {
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onCreateProduct: (product: ProductRecord) => void;
   onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
+  onSetSupplierActive: (supplierId: string, active: boolean) => void;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     invoiceNumber: string;
@@ -1806,8 +1999,10 @@ type SectionContentProps = {
   onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
   onSetCustomerActive: (customerId: string, active: boolean) => void;
   onCloseProductForm: () => void;
+  onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
   productFormVisible: boolean;
+  supplierFormVisible: boolean;
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
@@ -1824,6 +2019,8 @@ function SectionContent({
   onCreateCustomer,
   onCreateProduct,
   onCreateSupplier,
+  onUpdateSupplier,
+  onSetSupplierActive,
   onRegisterPurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
@@ -1832,8 +2029,10 @@ function SectionContent({
   onUpdateCustomer,
   onSetCustomerActive,
   onCloseProductForm,
+  onCloseSupplierForm,
   onSalesDraftChange,
   productFormVisible,
+  supplierFormVisible,
   products,
   purchases,
   receivables,
@@ -1911,8 +2110,14 @@ function SectionContent({
   if (section.id === "suppliers") {
     return (
       <SuppliersSection
+        formVisible={supplierFormVisible}
+        onCloseForm={onCloseSupplierForm}
+        onCreateSupplier={onCreateSupplier}
         onRegisterSupplierPayment={onRegisterSupplierPayment}
+        onSetSupplierActive={onSetSupplierActive}
+        onUpdateSupplier={onUpdateSupplier}
         supplierPayables={supplierPayables}
+        suppliers={suppliers}
       />
     );
   }
@@ -2518,6 +2723,7 @@ function PurchasesSection({
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
+  const activeSuppliers = suppliers.filter((supplier) => supplier.active);
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
@@ -2785,7 +2991,7 @@ function PurchasesSection({
               value={form.supplierId}
             >
               <option value="">Selecciona un proveedor</option>
-              {suppliers.map((supplier) => (
+              {activeSuppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
                 </option>
@@ -2875,7 +3081,7 @@ function PurchasesSection({
               error={supplierErrors.name}
               label="Nombre proveedor"
               onChange={(value) => {
-                setSupplierForm({ name: value });
+                setSupplierForm((currentForm) => ({ ...currentForm, name: value }));
                 setSupplierErrors({});
               }}
               value={supplierForm.name}
@@ -3025,11 +3231,17 @@ function PurchasesSection({
 }
 
 type SuppliersSectionProps = {
+  formVisible: boolean;
+  onCloseForm: () => void;
+  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
   }) => void;
+  onSetSupplierActive: (supplierId: string, active: boolean) => void;
+  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
   supplierPayables: SupplierPayableRecord[];
+  suppliers: SupplierRecord[];
 };
 
 function formatPayableStatus(status: SupplierPayableStatus): string {
@@ -3041,27 +3253,218 @@ function formatPayableStatus(status: SupplierPayableStatus): string {
 }
 
 function SuppliersSection({
+  formVisible,
+  onCloseForm,
+  onCreateSupplier,
   onRegisterSupplierPayment,
-  supplierPayables
+  onSetSupplierActive,
+  onUpdateSupplier,
+  supplierPayables,
+  suppliers
 }: SuppliersSectionProps) {
-  if (supplierPayables.length === 0) {
-    return (
-      <section className="section-panel">
+  const [form, setForm] = useState<SupplierFormState>(emptySupplierForm);
+  const [errors, setErrors] = useState<SupplierFormErrors>({});
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const editingSupplier =
+    suppliers.find((supplier) => supplier.id === editingSupplierId) ?? null;
+
+  function getSupplierFormState(supplier: SupplierRecord): SupplierFormState {
+    return {
+      address: supplier.address,
+      city: supplier.city,
+      department: supplier.department,
+      document: supplier.document,
+      email: supplier.email,
+      name: supplier.name,
+      phone: supplier.phone
+    };
+  }
+
+  function updateField(field: keyof SupplierFormState, value: string) {
+    setForm((currentForm) => {
+      if (field === "department") {
+        return {
+          ...currentForm,
+          department: value,
+          city: value.trim() !== "Antioquia" ? "" : currentForm.city
+        };
+      }
+
+      return { ...currentForm, [field]: value };
+    });
+    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function startEditingSupplier(supplier: SupplierRecord) {
+    setEditingSupplierId(supplier.id);
+    setForm(getSupplierFormState(supplier));
+    setErrors({});
+  }
+
+  function submitSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: SupplierFormErrors = {};
+
+    if (form.name.trim() === "") {
+      nextErrors.name = "El nombre del proveedor es obligatorio.";
+    }
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    if (editingSupplier) {
+      onUpdateSupplier(editingSupplier.id, form);
+      setEditingSupplierId(null);
+    } else {
+      onCreateSupplier(form);
+      onCloseForm();
+    }
+
+    setForm(emptySupplierForm);
+    setErrors({});
+  }
+
+  return (
+    <section className="suppliers-layout">
+      {formVisible || editingSupplier ? (
+        <form className="customer-form" onSubmit={submitSupplier}>
+          <div className="form-grid">
+            <TextField
+              error={errors.name}
+              label="Nombre proveedor"
+              onChange={(value) => updateField("name", value)}
+              value={form.name}
+            />
+            <TextField
+              error={errors.document}
+              label="NIT o C.C. proveedor"
+              onChange={(value) => updateField("document", value)}
+              value={form.document}
+            />
+            <TextField
+              error={errors.phone}
+              label="Telefono proveedor"
+              onChange={(value) => updateField("phone", value)}
+              value={form.phone}
+            />
+            <TextField
+              error={errors.email}
+              label="Email proveedor"
+              onChange={(value) => updateField("email", value)}
+              value={form.email}
+            />
+            <TextField
+              error={errors.address}
+              label="Direccion proveedor"
+              onChange={(value) => updateField("address", value)}
+              value={form.address}
+            />
+            <TextField
+              error={errors.department}
+              label="Departamento"
+              onChange={(value) => updateField("department", value)}
+              value={form.department}
+            />
+            {form.department.trim() === "Antioquia" ? (
+              <label className="field" htmlFor="municipio-proveedor">
+                <span>Municipio</span>
+                <select
+                  id="municipio-proveedor"
+                  onChange={(event) => updateField("city", event.target.value)}
+                  value={form.city}
+                >
+                  <option value="">Selecciona un municipio</option>
+                  {antioquiaMunicipalities.map((municipality) => (
+                    <option key={municipality} value={municipality}>
+                      {municipality}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <TextField
+                error={errors.city}
+                label="Municipio"
+                onChange={(value) => updateField("city", value)}
+                value={form.city}
+              />
+            )}
+          </div>
+          <div className="form-actions">
+            <button type="submit">
+              {editingSupplier ? "Guardar cambios proveedor" : "Guardar proveedor"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {suppliers.length > 0 ? (
+        <table className="data-table" aria-label="Proveedores registrados">
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th>Documento</th>
+              <th>Telefono</th>
+              <th>Email</th>
+              <th>Departamento</th>
+              <th>Municipio</th>
+              <th>Estado</th>
+              <th>Accion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {suppliers.map((supplier) => (
+              <tr key={supplier.id}>
+                <td>{supplier.name}</td>
+                <td>{supplier.document || "Sin documento"}</td>
+                <td>{supplier.phone || "Sin telefono"}</td>
+                <td>{supplier.email || "Sin email"}</td>
+                <td>{supplier.department || "Antioquia"}</td>
+                <td>{supplier.city || "Sin municipio"}</td>
+                <td>{supplier.active ? "Activo" : "Inactivo"}</td>
+                <td>
+                  <button
+                    className="table-action"
+                    onClick={() => startEditingSupplier(supplier)}
+                    type="button"
+                  >
+                    Editar proveedor {supplier.name}
+                  </button>
+                  <button
+                    className="table-action"
+                    onClick={() => onSetSupplierActive(supplier.id, !supplier.active)}
+                    type="button"
+                  >
+                    {supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="empty-state section-empty">
+          <strong>Sin proveedores registrados</strong>
+          <span>Crea proveedores para asociarlos a tus compras.</span>
+        </div>
+      )}
+
+      {supplierPayables.length > 0 ? (
+        <PayablesTable
+          onRegisterSupplierPayment={onRegisterSupplierPayment}
+          supplierPayables={supplierPayables}
+          tableLabel="Cuentas por pagar"
+        />
+      ) : (
         <div className="empty-state section-empty">
           <strong>Sin cuentas por pagar</strong>
           <span>Las facturas pendientes de proveedor apareceran aqui.</span>
         </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="section-panel">
-      <PayablesTable
-        onRegisterSupplierPayment={onRegisterSupplierPayment}
-        supplierPayables={supplierPayables}
-        tableLabel="Cuentas por pagar"
-      />
+      )}
     </section>
   );
 }
