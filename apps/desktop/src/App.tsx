@@ -2,9 +2,11 @@ import {
   useEffect,
   useMemo,
   useState,
+  type Dispatch,
   type FormEvent,
   type HTMLAttributes,
-  type HTMLInputTypeAttribute
+  type HTMLInputTypeAttribute,
+  type SetStateAction
 } from "react";
 import type { InvoicePdfResult } from "./invoice-pdf";
 
@@ -44,6 +46,7 @@ type CustomerRecord = {
   name: string;
   document: string;
   address: string;
+  active: boolean;
   city: string;
   email: string;
 };
@@ -101,7 +104,14 @@ type ReceivableRecord = {
 
 type SupplierRecord = {
   id: string;
+  active: boolean;
+  address: string;
+  city: string;
+  department: string;
+  document: string;
+  email: string;
   name: string;
+  phone: string;
 };
 
 type PurchasePaymentStatus = "paid" | "pending";
@@ -196,6 +206,11 @@ type SalesFormErrors = {
   submit?: string | undefined;
 };
 
+type SalesDraftState = {
+  form: SalesFormState;
+  saleLines: SaleDraftLine[];
+};
+
 type CustomerFormState = {
   name: string;
   document: string;
@@ -206,8 +221,19 @@ type CustomerFormState = {
 
 type CustomerFormErrors = Partial<Record<keyof CustomerFormState, string>>;
 
+type CustomerValidationOptions = {
+  customers: CustomerRecord[];
+  currentCustomerId?: string | undefined;
+};
+
 type SupplierFormState = {
+  address: string;
+  city: string;
+  department: string;
+  document: string;
+  email: string;
   name: string;
+  phone: string;
 };
 
 type SupplierFormErrors = Partial<Record<keyof SupplierFormState, string>>;
@@ -278,6 +304,11 @@ const emptySalesForm: SalesFormState = {
   paymentStatus: "paid"
 };
 
+const emptySalesDraft: SalesDraftState = {
+  form: emptySalesForm,
+  saleLines: []
+};
+
 const emptyCustomerForm: CustomerFormState = {
   address: "",
   city: "",
@@ -286,9 +317,175 @@ const emptyCustomerForm: CustomerFormState = {
   name: ""
 };
 
+function normalizeCustomerDocument(document: string): string {
+  return document.trim().toLocaleLowerCase();
+}
+
+function validateCustomerForm(
+  input: CustomerFormState,
+  options: CustomerValidationOptions
+): CustomerFormErrors {
+  const errors: CustomerFormErrors = {};
+  const normalizedDocument = normalizeCustomerDocument(input.document);
+
+  if (input.name.trim() === "") {
+    errors.name = "El nombre del cliente es obligatorio.";
+  }
+
+  if (normalizedDocument === "") {
+    errors.document = "El documento del cliente es obligatorio.";
+  } else {
+    const duplicate = options.customers.some(
+      (customer) =>
+        customer.id !== options.currentCustomerId &&
+        normalizeCustomerDocument(customer.document) === normalizedDocument
+    );
+
+    if (duplicate) {
+      errors.document = "Ya existe un cliente con este NIT o C.C.";
+    }
+  }
+
+  return errors;
+}
+
 const emptySupplierForm: SupplierFormState = {
-  name: ""
+  address: "",
+  city: "",
+  department: "Antioquia",
+  document: "",
+  email: "",
+  name: "",
+  phone: ""
 };
+
+const antioquiaMunicipalities = [
+  "Abejorral",
+  "Abriaqui",
+  "Alejandria",
+  "Amaga",
+  "Amalfi",
+  "Andes",
+  "Angelopolis",
+  "Angostura",
+  "Anori",
+  "Anza",
+  "Apartado",
+  "Arboletes",
+  "Argelia",
+  "Armenia",
+  "Barbosa",
+  "Bello",
+  "Belmira",
+  "Betania",
+  "Betulia",
+  "Briceño",
+  "Buritica",
+  "Caceres",
+  "Caicedo",
+  "Caldas",
+  "Campamento",
+  "Cañasgordas",
+  "Caracoli",
+  "Caramanta",
+  "Carepa",
+  "Carolina del Principe",
+  "Caucasia",
+  "Chigorodo",
+  "Cisneros",
+  "Ciudad Bolivar",
+  "Cocorna",
+  "Concepcion",
+  "Concordia",
+  "Copacabana",
+  "Dabeiba",
+  "Donmatias",
+  "Ebejico",
+  "El Bagre",
+  "El Carmen de Viboral",
+  "El Peñol",
+  "El Retiro",
+  "El Santuario",
+  "Entrerrios",
+  "Envigado",
+  "Fredonia",
+  "Frontino",
+  "Giraldo",
+  "Girardota",
+  "Gomez Plata",
+  "Granada",
+  "Guadalupe",
+  "Guarne",
+  "Guatape",
+  "Heliconia",
+  "Hispania",
+  "Itagui",
+  "Ituango",
+  "Jardin",
+  "Jerico",
+  "La Ceja",
+  "La Estrella",
+  "La Pintada",
+  "La Union",
+  "Liborina",
+  "Maceo",
+  "Marinilla",
+  "Medellin",
+  "Montebello",
+  "Murindo",
+  "Mutata",
+  "Nariño",
+  "Nechi",
+  "Necocli",
+  "Olaya",
+  "Peque",
+  "Pueblorrico",
+  "Puerto Berrio",
+  "Puerto Nare",
+  "Puerto Triunfo",
+  "Remedios",
+  "Rionegro",
+  "Sabanalarga",
+  "Sabaneta",
+  "Salgar",
+  "San Andres de Cuerquia",
+  "San Carlos",
+  "San Francisco",
+  "San Jeronimo",
+  "San Jose de la Montaña",
+  "San Juan de Uraba",
+  "San Luis",
+  "San Pedro de los Milagros",
+  "San Pedro de Uraba",
+  "San Rafael",
+  "San Roque",
+  "San Vicente Ferrer",
+  "Santa Barbara",
+  "Santa Fe de Antioquia",
+  "Santa Rosa de Osos",
+  "Santo Domingo",
+  "Segovia",
+  "Sonson",
+  "Sopetran",
+  "Tamesis",
+  "Taraza",
+  "Tarso",
+  "Titiribi",
+  "Toledo",
+  "Turbo",
+  "Uramita",
+  "Urrao",
+  "Valdivia",
+  "Valparaiso",
+  "Vegachi",
+  "Venecia",
+  "Vigia del Fuerte",
+  "Yali",
+  "Yarumal",
+  "Yolombo",
+  "Yondo",
+  "Zaragoza"
+];
 
 const emptyPurchaseForm: PurchaseFormState = {
   dueAt: "",
@@ -351,7 +548,6 @@ const navigationItems: SectionConfig[] = [
     label: "Clientes",
     title: "Clientes",
     description: "Contactos y saldos de clientes",
-    primaryAction: "Nuevo cliente",
     emptyTitle: "Sin clientes registrados",
     emptyBody: "Los clientes quedaran disponibles para ventas y cartera."
   },
@@ -382,6 +578,10 @@ const navigationItems: SectionConfig[] = [
     emptyBody: "Los reportes se activaran cuando existan movimientos."
   }
 ];
+
+const sidebarNavigationItems = navigationItems.filter(
+  (item) => item.id !== "dashboard"
+);
 
 function stripNonDigits(value: string): string {
   return value.replace(/\D/g, "");
@@ -524,6 +724,13 @@ type CustomerMarginRow = {
   revenueMinor: number;
 };
 
+type CustomerSummary = {
+  lastSaleLabel: string;
+  pendingReceivableMinor: number;
+  saleCount: number;
+  totalSoldMinor: number;
+};
+
 type SaleMarginRow = {
   costMinor: number;
   customerName: string;
@@ -606,6 +813,29 @@ type UtilitySummary = {
   bestPeriodMarginMinor: number;
   worstPeriodLabel: string;
   worstPeriodMarginMinor: number;
+};
+
+type DashboardTrendRow = {
+  label: string;
+  valueMinor: number;
+};
+
+type DashboardRankingRow = {
+  id: string;
+  label: string;
+  meta: string;
+  valueMinor: number;
+};
+
+type DashboardPeriodOption = {
+  label: string;
+  value: string;
+};
+
+type DashboardTrendSeries = {
+  color: "primary" | "secondary";
+  label: string;
+  rows: DashboardTrendRow[];
 };
 
 function parseLocalDate(value: string): Date | null {
@@ -754,6 +984,35 @@ function buildProductMarginRows(sales: SaleRecord[]): ProductMarginRow[] {
   });
 
   return [...productMap.values()].sort((left, right) => right.marginMinor - left.marginMinor);
+}
+
+function buildCustomerSummary(input: {
+  customer: CustomerRecord;
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+}): CustomerSummary {
+  const customerSales = input.sales.filter(
+    (sale) => sale.customerId === input.customer.id
+  );
+  const customerReceivables = input.receivables.filter(
+    (receivable) => receivable.customerId === input.customer.id
+  );
+  const lastSale = [...customerSales].sort(
+    (left, right) => right.occurredAtMs - left.occurredAtMs
+  )[0];
+
+  return {
+    lastSaleLabel: lastSale?.occurredAtLabel ?? "Sin ventas",
+    pendingReceivableMinor: customerReceivables.reduce(
+      (total, receivable) => total + receivable.amountMinor,
+      0
+    ),
+    saleCount: customerSales.length,
+    totalSoldMinor: customerSales.reduce(
+      (total, sale) => total + sale.totalMinor,
+      0
+    )
+  };
 }
 
 function buildCustomerMarginRows(sales: SaleRecord[]): CustomerMarginRow[] {
@@ -1119,6 +1378,191 @@ function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
   };
 }
 
+function isSameLocalDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function isSameLocalMonth(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth()
+  );
+}
+
+function buildDashboardDailySalesRows(
+  sales: SaleRecord[],
+  referenceDate = new Date()
+): DashboardTrendRow[] {
+  const totalsByDay = new Map<number, number>();
+
+  sales.forEach((sale) => {
+    const occurredAt = new Date(sale.occurredAtMs);
+
+    if (!isSameLocalMonth(occurredAt, referenceDate)) {
+      return;
+    }
+
+    totalsByDay.set(
+      occurredAt.getDate(),
+      (totalsByDay.get(occurredAt.getDate()) ?? 0) + sale.totalMinor
+    );
+  });
+
+  return Array.from({ length: 31 }, (_, index) => {
+    const day = index + 1;
+
+    return {
+      label: String(day),
+      valueMinor: totalsByDay.get(day) ?? 0
+    };
+  });
+}
+
+function formatDashboardPeriodValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function formatDashboardPeriodLabel(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+
+  if (!year || !month) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("es-CO", {
+    month: "long",
+    year: "numeric"
+  }).format(new Date(year, month - 1, 1));
+}
+
+function parseDashboardPeriodValue(value: string): Date {
+  const [year, month] = value.split("-").map(Number);
+
+  if (!year || !month) {
+    return new Date();
+  }
+
+  return new Date(year, month - 1, 1);
+}
+
+function shiftMonth(date: Date, offset: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1);
+}
+
+function buildDashboardPeriodOptions(
+  sales: SaleRecord[],
+  referenceDate = new Date()
+): DashboardPeriodOption[] {
+  const periodValues = new Set<string>([
+    formatDashboardPeriodValue(referenceDate),
+    formatDashboardPeriodValue(shiftMonth(referenceDate, -1))
+  ]);
+
+  sales.forEach((sale) => {
+    periodValues.add(formatDashboardPeriodValue(new Date(sale.occurredAtMs)));
+  });
+
+  return [...periodValues]
+    .sort((left, right) => right.localeCompare(left))
+    .map((value) => ({
+      label: formatDashboardPeriodLabel(value),
+      value
+    }));
+}
+
+function buildDashboardMonthlySalesRows(
+  sales: SaleRecord[],
+  referenceDate = new Date()
+): DashboardTrendRow[] {
+  const totalsByMonth = new Map<number, number>();
+  const formatter = new Intl.DateTimeFormat("es-CO", { month: "short" });
+
+  sales.forEach((sale) => {
+    const occurredAt = new Date(sale.occurredAtMs);
+
+    if (occurredAt.getFullYear() !== referenceDate.getFullYear()) {
+      return;
+    }
+
+    totalsByMonth.set(
+      occurredAt.getMonth(),
+      (totalsByMonth.get(occurredAt.getMonth()) ?? 0) + sale.totalMinor
+    );
+  });
+
+  return Array.from({ length: 12 }, (_, month) => ({
+    label: formatter.format(new Date(referenceDate.getFullYear(), month, 1)),
+    valueMinor: totalsByMonth.get(month) ?? 0
+  }));
+}
+
+function buildDashboardProductRows(sales: SaleRecord[]): DashboardRankingRow[] {
+  const productMap = new Map<
+    string,
+    { label: string; quantity: number; valueMinor: number }
+  >();
+
+  sales.forEach((sale) => {
+    sale.lines.forEach((line) => {
+      const currentRow = productMap.get(line.productId) ?? {
+        label: line.productName,
+        quantity: 0,
+        valueMinor: 0
+      };
+
+      currentRow.quantity += line.quantity;
+      currentRow.valueMinor += line.totalMinor;
+      productMap.set(line.productId, currentRow);
+    });
+  });
+
+  return [...productMap.entries()]
+    .map(([id, row]) => ({
+      id,
+      label: row.label,
+      meta: `${row.quantity} unidades`,
+      valueMinor: row.valueMinor
+    }))
+    .sort((left, right) => right.valueMinor - left.valueMinor)
+    .slice(0, 5);
+}
+
+function buildDashboardCustomerRows(sales: SaleRecord[]): DashboardRankingRow[] {
+  const customerMap = new Map<
+    string,
+    { label: string; purchases: number; valueMinor: number }
+  >();
+
+  sales.forEach((sale) => {
+    const currentRow = customerMap.get(sale.customerId) ?? {
+      label: sale.customerName,
+      purchases: 0,
+      valueMinor: 0
+    };
+
+    currentRow.purchases += 1;
+    currentRow.valueMinor += sale.totalMinor;
+    customerMap.set(sale.customerId, currentRow);
+  });
+
+  return [...customerMap.entries()]
+    .map(([id, row]) => ({
+      id,
+      label: row.label,
+      meta: `${row.purchases} ventas`,
+      valueMinor: row.valueMinor
+    }))
+    .sort((left, right) => right.valueMinor - left.valueMinor)
+    .slice(0, 5);
+}
+
 function getSupplierPayableStatus(input: {
   originalAmountMinor: number;
   paidAmountMinor: number;
@@ -1139,6 +1583,7 @@ function isLowStock(product: ProductRecord): boolean {
 export function App() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [receivables, setReceivables] = useState<ReceivableRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -1146,6 +1591,7 @@ export function App() {
   const [supplierPayables, setSupplierPayables] = useState<SupplierPayableRecord[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
   const [productFormVisible, setProductFormVisible] = useState(false);
+  const [supplierFormVisible, setSupplierFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
     () =>
@@ -1155,8 +1601,19 @@ export function App() {
   );
 
   const lowStockProducts = products.filter(isLowStock);
+  const today = new Date();
   const salesTodayTotal = sales.reduce(
-    (total, sale) => total + sale.totalMinor,
+    (total, sale) =>
+      isSameLocalDay(new Date(sale.occurredAtMs), today)
+        ? total + sale.totalMinor
+        : total,
+    0
+  );
+  const salesMonthTotal = sales.reduce(
+    (total, sale) =>
+      isSameLocalMonth(new Date(sale.occurredAtMs), today)
+        ? total + sale.totalMinor
+        : total,
     0
   );
   const pendingReceivablesTotal = receivables.reduce(
@@ -1169,6 +1626,7 @@ export function App() {
       value: String(products.filter((product) => product.active).length)
     },
     { label: "Ventas de hoy", value: formatCurrency(salesTodayTotal) },
+    { label: "Ventas del mes", value: formatCurrency(salesMonthTotal) },
     {
       label: "Cartera pendiente",
       value: formatCurrency(pendingReceivablesTotal)
@@ -1194,6 +1652,11 @@ export function App() {
       return;
     }
 
+    if (activeSection.id === "suppliers") {
+      setSupplierFormVisible((visible) => !visible);
+      return;
+    }
+
     openSection(activeSection.id);
   }
 
@@ -1204,6 +1667,7 @@ export function App() {
   function createCustomer(input: CustomerFormState): CustomerRecord {
     const customer = {
       address: input.address.trim(),
+      active: true,
       city: input.city.trim(),
       document: input.document.trim(),
       email: input.email.trim(),
@@ -1216,15 +1680,81 @@ export function App() {
     return customer;
   }
 
+  function updateCustomer(customerId: string, input: CustomerFormState) {
+    setCustomers((currentCustomers) =>
+      currentCustomers.map((customer) =>
+        customer.id === customerId
+          ? {
+              ...customer,
+              address: input.address.trim(),
+              city: input.city.trim(),
+              document: input.document.trim(),
+              email: input.email.trim(),
+              name: input.name.trim()
+            }
+          : customer
+      )
+    );
+  }
+
+  function setCustomerActive(customerId: string, active: boolean) {
+    setCustomers((currentCustomers) =>
+      currentCustomers.map((customer) =>
+        customer.id === customerId ? { ...customer, active } : customer
+      )
+    );
+  }
+
+  function validateCustomer(
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ): CustomerFormErrors {
+    return validateCustomerForm(input, { customers, currentCustomerId });
+  }
+
   function createSupplier(input: SupplierFormState): SupplierRecord {
     const supplier = {
+      active: true,
+      address: input.address.trim(),
+      city: input.city.trim(),
+      department: input.department.trim() || "Antioquia",
+      document: input.document.trim(),
+      email: input.email.trim(),
       id: `supplier-${Date.now()}`,
-      name: input.name.trim()
+      name: input.name.trim(),
+      phone: input.phone.trim()
     };
 
     setSuppliers((currentSuppliers) => [...currentSuppliers, supplier]);
 
     return supplier;
+  }
+
+  function updateSupplier(supplierId: string, input: SupplierFormState) {
+    setSuppliers((currentSuppliers) =>
+      currentSuppliers.map((supplier) =>
+        supplier.id === supplierId
+          ? {
+              ...supplier,
+              address: input.address.trim(),
+              city: input.city.trim(),
+              department: input.department.trim() || "Antioquia",
+              document: input.document.trim(),
+              email: input.email.trim(),
+              name: input.name.trim(),
+              phone: input.phone.trim()
+            }
+          : supplier
+      )
+    );
+  }
+
+  function setSupplierActive(supplierId: string, active: boolean) {
+    setSuppliers((currentSuppliers) =>
+      currentSuppliers.map((supplier) =>
+        supplier.id === supplierId ? { ...supplier, active } : supplier
+      )
+    );
   }
 
   function registerPurchaseInSession(input: {
@@ -1490,16 +2020,22 @@ export function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
+        <button
+          aria-label="Moneta Inventario y cartera"
+          aria-current={activeSectionId === "dashboard" ? "page" : undefined}
+          className="brand"
+          onClick={() => openSection("dashboard")}
+          type="button"
+        >
           <span className="brand-mark">M</span>
           <div>
             <strong>Moneta</strong>
             <small>Inventario y cartera</small>
           </div>
-        </div>
+        </button>
 
         <nav className="navigation" aria-label="Principal">
-          {navigationItems.map((item) => (
+          {sidebarNavigationItems.map((item) => (
             <button
               aria-current={item.id === activeSectionId ? "page" : undefined}
               className={item.id === activeSectionId ? "active" : ""}
@@ -1535,6 +2071,7 @@ export function App() {
             metrics={metrics}
             onOpenProducts={() => openSection("products")}
             onOpenReports={() => openSection("reports")}
+            sales={sales}
           />
         ) : (
           <SectionContent
@@ -1542,17 +2079,26 @@ export function App() {
             onCreateCustomer={createCustomer}
             onCreateProduct={createProduct}
             onCreateSupplier={createSupplier}
+            onUpdateSupplier={updateSupplier}
+            onSetSupplierActive={setSupplierActive}
             onRegisterPurchase={registerPurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}
+            onValidateCustomer={validateCustomer}
+            onUpdateCustomer={updateCustomer}
+            onSetCustomerActive={setCustomerActive}
             onCloseProductForm={() => setProductFormVisible(false)}
+            onCloseSupplierForm={() => setSupplierFormVisible(false)}
             productFormVisible={productFormVisible}
+            supplierFormVisible={supplierFormVisible}
             products={products}
             purchases={purchases}
             receivables={receivables}
             sales={sales}
+            salesDraft={salesDraft}
             section={activeSection}
+            onSalesDraftChange={setSalesDraft}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}
             suppliers={suppliers}
@@ -1568,14 +2114,45 @@ type DashboardContentProps = {
   metrics: Array<{ label: string; value: string }>;
   onOpenProducts: () => void;
   onOpenReports: () => void;
+  sales: SaleRecord[];
 };
 
 function DashboardContent({
   lowStockProducts,
   metrics,
   onOpenProducts,
-  onOpenReports
+  onOpenReports,
+  sales
 }: DashboardContentProps) {
+  const dailyPeriodOptions = buildDashboardPeriodOptions(sales);
+  const [periodOne, setPeriodOne] = useState(dailyPeriodOptions[0]!.value);
+  const [periodTwo, setPeriodTwo] = useState(
+    dailyPeriodOptions[1]?.value ?? dailyPeriodOptions[0]!.value
+  );
+  const periodOneLabel = formatDashboardPeriodLabel(periodOne);
+  const periodTwoLabel = formatDashboardPeriodLabel(periodTwo);
+  const dailySalesSeries: DashboardTrendSeries[] = [
+    {
+      color: "primary",
+      label: "Periodo 1",
+      rows: buildDashboardDailySalesRows(
+        sales,
+        parseDashboardPeriodValue(periodOne)
+      )
+    },
+    {
+      color: "secondary",
+      label: "Periodo 2",
+      rows: buildDashboardDailySalesRows(
+        sales,
+        parseDashboardPeriodValue(periodTwo)
+      )
+    }
+  ];
+  const monthlySalesRows = buildDashboardMonthlySalesRows(sales);
+  const productRows = buildDashboardProductRows(sales);
+  const customerRows = buildDashboardCustomerRows(sales);
+
   return (
     <>
       <section className="metric-grid" aria-label="Indicadores">
@@ -1587,16 +2164,74 @@ function DashboardContent({
         ))}
       </section>
 
-      <section className="content-grid">
-        <div className="panel">
+      <section className="dashboard-chart-grid" aria-label="Graficos del negocio">
+        <div className="panel dashboard-chart-panel dashboard-chart-panel-wide">
           <div className="panel-header">
-            <h2>Actividad reciente</h2>
+            <h2>Ventas diarias</h2>
             <button onClick={onOpenReports}>Ver todo</button>
           </div>
-          <div className="empty-state">
-            <strong>Sin movimientos registrados</strong>
-            <span>Las compras, ventas y pagos apareceran aqui.</span>
+          <div className="dashboard-period-controls">
+            <label className="field" htmlFor="dashboard-period-one">
+              <span>Periodo 1</span>
+              <select
+                aria-label="Periodo 1 ventas diarias"
+                id="dashboard-period-one"
+                onChange={(event) => setPeriodOne(event.target.value)}
+                value={periodOne}
+              >
+                {dailyPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field" htmlFor="dashboard-period-two">
+              <span>Periodo 2</span>
+              <select
+                aria-label="Periodo 2 ventas diarias"
+                id="dashboard-period-two"
+                onChange={(event) => setPeriodTwo(event.target.value)}
+                value={periodTwo}
+              >
+                {dailyPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          <DashboardAreaChart
+            periodOneLabel={periodOneLabel}
+            periodTwoLabel={periodTwoLabel}
+            series={dailySalesSeries}
+          />
+        </div>
+
+        <div className="panel dashboard-chart-panel">
+          <div className="panel-header">
+            <h2>Ventas por mes</h2>
+          </div>
+          <DashboardBarChart rows={monthlySalesRows} />
+        </div>
+
+        <div className="panel dashboard-chart-panel">
+          <div className="panel-header">
+            <h2>Productos mas vendidos</h2>
+          </div>
+          <DashboardProductPieChart rows={productRows} />
+        </div>
+
+        <div className="panel dashboard-chart-panel">
+          <div className="panel-header">
+            <h2>Top clientes</h2>
+          </div>
+          <DashboardRankingList
+            emptyBody="Los clientes con ventas se mostraran aqui."
+            emptyTitle="Sin ventas por cliente"
+            rows={customerRows}
+          />
         </div>
 
         <div className="panel">
@@ -1627,11 +2262,392 @@ function DashboardContent({
   );
 }
 
+function DashboardAreaChart({
+  periodOneLabel,
+  periodTwoLabel,
+  series
+}: {
+  periodOneLabel: string;
+  periodTwoLabel: string;
+  series: DashboardTrendSeries[];
+}) {
+  const maxValue = Math.max(
+    ...series.flatMap((trendSeries) =>
+      trendSeries.rows.map((row) => row.valueMinor)
+    ),
+    0
+  );
+  const width = 760;
+  const height = 260;
+  const padding = {
+    bottom: 42,
+    left: 84,
+    right: 24,
+    top: 24
+  };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const yAxisTicks = [maxValue, Math.round(maxValue / 2), 0];
+  const xAxisTicks = [
+    { label: "Dia 1", index: 0 },
+    { label: "Dia 16", index: 15 },
+    { label: "Dia 31", index: 30 }
+  ];
+  const chartSeries = series.map((trendSeries) => {
+    const points = trendSeries.rows.map((row, index) => {
+      const x =
+        trendSeries.rows.length === 1
+          ? padding.left + chartWidth / 2
+          : padding.left + (index / (trendSeries.rows.length - 1)) * chartWidth;
+      const y =
+        maxValue === 0
+          ? padding.top + chartHeight
+          : padding.top + chartHeight - (row.valueMinor / maxValue) * chartHeight;
+
+      return { ...row, x, y };
+    });
+    const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+    const areaPoints =
+      points.length > 0
+        ? `${padding.left},${height - padding.bottom} ${linePoints} ${width - padding.right},${height - padding.bottom}`
+        : "";
+
+    return {
+      ...trendSeries,
+      areaPoints,
+      linePoints,
+      points
+    };
+  });
+
+  if (maxValue === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>Sin ventas registradas</strong>
+        <span>Las ventas diarias apareceran cuando registres movimientos.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-line-chart" aria-label="Grafico ventas diarias">
+      <div className="dashboard-series-legend">
+        <span className="dashboard-series-label dashboard-series-label-primary">
+          Periodo 1
+          <small>{periodOneLabel}</small>
+        </span>
+        <span className="dashboard-series-label dashboard-series-label-secondary">
+          Periodo 2
+          <small>{periodTwoLabel}</small>
+        </span>
+      </div>
+      <svg role="img" viewBox={`0 0 ${width} ${height}`}>
+        <title>Ventas diarias</title>
+        <line
+          className="dashboard-chart-axis"
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={height - padding.bottom}
+          y2={height - padding.bottom}
+        />
+        <line
+          className="dashboard-chart-axis"
+          x1={padding.left}
+          x2={padding.left}
+          y1={padding.top}
+          y2={height - padding.bottom}
+        />
+        {yAxisTicks.map((tick) => {
+          const y =
+            maxValue === 0
+              ? height - padding.bottom
+              : padding.top + chartHeight - (tick / maxValue) * chartHeight;
+
+          return (
+            <g key={`y-${tick}`}>
+              <line
+                className="dashboard-chart-gridline"
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+              />
+              <text
+                className="dashboard-axis-tick"
+                textAnchor="end"
+                x={padding.left - 10}
+                y={y + 4}
+              >
+                {formatCurrency(tick)}
+              </text>
+            </g>
+          );
+        })}
+        {xAxisTicks.map((tick) => {
+          const x =
+            padding.left + (tick.index / 30) * chartWidth;
+
+          return (
+            <text
+              className="dashboard-axis-tick"
+              key={`x-${tick.label}`}
+              textAnchor="middle"
+              x={x}
+              y={height - 14}
+            >
+              {tick.label}
+            </text>
+          );
+        })}
+        <text
+          className="dashboard-axis-label"
+          textAnchor="middle"
+          transform={`translate(16 ${padding.top + chartHeight / 2}) rotate(-90)`}
+        >
+          Precios
+        </text>
+        <text
+          className="dashboard-axis-label"
+          textAnchor="middle"
+          x={padding.left + chartWidth / 2}
+          y={height - 2}
+        >
+          Dias
+        </text>
+        {chartSeries.map((trendSeries) => (
+          <g key={`area-${trendSeries.label}`}>
+            <polygon
+              className={`dashboard-area-fill dashboard-area-fill-${trendSeries.color}`}
+              points={trendSeries.areaPoints}
+            />
+          </g>
+        ))}
+        {chartSeries.map((trendSeries) => (
+          <g key={`line-${trendSeries.label}`}>
+            <polyline
+              className={`dashboard-line-stroke dashboard-line-stroke-${trendSeries.color}`}
+              points={trendSeries.linePoints}
+            />
+            {trendSeries.points
+              .filter((point) => point.valueMinor > 0)
+              .map((point) => (
+                <circle
+                  className={`dashboard-line-point dashboard-line-point-${trendSeries.color}`}
+                  cx={point.x}
+                  cy={point.y}
+                  key={`${trendSeries.label}-${point.label}`}
+                  r="4"
+                />
+              ))}
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function DashboardBarChart({ rows }: { rows: DashboardTrendRow[] }) {
+  const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
+
+  if (maxValue === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>Sin ventas registradas</strong>
+        <span>El comparativo mensual aparecera con las primeras ventas.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-bar-chart" aria-label="Grafico ventas por mes">
+      {rows.map((row) => (
+        <div className="dashboard-month-bar" key={row.label}>
+          <div className="dashboard-month-track">
+            <span
+              style={{
+                height: `${Math.max((row.valueMinor / maxValue) * 100, 3)}%`
+              }}
+            />
+          </div>
+          <small>{row.label}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardRankingList({
+  emptyBody,
+  emptyTitle,
+  rows
+}: {
+  emptyBody: string;
+  emptyTitle: string;
+  rows: DashboardRankingRow[];
+}) {
+  const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
+
+  if (rows.length === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>{emptyTitle}</strong>
+        <span>{emptyBody}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-ranking-list">
+      {rows.map((row) => (
+        <article className="dashboard-ranking-row" key={row.id}>
+          <div>
+            <strong>{row.label}</strong>
+            <span>{row.meta}</span>
+          </div>
+          <div className="dashboard-ranking-track">
+            <span style={{ width: `${(row.valueMinor / maxValue) * 100}%` }} />
+          </div>
+          <strong>{formatCurrency(row.valueMinor)}</strong>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+const dashboardPieColors = ["#0f766e", "#60a5fa", "#6366f1", "#a855f7", "#f59e0b"];
+
+function getPiePoint(center: number, radius: number, angleDegrees: number) {
+  const angleRadians = ((angleDegrees - 90) * Math.PI) / 180;
+
+  return {
+    x: center + radius * Math.cos(angleRadians),
+    y: center + radius * Math.sin(angleRadians)
+  };
+}
+
+function getPieSlicePath(
+  center: number,
+  radius: number,
+  startAngle: number,
+  endAngle: number
+) {
+  const start = getPiePoint(center, radius, startAngle);
+  const end = getPiePoint(center, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+
+  return [
+    `M ${center} ${center}`,
+    `L ${start.x} ${start.y}`,
+    `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`,
+    "Z"
+  ].join(" ");
+}
+
+function DashboardProductPieChart({ rows }: { rows: DashboardRankingRow[] }) {
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+
+  if (rows.length === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>Sin productos vendidos</strong>
+        <span>Los productos vendidos se mostraran aqui.</span>
+      </div>
+    );
+  }
+
+  const totalMinor = rows.reduce((total, row) => total + row.valueMinor, 0);
+  const activeProductId = selectedProductId ?? rows[0]!.id;
+  const selectedRow =
+    rows.find((row) => row.id === activeProductId) ?? rows[0]!;
+  let currentAngle = 0;
+
+  return (
+    <div
+      aria-label="Grafico productos mas vendidos"
+      className="dashboard-product-pie"
+    >
+      <div className="dashboard-pie-visual">
+        <svg
+          aria-label="Torta productos mas vendidos"
+          role="img"
+          viewBox="0 0 220 220"
+        >
+          {rows.length === 1 ? (
+            <circle
+              className="dashboard-pie-segment active"
+              cx="110"
+              cy="110"
+              fill={dashboardPieColors[0]}
+              r="88"
+            />
+          ) : (
+            rows.map((row, index) => {
+              const sliceAngle = (row.valueMinor / totalMinor) * 360;
+              const startAngle = currentAngle;
+              const endAngle = currentAngle + sliceAngle;
+              currentAngle = endAngle;
+
+              return (
+                <path
+                  className={`dashboard-pie-segment${
+                    row.id === activeProductId ? " active" : ""
+                  }`}
+                  d={getPieSlicePath(110, 88, startAngle, endAngle)}
+                  fill={dashboardPieColors[index % dashboardPieColors.length]}
+                  key={row.id}
+                  onClick={() => setSelectedProductId(row.id)}
+                />
+              );
+            })
+          )}
+        </svg>
+      </div>
+
+      <div className="dashboard-pie-detail">
+        <span>Producto seleccionado</span>
+        <strong>Seleccionado: {selectedRow.label}</strong>
+        <small>{selectedRow.meta}</small>
+        <b>{formatCurrency(selectedRow.valueMinor)}</b>
+      </div>
+
+      <div className="dashboard-pie-legend">
+        {rows.map((row, index) => {
+          const percentage =
+            totalMinor > 0 ? Math.round((row.valueMinor / totalMinor) * 100) : 0;
+
+          return (
+            <button
+              aria-label={`Seleccionar ${row.label}`}
+              className={row.id === activeProductId ? "active" : ""}
+              key={row.id}
+              onClick={() => setSelectedProductId(row.id)}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className="dashboard-pie-swatch"
+                style={{
+                  backgroundColor:
+                    dashboardPieColors[index % dashboardPieColors.length]
+                }}
+              />
+              <span>{row.label}</span>
+              <strong>{percentage}%</strong>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type SectionContentProps = {
   customers: CustomerRecord[];
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onCreateProduct: (product: ProductRecord) => void;
   onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
+  onSetSupplierActive: (supplierId: string, active: boolean) => void;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     invoiceNumber: string;
@@ -1675,12 +2691,22 @@ type SectionContentProps = {
     payableId: string;
     amountMinor: number;
   }) => void;
+  onValidateCustomer: (
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ) => CustomerFormErrors;
+  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
+  onSetCustomerActive: (customerId: string, active: boolean) => void;
   onCloseProductForm: () => void;
+  onCloseSupplierForm: () => void;
+  onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
   productFormVisible: boolean;
+  supplierFormVisible: boolean;
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
+  salesDraft: SalesDraftState;
   section: SectionConfig;
   supplierPayables: SupplierPayableRecord[];
   supplierPayments: SupplierPaymentRecord[];
@@ -1692,16 +2718,25 @@ function SectionContent({
   onCreateCustomer,
   onCreateProduct,
   onCreateSupplier,
+  onUpdateSupplier,
+  onSetSupplierActive,
   onRegisterPurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
   onRegisterSupplierPayment,
+  onValidateCustomer,
+  onUpdateCustomer,
+  onSetCustomerActive,
   onCloseProductForm,
+  onCloseSupplierForm,
+  onSalesDraftChange,
   productFormVisible,
+  supplierFormVisible,
   products,
   purchases,
   receivables,
   sales,
+  salesDraft,
   section,
   supplierPayables,
   supplierPayments,
@@ -1738,7 +2773,24 @@ function SectionContent({
         onCreateCustomer={onCreateCustomer}
         onRegisterPaidSale={onRegisterPaidSale}
         onRegisterPendingSale={onRegisterPendingSale}
+        onValidateCustomer={onValidateCustomer}
         products={products}
+        sales={sales}
+        salesDraft={salesDraft}
+        onSalesDraftChange={onSalesDraftChange}
+      />
+    );
+  }
+
+  if (section.id === "customers") {
+    return (
+      <CustomersSection
+        customers={customers}
+        onCreateCustomer={onCreateCustomer}
+        onSetCustomerActive={onSetCustomerActive}
+        onUpdateCustomer={onUpdateCustomer}
+        onValidateCustomer={onValidateCustomer}
+        receivables={receivables}
         sales={sales}
       />
     );
@@ -1757,8 +2809,14 @@ function SectionContent({
   if (section.id === "suppliers") {
     return (
       <SuppliersSection
+        formVisible={supplierFormVisible}
+        onCloseForm={onCloseSupplierForm}
+        onCreateSupplier={onCreateSupplier}
         onRegisterSupplierPayment={onRegisterSupplierPayment}
+        onSetSupplierActive={onSetSupplierActive}
+        onUpdateSupplier={onUpdateSupplier}
         supplierPayables={supplierPayables}
+        suppliers={suppliers}
       />
     );
   }
@@ -1781,6 +2839,399 @@ function SectionContent({
         <strong>{section.emptyTitle}</strong>
         <span>{section.emptyBody}</span>
       </div>
+    </section>
+  );
+}
+
+type CustomersSectionProps = {
+  customers: CustomerRecord[];
+  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onSetCustomerActive: (customerId: string, active: boolean) => void;
+  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
+  onValidateCustomer: (
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ) => CustomerFormErrors;
+  receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+};
+
+function CustomersSection({
+  customers,
+  onCreateCustomer,
+  onSetCustomerActive,
+  onUpdateCustomer,
+  onValidateCustomer,
+  receivables,
+  sales
+}: CustomersSectionProps) {
+  const [formVisible, setFormVisible] = useState(false);
+  const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
+  const [errors, setErrors] = useState<CustomerFormErrors>({});
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<CustomerFormState>(emptyCustomerForm);
+  const [editErrors, setEditErrors] = useState<CustomerFormErrors>({});
+  const [search, setSearch] = useState("");
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredCustomers = customers.filter((customer) => {
+    if (normalizedSearch === "") {
+      return true;
+    }
+
+    return [
+      customer.name,
+      customer.document,
+      customer.address,
+      customer.city,
+      customer.email
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
+  });
+  const selectedCustomer =
+    filteredCustomers.find((customer) => customer.id === selectedCustomerId) ??
+    customers.find((customer) => customer.id === selectedCustomerId) ??
+    null;
+  const editingCustomer = editingCustomerId === selectedCustomer?.id ? selectedCustomer : null;
+  const selectedCustomerSales = selectedCustomer
+    ? sales.filter((sale) => sale.customerId === selectedCustomer.id)
+    : [];
+  const selectedCustomerReceivables = selectedCustomer
+    ? receivables.filter((receivable) => receivable.customerId === selectedCustomer.id)
+    : [];
+  const selectedCustomerSummary = selectedCustomer
+    ? buildCustomerSummary({ customer: selectedCustomer, receivables, sales })
+    : null;
+
+  function getCustomerFormState(customer: CustomerRecord): CustomerFormState {
+    return {
+      address: customer.address,
+      city: customer.city,
+      document: customer.document,
+      email: customer.email,
+      name: customer.name
+    };
+  }
+
+  function updateField(field: keyof CustomerFormState, value: string) {
+    setForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function updateEditField(field: keyof CustomerFormState, value: string) {
+    setEditForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setEditErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function selectCustomer(customer: CustomerRecord) {
+    setSelectedCustomerId(customer.id);
+    setEditingCustomerId(null);
+    setEditForm(getCustomerFormState(customer));
+    setEditErrors({});
+    setFormVisible(false);
+  }
+
+  function startEditingCustomer(customer: CustomerRecord) {
+    setEditingCustomerId(customer.id);
+    setEditForm(getCustomerFormState(customer));
+    setEditErrors({});
+  }
+
+  function submitCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors = onValidateCustomer(form);
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    onCreateCustomer(form);
+    setForm(emptyCustomerForm);
+    setErrors({});
+    setFormVisible(false);
+  }
+
+  function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingCustomer) {
+      return;
+    }
+
+    const nextErrors = onValidateCustomer(editForm, editingCustomer.id);
+
+    setEditErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    onUpdateCustomer(editingCustomer.id, editForm);
+    setEditErrors({});
+    setEditingCustomerId(null);
+  }
+
+  return (
+    <section className="customers-layout">
+      <div className="customers-toolbar">
+        <TextField
+          label="Buscar clientes"
+          onChange={setSearch}
+          value={search}
+        />
+        <button
+          className="primary-action"
+          onClick={() => {
+            setFormVisible((visible) => !visible);
+            setEditingCustomerId(null);
+            setEditErrors({});
+          }}
+          type="button"
+        >
+          Nuevo cliente
+        </button>
+      </div>
+
+      {formVisible ? (
+        <form className="customer-form" onSubmit={submitCustomer}>
+          <div className="form-grid">
+            <TextField
+              error={errors.name}
+              label="Nombre o razon social"
+              onChange={(value) => updateField("name", value)}
+              value={form.name}
+            />
+            <TextField
+              error={errors.document}
+              label="NIT o C.C."
+              onChange={(value) => updateField("document", value)}
+              value={form.document}
+            />
+            <TextField
+              error={errors.address}
+              label="Direccion"
+              onChange={(value) => updateField("address", value)}
+              value={form.address}
+            />
+            <TextField
+              error={errors.city}
+              label="Ciudad"
+              onChange={(value) => updateField("city", value)}
+              value={form.city}
+            />
+            <TextField
+              error={errors.email}
+              label="Email"
+              onChange={(value) => updateField("email", value)}
+              value={form.email}
+            />
+          </div>
+          <div className="form-actions">
+            <button type="submit">Guardar cliente</button>
+          </div>
+        </form>
+      ) : null}
+
+      {customers.length === 0 ? (
+        <div className="empty-state section-empty">
+          <strong>Sin clientes registrados</strong>
+          <span>Crea clientes para ventas y cartera.</span>
+        </div>
+      ) : filteredCustomers.length === 0 ? (
+        <div className="empty-state section-empty">
+          <strong>Sin resultados</strong>
+          <span>Ajusta la busqueda para ver mas clientes.</span>
+        </div>
+      ) : (
+        <table className="data-table" aria-label="Clientes registrados">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Documento</th>
+              <th>Estado</th>
+              <th>Total vendido</th>
+              <th>Cartera</th>
+              <th>Ultima venta</th>
+              <th>Accion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCustomers.map((customer) => {
+              const summary = buildCustomerSummary({ customer, receivables, sales });
+
+              return (
+                <tr key={customer.id}>
+                  <td>{customer.name}</td>
+                  <td>{customer.document}</td>
+                  <td>{customer.active ? "Activo" : "Inactivo"}</td>
+                  <td>{formatCurrency(summary.totalSoldMinor)}</td>
+                  <td>{formatCurrency(summary.pendingReceivableMinor)}</td>
+                  <td>{summary.lastSaleLabel}</td>
+                  <td>
+                    <button
+                      className="table-action"
+                      onClick={() => selectCustomer(customer)}
+                      type="button"
+                    >
+                      Ver cliente {customer.name}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {selectedCustomer ? (
+        <section className="customer-file" aria-label="Ficha de cliente">
+          <div className="section-heading">
+            <div>
+              <h2>{selectedCustomer.name}</h2>
+              <p>{selectedCustomer.document}</p>
+              <span
+                className={
+                  selectedCustomer.active ? "status-pill active" : "status-pill inactive"
+                }
+              >
+                {selectedCustomer.active ? "Activo" : "Inactivo"}
+              </span>
+            </div>
+            <div className="form-actions">
+              <button
+                className="table-action"
+                onClick={() => startEditingCustomer(selectedCustomer)}
+                type="button"
+              >
+                Editar cliente
+              </button>
+              <button
+                className="table-action"
+                onClick={() =>
+                  onSetCustomerActive(selectedCustomer.id, !selectedCustomer.active)
+                }
+                type="button"
+              >
+                {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}
+              </button>
+            </div>
+          </div>
+
+          {editingCustomer ? (
+            <form className="customer-form" onSubmit={submitCustomerEdit}>
+              <div className="form-grid">
+                <TextField
+                  error={editErrors.name}
+                  label="Nombre o razon social"
+                  onChange={(value) => updateEditField("name", value)}
+                  value={editForm.name}
+                />
+                <TextField
+                  error={editErrors.document}
+                  label="NIT o C.C."
+                  onChange={(value) => updateEditField("document", value)}
+                  value={editForm.document}
+                />
+                <TextField
+                  error={editErrors.address}
+                  label="Direccion"
+                  onChange={(value) => updateEditField("address", value)}
+                  value={editForm.address}
+                />
+                <TextField
+                  error={editErrors.city}
+                  label="Ciudad"
+                  onChange={(value) => updateEditField("city", value)}
+                  value={editForm.city}
+                />
+                <TextField
+                  error={editErrors.email}
+                  label="Email"
+                  onChange={(value) => updateEditField("email", value)}
+                  value={editForm.email}
+                />
+              </div>
+              <div className="form-actions">
+                <button type="submit">Guardar cambios</button>
+              </div>
+            </form>
+          ) : null}
+
+          {selectedCustomerSummary ? (
+            <div className="customer-summary" aria-label="Resumen del cliente">
+              <div className="summary-card">
+                <span>Total vendido</span>
+                <strong>{formatCurrency(selectedCustomerSummary.totalSoldMinor)}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Ventas</span>
+                <strong>{selectedCustomerSummary.saleCount}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Cartera pendiente</span>
+                <strong>
+                  {formatCurrency(selectedCustomerSummary.pendingReceivableMinor)}
+                </strong>
+              </div>
+              <div className="summary-card">
+                <span>Ultima venta</span>
+                <strong>{selectedCustomerSummary.lastSaleLabel}</strong>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedCustomerSales.length > 0 ? (
+            <table className="data-table" aria-label="Historial de ventas del cliente">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Producto</th>
+                  <th>Estado</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedCustomerSales.map((sale) => (
+                  <tr key={sale.id}>
+                    <td>{sale.occurredAtLabel}</td>
+                    <td>{sale.productName}</td>
+                    <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                    <td>{formatCurrency(sale.totalMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state section-empty">
+              <strong>Sin ventas del cliente</strong>
+              <span>Las ventas apareceran cuando se registren movimientos.</span>
+            </div>
+          )}
+
+          {selectedCustomerReceivables.length > 0 ? (
+            <table className="data-table" aria-label="Cartera pendiente del cliente">
+              <thead>
+                <tr>
+                  <th>Venta</th>
+                  <th>Vencimiento</th>
+                  <th>Saldo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedCustomerReceivables.map((receivable) => (
+                  <tr key={receivable.id}>
+                    <td>{receivable.saleId}</td>
+                    <td>{receivable.dueAt || "Sin vencimiento"}</td>
+                    <td>{formatCurrency(receivable.amountMinor)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </section>
+      ) : null}
     </section>
   );
 }
@@ -1971,6 +3422,7 @@ function PurchasesSection({
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
+  const activeSuppliers = suppliers.filter((supplier) => supplier.active);
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
@@ -2238,7 +3690,7 @@ function PurchasesSection({
               value={form.supplierId}
             >
               <option value="">Selecciona un proveedor</option>
-              {suppliers.map((supplier) => (
+              {activeSuppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
                 </option>
@@ -2328,7 +3780,7 @@ function PurchasesSection({
               error={supplierErrors.name}
               label="Nombre proveedor"
               onChange={(value) => {
-                setSupplierForm({ name: value });
+                setSupplierForm((currentForm) => ({ ...currentForm, name: value }));
                 setSupplierErrors({});
               }}
               value={supplierForm.name}
@@ -2478,11 +3930,17 @@ function PurchasesSection({
 }
 
 type SuppliersSectionProps = {
+  formVisible: boolean;
+  onCloseForm: () => void;
+  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
   }) => void;
+  onSetSupplierActive: (supplierId: string, active: boolean) => void;
+  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
   supplierPayables: SupplierPayableRecord[];
+  suppliers: SupplierRecord[];
 };
 
 function formatPayableStatus(status: SupplierPayableStatus): string {
@@ -2494,27 +3952,218 @@ function formatPayableStatus(status: SupplierPayableStatus): string {
 }
 
 function SuppliersSection({
+  formVisible,
+  onCloseForm,
+  onCreateSupplier,
   onRegisterSupplierPayment,
-  supplierPayables
+  onSetSupplierActive,
+  onUpdateSupplier,
+  supplierPayables,
+  suppliers
 }: SuppliersSectionProps) {
-  if (supplierPayables.length === 0) {
-    return (
-      <section className="section-panel">
+  const [form, setForm] = useState<SupplierFormState>(emptySupplierForm);
+  const [errors, setErrors] = useState<SupplierFormErrors>({});
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const editingSupplier =
+    suppliers.find((supplier) => supplier.id === editingSupplierId) ?? null;
+
+  function getSupplierFormState(supplier: SupplierRecord): SupplierFormState {
+    return {
+      address: supplier.address,
+      city: supplier.city,
+      department: supplier.department,
+      document: supplier.document,
+      email: supplier.email,
+      name: supplier.name,
+      phone: supplier.phone
+    };
+  }
+
+  function updateField(field: keyof SupplierFormState, value: string) {
+    setForm((currentForm) => {
+      if (field === "department") {
+        return {
+          ...currentForm,
+          department: value,
+          city: value.trim() !== "Antioquia" ? "" : currentForm.city
+        };
+      }
+
+      return { ...currentForm, [field]: value };
+    });
+    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function startEditingSupplier(supplier: SupplierRecord) {
+    setEditingSupplierId(supplier.id);
+    setForm(getSupplierFormState(supplier));
+    setErrors({});
+  }
+
+  function submitSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: SupplierFormErrors = {};
+
+    if (form.name.trim() === "") {
+      nextErrors.name = "El nombre del proveedor es obligatorio.";
+    }
+
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    if (editingSupplier) {
+      onUpdateSupplier(editingSupplier.id, form);
+      setEditingSupplierId(null);
+    } else {
+      onCreateSupplier(form);
+      onCloseForm();
+    }
+
+    setForm(emptySupplierForm);
+    setErrors({});
+  }
+
+  return (
+    <section className="suppliers-layout">
+      {formVisible || editingSupplier ? (
+        <form className="customer-form" onSubmit={submitSupplier}>
+          <div className="form-grid">
+            <TextField
+              error={errors.name}
+              label="Nombre proveedor"
+              onChange={(value) => updateField("name", value)}
+              value={form.name}
+            />
+            <TextField
+              error={errors.document}
+              label="NIT o C.C. proveedor"
+              onChange={(value) => updateField("document", value)}
+              value={form.document}
+            />
+            <TextField
+              error={errors.phone}
+              label="Telefono proveedor"
+              onChange={(value) => updateField("phone", value)}
+              value={form.phone}
+            />
+            <TextField
+              error={errors.email}
+              label="Email proveedor"
+              onChange={(value) => updateField("email", value)}
+              value={form.email}
+            />
+            <TextField
+              error={errors.address}
+              label="Direccion proveedor"
+              onChange={(value) => updateField("address", value)}
+              value={form.address}
+            />
+            <TextField
+              error={errors.department}
+              label="Departamento"
+              onChange={(value) => updateField("department", value)}
+              value={form.department}
+            />
+            {form.department.trim() === "Antioquia" ? (
+              <label className="field" htmlFor="municipio-proveedor">
+                <span>Municipio</span>
+                <select
+                  id="municipio-proveedor"
+                  onChange={(event) => updateField("city", event.target.value)}
+                  value={form.city}
+                >
+                  <option value="">Selecciona un municipio</option>
+                  {antioquiaMunicipalities.map((municipality) => (
+                    <option key={municipality} value={municipality}>
+                      {municipality}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <TextField
+                error={errors.city}
+                label="Municipio"
+                onChange={(value) => updateField("city", value)}
+                value={form.city}
+              />
+            )}
+          </div>
+          <div className="form-actions">
+            <button type="submit">
+              {editingSupplier ? "Guardar cambios proveedor" : "Guardar proveedor"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {suppliers.length > 0 ? (
+        <table className="data-table" aria-label="Proveedores registrados">
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th>Documento</th>
+              <th>Telefono</th>
+              <th>Email</th>
+              <th>Departamento</th>
+              <th>Municipio</th>
+              <th>Estado</th>
+              <th>Accion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {suppliers.map((supplier) => (
+              <tr key={supplier.id}>
+                <td>{supplier.name}</td>
+                <td>{supplier.document || "Sin documento"}</td>
+                <td>{supplier.phone || "Sin telefono"}</td>
+                <td>{supplier.email || "Sin email"}</td>
+                <td>{supplier.department || "Antioquia"}</td>
+                <td>{supplier.city || "Sin municipio"}</td>
+                <td>{supplier.active ? "Activo" : "Inactivo"}</td>
+                <td>
+                  <button
+                    className="table-action"
+                    onClick={() => startEditingSupplier(supplier)}
+                    type="button"
+                  >
+                    Editar proveedor {supplier.name}
+                  </button>
+                  <button
+                    className="table-action"
+                    onClick={() => onSetSupplierActive(supplier.id, !supplier.active)}
+                    type="button"
+                  >
+                    {supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="empty-state section-empty">
+          <strong>Sin proveedores registrados</strong>
+          <span>Crea proveedores para asociarlos a tus compras.</span>
+        </div>
+      )}
+
+      {supplierPayables.length > 0 ? (
+        <PayablesTable
+          onRegisterSupplierPayment={onRegisterSupplierPayment}
+          supplierPayables={supplierPayables}
+          tableLabel="Cuentas por pagar"
+        />
+      ) : (
         <div className="empty-state section-empty">
           <strong>Sin cuentas por pagar</strong>
           <span>Las facturas pendientes de proveedor apareceran aqui.</span>
         </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="section-panel">
-      <PayablesTable
-        onRegisterSupplierPayment={onRegisterSupplierPayment}
-        supplierPayables={supplierPayables}
-        tableLabel="Cuentas por pagar"
-      />
+      )}
     </section>
   );
 }
@@ -3788,8 +5437,14 @@ type SalesSectionProps = {
       totalMinor: number;
     }>;
   }) => string | null;
+  onValidateCustomer: (
+    input: CustomerFormState,
+    currentCustomerId?: string | undefined
+  ) => CustomerFormErrors;
+  onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
   products: ProductRecord[];
   sales: SaleRecord[];
+  salesDraft: SalesDraftState;
 };
 
 function SalesSection({
@@ -3797,10 +5452,13 @@ function SalesSection({
   onCreateCustomer,
   onRegisterPaidSale,
   onRegisterPendingSale,
+  onValidateCustomer,
+  onSalesDraftChange,
   products,
-  sales
+  sales,
+  salesDraft
 }: SalesSectionProps) {
-  const [form, setForm] = useState<SalesFormState>(emptySalesForm);
+  const { form, saleLines } = salesDraft;
   const [errors, setErrors] = useState<SalesFormErrors>({});
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
   const [customerForm, setCustomerForm] =
@@ -3808,8 +5466,8 @@ function SalesSection({
   const [customerErrors, setCustomerErrors] = useState<CustomerFormErrors>({});
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
-  const [saleLines, setSaleLines] = useState<SaleDraftLine[]>([]);
 
+  const activeCustomers = customers.filter((customer) => customer.active);
   const selectedCustomer =
     customers.find((customer) => customer.id === form.customerId) ?? null;
   const selectedProduct =
@@ -3838,6 +5496,30 @@ function SalesSection({
         : currentForm
     );
   }, [selectedProduct]);
+
+  function setForm(action: SetStateAction<SalesFormState>) {
+    onSalesDraftChange((currentDraft) => ({
+      ...currentDraft,
+      form:
+        typeof action === "function"
+          ? (action as (currentForm: SalesFormState) => SalesFormState)(
+              currentDraft.form
+            )
+          : action
+    }));
+  }
+
+  function setSaleLines(action: SetStateAction<SaleDraftLine[]>) {
+    onSalesDraftChange((currentDraft) => ({
+      ...currentDraft,
+      saleLines:
+        typeof action === "function"
+          ? (action as (currentLines: SaleDraftLine[]) => SaleDraftLine[])(
+              currentDraft.saleLines
+            )
+          : action
+    }));
+  }
 
   function updateField(field: keyof SalesFormState, value: string) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
@@ -3940,6 +5622,9 @@ function SalesSection({
 
     if (!selectedCustomer) {
       nextErrors.customerId = "Debes seleccionar un cliente.";
+    } else if (!selectedCustomer.active) {
+      nextErrors.customerId =
+        "El cliente seleccionado esta inactivo. Reactivalo para registrar nuevas ventas.";
     }
     if (form.paymentStatus === "pending" && form.dueAt.trim() === "") {
       nextErrors.dueAt =
@@ -3999,14 +5684,7 @@ function SalesSection({
   }
 
   function submitCustomer() {
-    const nextErrors: CustomerFormErrors = {};
-
-    if (customerForm.name.trim() === "") {
-      nextErrors.name = "El nombre del cliente es obligatorio.";
-    }
-    if (customerForm.document.trim() === "") {
-      nextErrors.document = "El documento del cliente es obligatorio.";
-    }
+    const nextErrors = onValidateCustomer(customerForm);
 
     setCustomerErrors(nextErrors);
 
@@ -4072,7 +5750,7 @@ function SalesSection({
               value={form.customerId}
             >
               <option value="">Selecciona un cliente</option>
-              {customers.map((customer) => (
+              {activeCustomers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name} - {customer.document}
                 </option>

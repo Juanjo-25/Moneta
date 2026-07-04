@@ -96,16 +96,31 @@ describe("App navigation", () => {
 
     render(<App />);
 
+    expect(screen.queryByRole("button", { name: "Dashboard" })).toBeNull();
+
     await user.click(screen.getByRole("button", { name: "Nueva venta" }));
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
     await user.click(screen.getByRole("button", { name: "Ver todo" }));
     expect(screen.getByRole("heading", { name: "Reportes" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
     await user.click(screen.getByRole("button", { name: "Revisar" }));
     expect(screen.getByRole("heading", { name: "Productos" })).toBeTruthy();
+  });
+
+  it("returns to the dashboard when the Moneta brand is clicked", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+
+    expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
   });
 
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
@@ -131,7 +146,7 @@ describe("App navigation", () => {
     expect(screen.getByRole("cell", { name: "4" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Bajo stock" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
 
     expect(screen.getByText("Productos activos")).toBeTruthy();
     expect(screen.getByText("Alertas de inventario")).toBeTruthy();
@@ -218,6 +233,52 @@ describe("App navigation", () => {
 
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(within(productsTable).getByRole("cell", { name: "2" })).toBeTruthy();
+  });
+
+  it("shows sales charts on the dashboard from registered sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+
+    expect(screen.getByRole("heading", { name: "Ventas diarias" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Ventas por mes" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Productos mas vendidos" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Top clientes" })).toBeTruthy();
+    expect(screen.getByText("Ventas del mes")).toBeTruthy();
+    const dailySalesChart = screen.getByLabelText("Grafico ventas diarias");
+    expect(screen.getByLabelText("Periodo 1 ventas diarias")).toBeTruthy();
+    expect(screen.getByLabelText("Periodo 2 ventas diarias")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Periodo 1")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Periodo 2")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Dia 1")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Dia 31")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Precios")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Dias")).toBeTruthy();
+    expect(within(dailySalesChart).getByText(/\$\s*0/)).toBeTruthy();
+    const productPieChart = screen.getByLabelText("Grafico productos mas vendidos");
+    expect(within(productPieChart).getByRole("img", { name: "Torta productos mas vendidos" })).toBeTruthy();
+    await user.click(within(productPieChart).getByRole("button", { name: "Seleccionar Arroz libra" }));
+    expect(within(productPieChart).getByText("Producto seleccionado")).toBeTruthy();
+    expect(within(productPieChart).getByText("2 unidades")).toBeTruthy();
+    expect(screen.getByText("Arroz libra")).toBeTruthy();
+    expect(screen.getByText("Ana Perez")).toBeTruthy();
+    expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 
   it("registers a pending sale, decreases stock, and exposes receivable data", async () => {
@@ -1091,6 +1152,85 @@ describe("App navigation", () => {
     expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
   });
 
+  it("creates a supplier profile with an Antioquia municipality", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Distribuidora Oriente");
+    await user.type(screen.getByLabelText("NIT o C.C. proveedor"), "900123456");
+    await user.type(screen.getByLabelText("Telefono proveedor"), "6044440000");
+    await user.type(screen.getByLabelText("Email proveedor"), "compras@oriente.test");
+    await user.type(screen.getByLabelText("Direccion proveedor"), "Calle 10 #20-30");
+    await user.selectOptions(
+      screen.getByLabelText("Municipio"),
+      screen.getByRole("option", { name: "Rionegro" })
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    const suppliersTable = screen.getByRole("table", { name: "Proveedores registrados" });
+    expect(within(suppliersTable).getByText("Distribuidora Oriente")).toBeTruthy();
+    expect(within(suppliersTable).getByText("900123456")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Rionegro")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Activo")).toBeTruthy();
+  });
+
+  it("defaults supplier department to Antioquia and allows manual department and municipality", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+
+    const departmentInput = screen.getByLabelText("Departamento") as HTMLInputElement;
+    expect(departmentInput.value).toBe("Antioquia");
+
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Externo");
+    await user.clear(departmentInput);
+    await user.type(departmentInput, "Choco");
+    await user.type(screen.getByLabelText("Municipio"), "Quibdo");
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    const suppliersTable = screen.getByRole("table", { name: "Proveedores registrados" });
+    expect(within(suppliersTable).getByText("Proveedor Externo")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Choco")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Quibdo")).toBeTruthy();
+  });
+
+  it("edits an existing supplier profile", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Inicial");
+    await user.selectOptions(
+      screen.getByLabelText("Municipio"),
+      screen.getByRole("option", { name: "Medellin" })
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
+
+    await user.click(screen.getByRole("button", { name: "Editar proveedor Proveedor Inicial" }));
+    await user.clear(screen.getByLabelText("Nombre proveedor"));
+    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Actualizado");
+    await user.type(screen.getByLabelText("Telefono proveedor"), "3005550101");
+    await user.selectOptions(
+      screen.getByLabelText("Municipio"),
+      screen.getByRole("option", { name: "Envigado" })
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar cambios proveedor" }));
+
+    const suppliersTable = screen.getByRole("table", { name: "Proveedores registrados" });
+    expect(within(suppliersTable).queryByText("Proveedor Inicial")).toBeNull();
+    expect(within(suppliersTable).getByText("Proveedor Actualizado")).toBeTruthy();
+    expect(within(suppliersTable).getByText("3005550101")).toBeTruthy();
+    expect(within(suppliersTable).getByText("Envigado")).toBeTruthy();
+  });
+
   it("registers a paid purchase, increases stock, and lists the invoice", async () => {
     const user = userEvent.setup();
 
@@ -1385,6 +1525,234 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
     expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
+  });
+
+  it("creates a customer from Clientes and lists it with active status", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Comercial Andes");
+    await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
+    await user.type(screen.getByLabelText("Direccion"), "Carrera 45 # 10-20");
+    await user.type(screen.getByLabelText("Ciudad"), "Medellin");
+    await user.type(screen.getByLabelText("Email"), "compras@andes.test");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
+    expect(within(customersTable).getByText("Comercial Andes")).toBeTruthy();
+    expect(within(customersTable).getByText("900123456")).toBeTruthy();
+    expect(within(customersTable).getByText("Activo")).toBeTruthy();
+  });
+
+  it("searches customers by name and document", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Comercial Andes");
+    await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Tienda Sur");
+    await user.type(screen.getByLabelText("NIT o C.C."), "111222333");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    const searchInput = screen.getByLabelText("Buscar clientes");
+
+    await user.type(searchInput, "900123456");
+
+    const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
+    expect(within(customersTable).getByText("Comercial Andes")).toBeTruthy();
+    expect(within(customersTable).queryByText("Tienda Sur")).toBeNull();
+
+    await user.clear(searchInput);
+    await user.type(searchInput, "Tienda");
+
+    expect(within(customersTable).getByText("Tienda Sur")).toBeTruthy();
+    expect(within(customersTable).queryByText("Comercial Andes")).toBeNull();
+  });
+
+  it("edits current customer data from the customer file", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Editar cliente" }));
+    await user.clear(screen.getByLabelText("Nombre o razon social"));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez SAS");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
+    expect(within(customersTable).getByText("Ana Perez SAS")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Ana Perez SAS" })).toBeTruthy();
+  });
+
+  it("deactivates a customer and hides it from new sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+
+    expect(within(screen.getByLabelText("Ficha de cliente")).getByText("Inactivo")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.queryByRole("option", { name: "Ana Perez - 123456789" })).toBeNull();
+  });
+
+  it("reactivates a customer and shows it for new sales again", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Reactivar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+
+    expect(screen.getByRole("option", { name: "Ana Perez - 123456789" })).toBeTruthy();
+  });
+
+  it("shows customer file metrics, sales history, and pending receivables", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-15");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Carlos Ruiz" }));
+
+    const customerSummary = screen.getByLabelText("Resumen del cliente");
+    expect(within(customerSummary).getByText("Total vendido")).toBeTruthy();
+    expect(within(customerSummary).getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
+    expect(within(customerSummary).getByText("Ventas")).toBeTruthy();
+    expect(within(customerSummary).getByText("1")).toBeTruthy();
+
+    const salesHistory = screen.getByRole("table", { name: "Historial de ventas del cliente" });
+    expect(within(salesHistory).getByText("Arroz libra")).toBeTruthy();
+    expect(within(salesHistory).getByText("Pendiente")).toBeTruthy();
+
+    const customerReceivables = screen.getByRole("table", { name: "Cartera pendiente del cliente" });
+    expect(within(customerReceivables).getByText("2026-07-15")).toBeTruthy();
+  });
+
+  it("rejects a sale when the selected customer becomes inactive", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    expect(
+      screen.getByText(
+        "El cliente seleccionado esta inactivo. Reactivalo para registrar nuevas ventas."
+      )
+    ).toBeTruthy();
+  });
+
+  it("keeps old invoice customer data after editing the current customer", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.type(screen.getByLabelText("Direccion"), "Calle 1");
+    await user.type(screen.getByLabelText("Ciudad"), "Medellin");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Editar cliente" }));
+    await user.clear(screen.getByLabelText("Nombre o razon social"));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez SAS");
+    await user.clear(screen.getByLabelText("Direccion"));
+    await user.type(screen.getByLabelText("Direccion"), "Calle 99");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+
+    await waitFor(() =>
+      expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            address: "Calle 1",
+            name: "Ana Perez"
+          })
+        })
+      )
+    );
+  });
+
+  it("blocks duplicate customer documents from inline sales creation", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez Sucursal");
+    await user.type(screen.getByLabelText("NIT o C.C."), " 123456789 ");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+
+    expect(screen.getByText("Ya existe un cliente con este NIT o C.C.")).toBeTruthy();
   });
 
   it("requires customer name and document when creating an inline customer", async () => {
