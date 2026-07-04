@@ -827,6 +827,17 @@ type DashboardRankingRow = {
   valueMinor: number;
 };
 
+type DashboardPeriodOption = {
+  label: string;
+  value: string;
+};
+
+type DashboardTrendSeries = {
+  color: "primary" | "secondary";
+  label: string;
+  rows: DashboardTrendRow[];
+};
+
 function parseLocalDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return null;
@@ -1386,11 +1397,6 @@ function buildDashboardDailySalesRows(
   sales: SaleRecord[],
   referenceDate = new Date()
 ): DashboardTrendRow[] {
-  const daysInMonth = new Date(
-    referenceDate.getFullYear(),
-    referenceDate.getMonth() + 1,
-    0
-  ).getDate();
   const totalsByDay = new Map<number, number>();
 
   sales.forEach((sale) => {
@@ -1406,7 +1412,7 @@ function buildDashboardDailySalesRows(
     );
   });
 
-  return Array.from({ length: daysInMonth }, (_, index) => {
+  return Array.from({ length: 31 }, (_, index) => {
     const day = index + 1;
 
     return {
@@ -1414,6 +1420,61 @@ function buildDashboardDailySalesRows(
       valueMinor: totalsByDay.get(day) ?? 0
     };
   });
+}
+
+function formatDashboardPeriodValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function formatDashboardPeriodLabel(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+
+  if (!year || !month) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("es-CO", {
+    month: "long",
+    year: "numeric"
+  }).format(new Date(year, month - 1, 1));
+}
+
+function parseDashboardPeriodValue(value: string): Date {
+  const [year, month] = value.split("-").map(Number);
+
+  if (!year || !month) {
+    return new Date();
+  }
+
+  return new Date(year, month - 1, 1);
+}
+
+function shiftMonth(date: Date, offset: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + offset, 1);
+}
+
+function buildDashboardPeriodOptions(
+  sales: SaleRecord[],
+  referenceDate = new Date()
+): DashboardPeriodOption[] {
+  const periodValues = new Set<string>([
+    formatDashboardPeriodValue(referenceDate),
+    formatDashboardPeriodValue(shiftMonth(referenceDate, -1))
+  ]);
+
+  sales.forEach((sale) => {
+    periodValues.add(formatDashboardPeriodValue(new Date(sale.occurredAtMs)));
+  });
+
+  return [...periodValues]
+    .sort((left, right) => right.localeCompare(left))
+    .map((value) => ({
+      label: formatDashboardPeriodLabel(value),
+      value
+    }));
 }
 
 function buildDashboardMonthlySalesRows(
@@ -2063,7 +2124,31 @@ function DashboardContent({
   onOpenReports,
   sales
 }: DashboardContentProps) {
-  const dailySalesRows = buildDashboardDailySalesRows(sales);
+  const dailyPeriodOptions = buildDashboardPeriodOptions(sales);
+  const [periodOne, setPeriodOne] = useState(dailyPeriodOptions[0]!.value);
+  const [periodTwo, setPeriodTwo] = useState(
+    dailyPeriodOptions[1]?.value ?? dailyPeriodOptions[0]!.value
+  );
+  const periodOneLabel = formatDashboardPeriodLabel(periodOne);
+  const periodTwoLabel = formatDashboardPeriodLabel(periodTwo);
+  const dailySalesSeries: DashboardTrendSeries[] = [
+    {
+      color: "primary",
+      label: "Periodo 1",
+      rows: buildDashboardDailySalesRows(
+        sales,
+        parseDashboardPeriodValue(periodOne)
+      )
+    },
+    {
+      color: "secondary",
+      label: "Periodo 2",
+      rows: buildDashboardDailySalesRows(
+        sales,
+        parseDashboardPeriodValue(periodTwo)
+      )
+    }
+  ];
   const monthlySalesRows = buildDashboardMonthlySalesRows(sales);
   const productRows = buildDashboardProductRows(sales);
   const customerRows = buildDashboardCustomerRows(sales);
@@ -2085,7 +2170,43 @@ function DashboardContent({
             <h2>Ventas diarias</h2>
             <button onClick={onOpenReports}>Ver todo</button>
           </div>
-          <DashboardAreaChart rows={dailySalesRows} />
+          <div className="dashboard-period-controls">
+            <label className="field" htmlFor="dashboard-period-one">
+              <span>Periodo 1</span>
+              <select
+                aria-label="Periodo 1 ventas diarias"
+                id="dashboard-period-one"
+                onChange={(event) => setPeriodOne(event.target.value)}
+                value={periodOne}
+              >
+                {dailyPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field" htmlFor="dashboard-period-two">
+              <span>Periodo 2</span>
+              <select
+                aria-label="Periodo 2 ventas diarias"
+                id="dashboard-period-two"
+                onChange={(event) => setPeriodTwo(event.target.value)}
+                value={periodTwo}
+              >
+                {dailyPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <DashboardAreaChart
+            periodOneLabel={periodOneLabel}
+            periodTwoLabel={periodTwoLabel}
+            series={dailySalesSeries}
+          />
         </div>
 
         <div className="panel dashboard-chart-panel">
@@ -2099,11 +2220,7 @@ function DashboardContent({
           <div className="panel-header">
             <h2>Productos mas vendidos</h2>
           </div>
-          <DashboardRankingList
-            emptyBody="Los productos vendidos se mostraran aqui."
-            emptyTitle="Sin productos vendidos"
-            rows={productRows}
-          />
+          <DashboardProductPieChart rows={productRows} />
         </div>
 
         <div className="panel dashboard-chart-panel">
@@ -2145,30 +2262,63 @@ function DashboardContent({
   );
 }
 
-function DashboardAreaChart({ rows }: { rows: DashboardTrendRow[] }) {
-  const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
-  const width = 720;
-  const height = 220;
-  const padding = 24;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
-  const points = rows.map((row, index) => {
-    const x =
-      rows.length === 1
-        ? padding + chartWidth / 2
-        : padding + (index / (rows.length - 1)) * chartWidth;
-    const y =
-      maxValue === 0
-        ? padding + chartHeight
-        : padding + chartHeight - (row.valueMinor / maxValue) * chartHeight;
+function DashboardAreaChart({
+  periodOneLabel,
+  periodTwoLabel,
+  series
+}: {
+  periodOneLabel: string;
+  periodTwoLabel: string;
+  series: DashboardTrendSeries[];
+}) {
+  const maxValue = Math.max(
+    ...series.flatMap((trendSeries) =>
+      trendSeries.rows.map((row) => row.valueMinor)
+    ),
+    0
+  );
+  const width = 760;
+  const height = 260;
+  const padding = {
+    bottom: 42,
+    left: 84,
+    right: 24,
+    top: 24
+  };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const yAxisTicks = [maxValue, Math.round(maxValue / 2), 0];
+  const xAxisTicks = [
+    { label: "Dia 1", index: 0 },
+    { label: "Dia 16", index: 15 },
+    { label: "Dia 31", index: 30 }
+  ];
+  const chartSeries = series.map((trendSeries) => {
+    const points = trendSeries.rows.map((row, index) => {
+      const x =
+        trendSeries.rows.length === 1
+          ? padding.left + chartWidth / 2
+          : padding.left + (index / (trendSeries.rows.length - 1)) * chartWidth;
+      const y =
+        maxValue === 0
+          ? padding.top + chartHeight
+          : padding.top + chartHeight - (row.valueMinor / maxValue) * chartHeight;
 
-    return { ...row, x, y };
+      return { ...row, x, y };
+    });
+    const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+    const areaPoints =
+      points.length > 0
+        ? `${padding.left},${height - padding.bottom} ${linePoints} ${width - padding.right},${height - padding.bottom}`
+        : "";
+
+    return {
+      ...trendSeries,
+      areaPoints,
+      linePoints,
+      points
+    };
   });
-  const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
-  const areaPoints =
-    points.length > 0
-      ? `${padding},${height - padding} ${linePoints} ${width - padding},${height - padding}`
-      : "";
 
   if (maxValue === 0) {
     return (
@@ -2181,34 +2331,117 @@ function DashboardAreaChart({ rows }: { rows: DashboardTrendRow[] }) {
 
   return (
     <div className="dashboard-line-chart" aria-label="Grafico ventas diarias">
+      <div className="dashboard-series-legend">
+        <span className="dashboard-series-label dashboard-series-label-primary">
+          Periodo 1
+          <small>{periodOneLabel}</small>
+        </span>
+        <span className="dashboard-series-label dashboard-series-label-secondary">
+          Periodo 2
+          <small>{periodTwoLabel}</small>
+        </span>
+      </div>
       <svg role="img" viewBox={`0 0 ${width} ${height}`}>
         <title>Ventas diarias</title>
         <line
           className="dashboard-chart-axis"
-          x1={padding}
-          x2={width - padding}
-          y1={height - padding}
-          y2={height - padding}
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={height - padding.bottom}
+          y2={height - padding.bottom}
         />
-        <polygon className="dashboard-area-fill" points={areaPoints} />
-        <polyline className="dashboard-line-stroke" points={linePoints} />
-        {points
-          .filter((point) => point.valueMinor > 0)
-          .map((point) => (
-            <circle
-              className="dashboard-line-point"
-              cx={point.x}
-              cy={point.y}
-              key={point.label}
-              r="4"
+        <line
+          className="dashboard-chart-axis"
+          x1={padding.left}
+          x2={padding.left}
+          y1={padding.top}
+          y2={height - padding.bottom}
+        />
+        {yAxisTicks.map((tick) => {
+          const y =
+            maxValue === 0
+              ? height - padding.bottom
+              : padding.top + chartHeight - (tick / maxValue) * chartHeight;
+
+          return (
+            <g key={`y-${tick}`}>
+              <line
+                className="dashboard-chart-gridline"
+                x1={padding.left}
+                x2={width - padding.right}
+                y1={y}
+                y2={y}
+              />
+              <text
+                className="dashboard-axis-tick"
+                textAnchor="end"
+                x={padding.left - 10}
+                y={y + 4}
+              >
+                {formatCurrency(tick)}
+              </text>
+            </g>
+          );
+        })}
+        {xAxisTicks.map((tick) => {
+          const x =
+            padding.left + (tick.index / 30) * chartWidth;
+
+          return (
+            <text
+              className="dashboard-axis-tick"
+              key={`x-${tick.label}`}
+              textAnchor="middle"
+              x={x}
+              y={height - 14}
+            >
+              {tick.label}
+            </text>
+          );
+        })}
+        <text
+          className="dashboard-axis-label"
+          textAnchor="middle"
+          transform={`translate(16 ${padding.top + chartHeight / 2}) rotate(-90)`}
+        >
+          Precios
+        </text>
+        <text
+          className="dashboard-axis-label"
+          textAnchor="middle"
+          x={padding.left + chartWidth / 2}
+          y={height - 2}
+        >
+          Dias
+        </text>
+        {chartSeries.map((trendSeries) => (
+          <g key={`area-${trendSeries.label}`}>
+            <polygon
+              className={`dashboard-area-fill dashboard-area-fill-${trendSeries.color}`}
+              points={trendSeries.areaPoints}
             />
-          ))}
+          </g>
+        ))}
+        {chartSeries.map((trendSeries) => (
+          <g key={`line-${trendSeries.label}`}>
+            <polyline
+              className={`dashboard-line-stroke dashboard-line-stroke-${trendSeries.color}`}
+              points={trendSeries.linePoints}
+            />
+            {trendSeries.points
+              .filter((point) => point.valueMinor > 0)
+              .map((point) => (
+                <circle
+                  className={`dashboard-line-point dashboard-line-point-${trendSeries.color}`}
+                  cx={point.x}
+                  cy={point.y}
+                  key={`${trendSeries.label}-${point.label}`}
+                  r="4"
+                />
+              ))}
+          </g>
+        ))}
       </svg>
-      <div className="dashboard-chart-scale">
-        <span>Dia 1</span>
-        <strong>{formatCurrency(maxValue)}</strong>
-        <span>Dia {rows.length}</span>
-      </div>
     </div>
   );
 }
@@ -2277,6 +2510,133 @@ function DashboardRankingList({
           <strong>{formatCurrency(row.valueMinor)}</strong>
         </article>
       ))}
+    </div>
+  );
+}
+
+const dashboardPieColors = ["#0f766e", "#60a5fa", "#6366f1", "#a855f7", "#f59e0b"];
+
+function getPiePoint(center: number, radius: number, angleDegrees: number) {
+  const angleRadians = ((angleDegrees - 90) * Math.PI) / 180;
+
+  return {
+    x: center + radius * Math.cos(angleRadians),
+    y: center + radius * Math.sin(angleRadians)
+  };
+}
+
+function getPieSlicePath(
+  center: number,
+  radius: number,
+  startAngle: number,
+  endAngle: number
+) {
+  const start = getPiePoint(center, radius, startAngle);
+  const end = getPiePoint(center, radius, endAngle);
+  const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+
+  return [
+    `M ${center} ${center}`,
+    `L ${start.x} ${start.y}`,
+    `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`,
+    "Z"
+  ].join(" ");
+}
+
+function DashboardProductPieChart({ rows }: { rows: DashboardRankingRow[] }) {
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+
+  if (rows.length === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>Sin productos vendidos</strong>
+        <span>Los productos vendidos se mostraran aqui.</span>
+      </div>
+    );
+  }
+
+  const totalMinor = rows.reduce((total, row) => total + row.valueMinor, 0);
+  const activeProductId = selectedProductId ?? rows[0]!.id;
+  const selectedRow =
+    rows.find((row) => row.id === activeProductId) ?? rows[0]!;
+  let currentAngle = 0;
+
+  return (
+    <div
+      aria-label="Grafico productos mas vendidos"
+      className="dashboard-product-pie"
+    >
+      <div className="dashboard-pie-visual">
+        <svg
+          aria-label="Torta productos mas vendidos"
+          role="img"
+          viewBox="0 0 220 220"
+        >
+          {rows.length === 1 ? (
+            <circle
+              className="dashboard-pie-segment active"
+              cx="110"
+              cy="110"
+              fill={dashboardPieColors[0]}
+              r="88"
+            />
+          ) : (
+            rows.map((row, index) => {
+              const sliceAngle = (row.valueMinor / totalMinor) * 360;
+              const startAngle = currentAngle;
+              const endAngle = currentAngle + sliceAngle;
+              currentAngle = endAngle;
+
+              return (
+                <path
+                  className={`dashboard-pie-segment${
+                    row.id === activeProductId ? " active" : ""
+                  }`}
+                  d={getPieSlicePath(110, 88, startAngle, endAngle)}
+                  fill={dashboardPieColors[index % dashboardPieColors.length]}
+                  key={row.id}
+                  onClick={() => setSelectedProductId(row.id)}
+                />
+              );
+            })
+          )}
+        </svg>
+      </div>
+
+      <div className="dashboard-pie-detail">
+        <span>Producto seleccionado</span>
+        <strong>Seleccionado: {selectedRow.label}</strong>
+        <small>{selectedRow.meta}</small>
+        <b>{formatCurrency(selectedRow.valueMinor)}</b>
+      </div>
+
+      <div className="dashboard-pie-legend">
+        {rows.map((row, index) => {
+          const percentage =
+            totalMinor > 0 ? Math.round((row.valueMinor / totalMinor) * 100) : 0;
+
+          return (
+            <button
+              aria-label={`Seleccionar ${row.label}`}
+              className={row.id === activeProductId ? "active" : ""}
+              key={row.id}
+              onClick={() => setSelectedProductId(row.id)}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className="dashboard-pie-swatch"
+                style={{
+                  backgroundColor:
+                    dashboardPieColors[index % dashboardPieColors.length]
+                }}
+              />
+              <span>{row.label}</span>
+              <strong>{percentage}%</strong>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

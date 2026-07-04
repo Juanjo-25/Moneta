@@ -228,6 +228,52 @@ button {
   min-height: 250px;
 }
 
+.dashboard-period-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 240px));
+  gap: 14px;
+  align-items: end;
+}
+
+.dashboard-series-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.dashboard-series-label {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 8px;
+  align-items: center;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dashboard-series-label::before {
+  display: block;
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  content: "";
+}
+
+.dashboard-series-label small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dashboard-series-label-primary::before {
+  background: #0f766e;
+}
+
+.dashboard-series-label-secondary::before {
+  background: #6366f1;
+}
+
 .dashboard-line-chart svg {
   width: 100%;
   min-height: 220px;
@@ -238,21 +284,56 @@ button {
   stroke-width: 1;
 }
 
-.dashboard-area-fill {
+.dashboard-chart-gridline {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+
+.dashboard-axis-label {
+  fill: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dashboard-axis-tick {
+  fill: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboard-area-fill-primary {
   fill: rgba(14, 165, 233, 0.18);
+}
+
+.dashboard-area-fill-secondary {
+  fill: rgba(99, 102, 241, 0.14);
 }
 
 .dashboard-line-stroke {
   fill: none;
-  stroke: #0f766e;
   stroke-linejoin: round;
   stroke-width: 4;
 }
 
+.dashboard-line-stroke-primary {
+  stroke: #0f766e;
+}
+
+.dashboard-line-stroke-secondary {
+  stroke: #6366f1;
+}
+
 .dashboard-line-point {
-  fill: #0f766e;
   stroke: #ffffff;
   stroke-width: 2;
+}
+
+.dashboard-line-point-primary {
+  fill: #0f766e;
+}
+
+.dashboard-line-point-secondary {
+  fill: #6366f1;
 }
 
 .dashboard-chart-scale {
@@ -358,6 +439,119 @@ button {
   background: #0f766e;
 }
 
+.dashboard-product-pie {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.dashboard-pie-visual {
+  min-width: 0;
+}
+
+.dashboard-pie-visual svg {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 1;
+}
+
+.dashboard-pie-segment {
+  cursor: pointer;
+  outline: none;
+  stroke: #ffffff;
+  stroke-width: 4px;
+  transition:
+    filter 0.18s ease,
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.dashboard-pie-segment:not(.active) {
+  opacity: 0.82;
+}
+
+.dashboard-pie-segment.active,
+.dashboard-pie-segment:hover {
+  filter: drop-shadow(0 8px 14px rgb(15 23 42 / 16%));
+  opacity: 1;
+  transform: scale(1.02);
+}
+
+.dashboard-pie-detail {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-pie-detail span,
+.dashboard-pie-detail small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-pie-detail strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-pie-detail b {
+  color: #0f766e;
+  font-size: 16px;
+}
+
+.dashboard-pie-legend {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.dashboard-pie-legend button {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 9px 10px;
+  color: #334155;
+  font: inherit;
+  text-align: left;
+}
+
+.dashboard-pie-legend button.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+  color: #0f172a;
+}
+
+.dashboard-pie-legend button span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-pie-legend button strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.dashboard-pie-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
 .section-panel {
   border: 1px solid #d8dee5;
   border-radius: 8px;
@@ -398,13 +592,18 @@ button {
   font-weight: 700;
 }
 
-.field input {
+.field input,
+.field select {
   min-width: 0;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   padding: 10px 11px;
   color: #111827;
   font: inherit;
+}
+
+.field select {
+  background: #ffffff;
 }
 
 .field input[aria-invalid="true"] {
