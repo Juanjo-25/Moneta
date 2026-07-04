@@ -579,6 +579,10 @@ const navigationItems: SectionConfig[] = [
   }
 ];
 
+const sidebarNavigationItems = navigationItems.filter(
+  (item) => item.id !== "dashboard"
+);
+
 function stripNonDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
@@ -809,6 +813,18 @@ type UtilitySummary = {
   bestPeriodMarginMinor: number;
   worstPeriodLabel: string;
   worstPeriodMarginMinor: number;
+};
+
+type DashboardTrendRow = {
+  label: string;
+  valueMinor: number;
+};
+
+type DashboardRankingRow = {
+  id: string;
+  label: string;
+  meta: string;
+  valueMinor: number;
 };
 
 function parseLocalDate(value: string): Date | null {
@@ -1351,6 +1367,141 @@ function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
   };
 }
 
+function isSameLocalDay(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function isSameLocalMonth(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth()
+  );
+}
+
+function buildDashboardDailySalesRows(
+  sales: SaleRecord[],
+  referenceDate = new Date()
+): DashboardTrendRow[] {
+  const daysInMonth = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth() + 1,
+    0
+  ).getDate();
+  const totalsByDay = new Map<number, number>();
+
+  sales.forEach((sale) => {
+    const occurredAt = new Date(sale.occurredAtMs);
+
+    if (!isSameLocalMonth(occurredAt, referenceDate)) {
+      return;
+    }
+
+    totalsByDay.set(
+      occurredAt.getDate(),
+      (totalsByDay.get(occurredAt.getDate()) ?? 0) + sale.totalMinor
+    );
+  });
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const day = index + 1;
+
+    return {
+      label: String(day),
+      valueMinor: totalsByDay.get(day) ?? 0
+    };
+  });
+}
+
+function buildDashboardMonthlySalesRows(
+  sales: SaleRecord[],
+  referenceDate = new Date()
+): DashboardTrendRow[] {
+  const totalsByMonth = new Map<number, number>();
+  const formatter = new Intl.DateTimeFormat("es-CO", { month: "short" });
+
+  sales.forEach((sale) => {
+    const occurredAt = new Date(sale.occurredAtMs);
+
+    if (occurredAt.getFullYear() !== referenceDate.getFullYear()) {
+      return;
+    }
+
+    totalsByMonth.set(
+      occurredAt.getMonth(),
+      (totalsByMonth.get(occurredAt.getMonth()) ?? 0) + sale.totalMinor
+    );
+  });
+
+  return Array.from({ length: 12 }, (_, month) => ({
+    label: formatter.format(new Date(referenceDate.getFullYear(), month, 1)),
+    valueMinor: totalsByMonth.get(month) ?? 0
+  }));
+}
+
+function buildDashboardProductRows(sales: SaleRecord[]): DashboardRankingRow[] {
+  const productMap = new Map<
+    string,
+    { label: string; quantity: number; valueMinor: number }
+  >();
+
+  sales.forEach((sale) => {
+    sale.lines.forEach((line) => {
+      const currentRow = productMap.get(line.productId) ?? {
+        label: line.productName,
+        quantity: 0,
+        valueMinor: 0
+      };
+
+      currentRow.quantity += line.quantity;
+      currentRow.valueMinor += line.totalMinor;
+      productMap.set(line.productId, currentRow);
+    });
+  });
+
+  return [...productMap.entries()]
+    .map(([id, row]) => ({
+      id,
+      label: row.label,
+      meta: `${row.quantity} unidades`,
+      valueMinor: row.valueMinor
+    }))
+    .sort((left, right) => right.valueMinor - left.valueMinor)
+    .slice(0, 5);
+}
+
+function buildDashboardCustomerRows(sales: SaleRecord[]): DashboardRankingRow[] {
+  const customerMap = new Map<
+    string,
+    { label: string; purchases: number; valueMinor: number }
+  >();
+
+  sales.forEach((sale) => {
+    const currentRow = customerMap.get(sale.customerId) ?? {
+      label: sale.customerName,
+      purchases: 0,
+      valueMinor: 0
+    };
+
+    currentRow.purchases += 1;
+    currentRow.valueMinor += sale.totalMinor;
+    customerMap.set(sale.customerId, currentRow);
+  });
+
+  return [...customerMap.entries()]
+    .map(([id, row]) => ({
+      id,
+      label: row.label,
+      meta: `${row.purchases} ventas`,
+      valueMinor: row.valueMinor
+    }))
+    .sort((left, right) => right.valueMinor - left.valueMinor)
+    .slice(0, 5);
+}
+
 function getSupplierPayableStatus(input: {
   originalAmountMinor: number;
   paidAmountMinor: number;
@@ -1389,8 +1540,19 @@ export function App() {
   );
 
   const lowStockProducts = products.filter(isLowStock);
+  const today = new Date();
   const salesTodayTotal = sales.reduce(
-    (total, sale) => total + sale.totalMinor,
+    (total, sale) =>
+      isSameLocalDay(new Date(sale.occurredAtMs), today)
+        ? total + sale.totalMinor
+        : total,
+    0
+  );
+  const salesMonthTotal = sales.reduce(
+    (total, sale) =>
+      isSameLocalMonth(new Date(sale.occurredAtMs), today)
+        ? total + sale.totalMinor
+        : total,
     0
   );
   const pendingReceivablesTotal = receivables.reduce(
@@ -1403,6 +1565,7 @@ export function App() {
       value: String(products.filter((product) => product.active).length)
     },
     { label: "Ventas de hoy", value: formatCurrency(salesTodayTotal) },
+    { label: "Ventas del mes", value: formatCurrency(salesMonthTotal) },
     {
       label: "Cartera pendiente",
       value: formatCurrency(pendingReceivablesTotal)
@@ -1796,16 +1959,22 @@ export function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
+        <button
+          aria-label="Moneta Inventario y cartera"
+          aria-current={activeSectionId === "dashboard" ? "page" : undefined}
+          className="brand"
+          onClick={() => openSection("dashboard")}
+          type="button"
+        >
           <span className="brand-mark">M</span>
           <div>
             <strong>Moneta</strong>
             <small>Inventario y cartera</small>
           </div>
-        </div>
+        </button>
 
         <nav className="navigation" aria-label="Principal">
-          {navigationItems.map((item) => (
+          {sidebarNavigationItems.map((item) => (
             <button
               aria-current={item.id === activeSectionId ? "page" : undefined}
               className={item.id === activeSectionId ? "active" : ""}
@@ -1841,6 +2010,7 @@ export function App() {
             metrics={metrics}
             onOpenProducts={() => openSection("products")}
             onOpenReports={() => openSection("reports")}
+            sales={sales}
           />
         ) : (
           <SectionContent
@@ -1883,14 +2053,21 @@ type DashboardContentProps = {
   metrics: Array<{ label: string; value: string }>;
   onOpenProducts: () => void;
   onOpenReports: () => void;
+  sales: SaleRecord[];
 };
 
 function DashboardContent({
   lowStockProducts,
   metrics,
   onOpenProducts,
-  onOpenReports
+  onOpenReports,
+  sales
 }: DashboardContentProps) {
+  const dailySalesRows = buildDashboardDailySalesRows(sales);
+  const monthlySalesRows = buildDashboardMonthlySalesRows(sales);
+  const productRows = buildDashboardProductRows(sales);
+  const customerRows = buildDashboardCustomerRows(sales);
+
   return (
     <>
       <section className="metric-grid" aria-label="Indicadores">
@@ -1902,16 +2079,42 @@ function DashboardContent({
         ))}
       </section>
 
-      <section className="content-grid">
-        <div className="panel">
+      <section className="dashboard-chart-grid" aria-label="Graficos del negocio">
+        <div className="panel dashboard-chart-panel dashboard-chart-panel-wide">
           <div className="panel-header">
-            <h2>Actividad reciente</h2>
+            <h2>Ventas diarias</h2>
             <button onClick={onOpenReports}>Ver todo</button>
           </div>
-          <div className="empty-state">
-            <strong>Sin movimientos registrados</strong>
-            <span>Las compras, ventas y pagos apareceran aqui.</span>
+          <DashboardAreaChart rows={dailySalesRows} />
+        </div>
+
+        <div className="panel dashboard-chart-panel">
+          <div className="panel-header">
+            <h2>Ventas por mes</h2>
           </div>
+          <DashboardBarChart rows={monthlySalesRows} />
+        </div>
+
+        <div className="panel dashboard-chart-panel">
+          <div className="panel-header">
+            <h2>Productos mas vendidos</h2>
+          </div>
+          <DashboardRankingList
+            emptyBody="Los productos vendidos se mostraran aqui."
+            emptyTitle="Sin productos vendidos"
+            rows={productRows}
+          />
+        </div>
+
+        <div className="panel dashboard-chart-panel">
+          <div className="panel-header">
+            <h2>Top clientes</h2>
+          </div>
+          <DashboardRankingList
+            emptyBody="Los clientes con ventas se mostraran aqui."
+            emptyTitle="Sin ventas por cliente"
+            rows={customerRows}
+          />
         </div>
 
         <div className="panel">
@@ -1939,6 +2142,142 @@ function DashboardContent({
         </div>
       </section>
     </>
+  );
+}
+
+function DashboardAreaChart({ rows }: { rows: DashboardTrendRow[] }) {
+  const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
+  const width = 720;
+  const height = 220;
+  const padding = 24;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+  const points = rows.map((row, index) => {
+    const x =
+      rows.length === 1
+        ? padding + chartWidth / 2
+        : padding + (index / (rows.length - 1)) * chartWidth;
+    const y =
+      maxValue === 0
+        ? padding + chartHeight
+        : padding + chartHeight - (row.valueMinor / maxValue) * chartHeight;
+
+    return { ...row, x, y };
+  });
+  const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const areaPoints =
+    points.length > 0
+      ? `${padding},${height - padding} ${linePoints} ${width - padding},${height - padding}`
+      : "";
+
+  if (maxValue === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>Sin ventas registradas</strong>
+        <span>Las ventas diarias apareceran cuando registres movimientos.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-line-chart" aria-label="Grafico ventas diarias">
+      <svg role="img" viewBox={`0 0 ${width} ${height}`}>
+        <title>Ventas diarias</title>
+        <line
+          className="dashboard-chart-axis"
+          x1={padding}
+          x2={width - padding}
+          y1={height - padding}
+          y2={height - padding}
+        />
+        <polygon className="dashboard-area-fill" points={areaPoints} />
+        <polyline className="dashboard-line-stroke" points={linePoints} />
+        {points
+          .filter((point) => point.valueMinor > 0)
+          .map((point) => (
+            <circle
+              className="dashboard-line-point"
+              cx={point.x}
+              cy={point.y}
+              key={point.label}
+              r="4"
+            />
+          ))}
+      </svg>
+      <div className="dashboard-chart-scale">
+        <span>Dia 1</span>
+        <strong>{formatCurrency(maxValue)}</strong>
+        <span>Dia {rows.length}</span>
+      </div>
+    </div>
+  );
+}
+
+function DashboardBarChart({ rows }: { rows: DashboardTrendRow[] }) {
+  const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
+
+  if (maxValue === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>Sin ventas registradas</strong>
+        <span>El comparativo mensual aparecera con las primeras ventas.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-bar-chart" aria-label="Grafico ventas por mes">
+      {rows.map((row) => (
+        <div className="dashboard-month-bar" key={row.label}>
+          <div className="dashboard-month-track">
+            <span
+              style={{
+                height: `${Math.max((row.valueMinor / maxValue) * 100, 3)}%`
+              }}
+            />
+          </div>
+          <small>{row.label}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardRankingList({
+  emptyBody,
+  emptyTitle,
+  rows
+}: {
+  emptyBody: string;
+  emptyTitle: string;
+  rows: DashboardRankingRow[];
+}) {
+  const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
+
+  if (rows.length === 0) {
+    return (
+      <div className="empty-state dashboard-empty-state">
+        <strong>{emptyTitle}</strong>
+        <span>{emptyBody}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-ranking-list">
+      {rows.map((row) => (
+        <article className="dashboard-ranking-row" key={row.id}>
+          <div>
+            <strong>{row.label}</strong>
+            <span>{row.meta}</span>
+          </div>
+          <div className="dashboard-ranking-track">
+            <span style={{ width: `${(row.valueMinor / maxValue) * 100}%` }} />
+          </div>
+          <strong>{formatCurrency(row.valueMinor)}</strong>
+        </article>
+      ))}
+    </div>
   );
 }
 

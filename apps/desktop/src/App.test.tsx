@@ -96,16 +96,31 @@ describe("App navigation", () => {
 
     render(<App />);
 
+    expect(screen.queryByRole("button", { name: "Dashboard" })).toBeNull();
+
     await user.click(screen.getByRole("button", { name: "Nueva venta" }));
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
     await user.click(screen.getByRole("button", { name: "Ver todo" }));
     expect(screen.getByRole("heading", { name: "Reportes" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
     await user.click(screen.getByRole("button", { name: "Revisar" }));
     expect(screen.getByRole("heading", { name: "Productos" })).toBeTruthy();
+  });
+
+  it("returns to the dashboard when the Moneta brand is clicked", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+
+    expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
   });
 
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
@@ -131,7 +146,7 @@ describe("App navigation", () => {
     expect(screen.getByRole("cell", { name: "4" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Bajo stock" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
 
     expect(screen.getByText("Productos activos")).toBeTruthy();
     expect(screen.getByText("Alertas de inventario")).toBeTruthy();
@@ -218,6 +233,41 @@ describe("App navigation", () => {
 
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(within(productsTable).getByRole("cell", { name: "2" })).toBeTruthy();
+  });
+
+  it("shows sales charts on the dashboard from registered sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+
+    expect(screen.getByRole("heading", { name: "Ventas diarias" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Ventas por mes" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Productos mas vendidos" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Top clientes" })).toBeTruthy();
+    expect(screen.getByText("Ventas del mes")).toBeTruthy();
+    const dailySalesChart = screen.getByLabelText("Grafico ventas diarias");
+    expect(within(dailySalesChart).getByText("Precios")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Dias")).toBeTruthy();
+    expect(within(dailySalesChart).getByText(/\$\s*0/)).toBeTruthy();
+    expect(screen.getByText("Arroz libra")).toBeTruthy();
+    expect(screen.getByText("Ana Perez")).toBeTruthy();
+    expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 
   it("registers a pending sale, decreases stock, and exposes receivable data", async () => {
