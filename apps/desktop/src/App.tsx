@@ -1784,18 +1784,24 @@ export function App() {
     const firstLine = lines[0]!;
 
     setProducts((currentProducts) =>
-      currentProducts.map((product) =>
-        lines.some((line) => line.productId === product.id)
+      currentProducts.map((product) => {
+        const productLines = lines.filter((line) => line.productId === product.id);
+        const latestLine = productLines.at(-1);
+
+        return productLines.length > 0 && latestLine
           ? {
               ...product,
+              costMinor: latestLine.unitCostMinor,
+              salePriceMinor:
+                product.salePriceMinor === 0
+                  ? latestLine.unitCostMinor
+                  : product.salePriceMinor,
               stock:
                 product.stock +
-                lines
-                  .filter((line) => line.productId === product.id)
-                  .reduce((total, line) => total + line.quantity, 0)
+                productLines.reduce((total, line) => total + line.quantity, 0)
             }
-          : product
-      )
+          : product;
+      })
     );
     setPurchases((currentPurchases) => [
       {
@@ -3433,9 +3439,15 @@ function PurchasesSection({
     0
   );
   const totalMinor = purchaseLinesTotalMinor + draftLineTotalMinor;
+  const nextInvoiceNumber = String(purchases.length + 1).padStart(3, "0");
+  const nextProductSku = String(products.length + 1).padStart(3, "0");
 
   function updateField(field: keyof PurchaseFormState, value: string) {
-    setForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+      ...(field === "paymentStatus" && value === "paid" ? { dueAt: "" } : {})
+    }));
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
@@ -3487,21 +3499,10 @@ function PurchasesSection({
 
   function submitProduct() {
     const nextErrors: PurchaseProductFormErrors = {};
-    const cost = parseNonNegativeInteger(productForm.cost);
-    const salePrice = parseNonNegativeInteger(productForm.salePrice);
     const minimumStock = parseNonNegativeInteger(productForm.minimumStock);
 
-    if (productForm.sku.trim() === "") {
-      nextErrors.sku = "El codigo es obligatorio.";
-    }
     if (productForm.name.trim() === "") {
       nextErrors.name = "El nombre es obligatorio.";
-    }
-    if (cost === null) {
-      nextErrors.cost = "El costo debe ser cero o mayor.";
-    }
-    if (salePrice === null) {
-      nextErrors.salePrice = "El precio de venta debe ser cero o mayor.";
     }
     if (minimumStock === null) {
       nextErrors.minimumStock = "El stock minimo debe ser cero o mayor.";
@@ -3509,23 +3510,18 @@ function PurchasesSection({
 
     setProductErrors(nextErrors);
 
-    if (
-      Object.keys(nextErrors).length > 0 ||
-      cost === null ||
-      salePrice === null ||
-      minimumStock === null
-    ) {
+    if (Object.keys(nextErrors).length > 0 || minimumStock === null) {
       return;
     }
 
     const product = {
       active: true,
-      costMinor: cost,
+      costMinor: 0,
       id: `product-${Date.now()}`,
       minimumStock,
       name: productForm.name.trim(),
-      salePriceMinor: salePrice,
-      sku: productForm.sku.trim(),
+      salePriceMinor: 0,
+      sku: nextProductSku,
       stock: 0
     };
 
@@ -3640,11 +3636,12 @@ function PurchasesSection({
     if (!selectedSupplier) {
       nextErrors.supplierId = "Debes seleccionar un proveedor.";
     }
-    if (form.invoiceNumber.trim() === "") {
-      nextErrors.invoiceNumber = "El numero de factura es obligatorio.";
-    }
     if (form.issuedAt.trim() === "") {
       nextErrors.issuedAt = "La fecha de emision es obligatoria.";
+    }
+    if (form.paymentStatus === "pending" && form.dueAt.trim() === "") {
+      nextErrors.dueAt =
+        "La fecha de vencimiento es obligatoria para compras pendientes.";
     }
     if (purchaseLines.length === 0 || hasDraftLine) {
       Object.assign(nextErrors, lineValidation.errors);
@@ -3661,8 +3658,8 @@ function PurchasesSection({
     }
 
     onRegisterPurchase({
-      dueAt: form.dueAt.trim(),
-      invoiceNumber: form.invoiceNumber.trim(),
+      dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
+      invoiceNumber: nextInvoiceNumber,
       issuedAt: form.issuedAt.trim(),
       lines: linesToRegister.map((line) => ({
         product: line.product,
@@ -3711,8 +3708,9 @@ function PurchasesSection({
           <TextField
             error={errors.invoiceNumber}
             label="Numero factura"
-            onChange={(value) => updateField("invoiceNumber", value)}
-            value={form.invoiceNumber}
+            onChange={() => undefined}
+            readOnly
+            value={nextInvoiceNumber}
           />
           <TextField
             error={errors.issuedAt}
@@ -3721,13 +3719,15 @@ function PurchasesSection({
             type="date"
             value={form.issuedAt}
           />
-          <TextField
-            error={errors.dueAt}
-            label="Fecha vencimiento"
-            onChange={(value) => updateField("dueAt", value)}
-            type="date"
-            value={form.dueAt}
-          />
+          {form.paymentStatus === "pending" ? (
+            <TextField
+              error={errors.dueAt}
+              label="Fecha vencimiento"
+              onChange={(value) => updateField("dueAt", value)}
+              type="date"
+              value={form.dueAt}
+            />
+          ) : null}
           <label className="field" htmlFor="producto-compra">
             <span>Producto</span>
             <select
@@ -3794,30 +3794,10 @@ function PurchasesSection({
         {productFormVisible ? (
           <div className="inline-purchase-product-form">
             <TextField
-              error={productErrors.sku}
-              label="Codigo producto"
-              onChange={(value) => updateProductField("sku", value)}
-              value={productForm.sku}
-            />
-            <TextField
               error={productErrors.name}
               label="Nombre producto"
               onChange={(value) => updateProductField("name", value)}
               value={productForm.name}
-            />
-            <TextField
-              error={productErrors.cost}
-              inputMode="numeric"
-              label="Costo producto"
-              onChange={(value) => updateProductField("cost", value)}
-              value={productForm.cost}
-            />
-            <TextField
-              error={productErrors.salePrice}
-              inputMode="numeric"
-              label="Precio venta producto"
-              onChange={(value) => updateProductField("salePrice", value)}
-              value={productForm.salePrice}
             />
             <TextField
               error={productErrors.minimumStock}
@@ -6001,6 +5981,7 @@ type TextFieldProps = {
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   label: string;
   onChange: (value: string) => void;
+  readOnly?: boolean | undefined;
   type?: HTMLInputTypeAttribute;
   value: string;
 };
@@ -6010,6 +5991,7 @@ function TextField({
   inputMode,
   label,
   onChange,
+  readOnly = false,
   type = "text",
   value
 }: TextFieldProps) {
@@ -6023,6 +6005,7 @@ function TextField({
         id={id}
         inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
+        readOnly={readOnly}
         type={type}
         value={value}
       />
