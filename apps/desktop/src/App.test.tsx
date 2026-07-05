@@ -1330,7 +1330,6 @@ describe("App navigation", () => {
     render(<App />);
 
     await createSupplierFixture(user, "Distribuidora Sur");
-    await user.type(screen.getByLabelText("Costo unitario"), "2500");
     await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     expect(screen.queryByLabelText("Codigo producto")).toBeNull();
     expect(screen.queryByLabelText("Costo producto")).toBeNull();
@@ -1344,6 +1343,7 @@ describe("App navigation", () => {
       screen.getByRole("option", { name: "Panela unidad" })
     );
     await user.type(screen.getByLabelText("Cantidad compra"), "8");
+    await user.type(screen.getByLabelText("Costo unitario"), "2500");
     await user.click(screen.getByRole("button", { name: "Registrar compra" }));
 
     const purchasesTable = screen.getByRole("table", { name: "Compras registradas" });

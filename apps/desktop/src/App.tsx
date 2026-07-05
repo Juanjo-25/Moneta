@@ -1784,18 +1784,24 @@ export function App() {
     const firstLine = lines[0]!;
 
     setProducts((currentProducts) =>
-      currentProducts.map((product) =>
-        lines.some((line) => line.productId === product.id)
+      currentProducts.map((product) => {
+        const productLines = lines.filter((line) => line.productId === product.id);
+        const latestLine = productLines.at(-1);
+
+        return productLines.length > 0 && latestLine
           ? {
               ...product,
+              costMinor: latestLine.unitCostMinor,
+              salePriceMinor:
+                product.salePriceMinor === 0
+                  ? latestLine.unitCostMinor
+                  : product.salePriceMinor,
               stock:
                 product.stock +
-                lines
-                  .filter((line) => line.productId === product.id)
-                  .reduce((total, line) => total + line.quantity, 0)
+                productLines.reduce((total, line) => total + line.quantity, 0)
             }
-          : product
-      )
+          : product;
+      })
     );
     setPurchases((currentPurchases) => [
       {
@@ -3493,7 +3499,6 @@ function PurchasesSection({
 
   function submitProduct() {
     const nextErrors: PurchaseProductFormErrors = {};
-    const cost = parseNonNegativeInteger(form.unitCost);
     const minimumStock = parseNonNegativeInteger(productForm.minimumStock);
 
     if (productForm.name.trim() === "") {
@@ -3502,30 +3507,20 @@ function PurchasesSection({
     if (minimumStock === null) {
       nextErrors.minimumStock = "El stock minimo debe ser cero o mayor.";
     }
-    if (cost === null) {
-      setErrors((currentErrors) => ({
-        ...currentErrors,
-        unitCost: "El costo unitario debe ser cero o mayor."
-      }));
-    }
 
     setProductErrors(nextErrors);
 
-    if (
-      Object.keys(nextErrors).length > 0 ||
-      cost === null ||
-      minimumStock === null
-    ) {
+    if (Object.keys(nextErrors).length > 0 || minimumStock === null) {
       return;
     }
 
     const product = {
       active: true,
-      costMinor: cost,
+      costMinor: 0,
       id: `product-${Date.now()}`,
       minimumStock,
       name: productForm.name.trim(),
-      salePriceMinor: cost,
+      salePriceMinor: 0,
       sku: nextProductSku,
       stock: 0
     };
