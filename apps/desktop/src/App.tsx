@@ -8,12 +8,26 @@ import {
 } from "react";
 import { EmptyState } from "./components/EmptyState";
 import { SectionHeader } from "./components/SectionHeader";
-import { StatusBadge } from "./components/StatusBadge";
-import { SummaryCard } from "./components/SummaryCard";
 import { TextField } from "./components/TextField";
 import type { InvoicePdfResult } from "./invoice-pdf";
+import { CustomersSection } from "./sections/customers/CustomersSection";
 import { ProductsSection } from "./sections/products/ProductsSection";
-import type { ProductRecord } from "./types";
+import { SuppliersSection } from "./sections/suppliers/SuppliersSection";
+import type {
+  CustomerFormErrors,
+  CustomerFormState,
+  CustomerRecord,
+  CustomerValidationOptions,
+  ProductRecord,
+  ReceivableRecord,
+  SaleRecord,
+  SupplierFormErrors,
+  SupplierFormState,
+  SupplierPayableRecord,
+  SupplierPayableStatus,
+  SupplierPaymentRecord,
+  SupplierRecord
+} from "./types";
 
 type SectionId =
   | "dashboard"
@@ -35,29 +49,6 @@ type SectionConfig = {
   emptyBody: string;
 };
 
-type CustomerRecord = {
-  id: string;
-  name: string;
-  document: string;
-  address: string;
-  active: boolean;
-  city: string;
-  email: string;
-};
-
-type SaleLineRecord = {
-  id: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitCostMinorAtSale: number;
-  unitPriceMinor: number;
-  costMinor: number;
-  marginMinor: number;
-  marginPercent: number;
-  totalMinor: number;
-};
-
 type SaleDraftLine = {
   id: string;
   product: ProductRecord;
@@ -68,44 +59,6 @@ type SaleDraftLine = {
   marginMinor: number;
   marginPercent: number;
   totalMinor: number;
-};
-
-type SaleRecord = {
-  id: string;
-  customer: CustomerRecord;
-  customerId: string;
-  customerName: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitPriceMinor: number;
-  totalMinor: number;
-  lines: SaleLineRecord[];
-  paymentStatus: "paid" | "pending";
-  occurredAtMs: number;
-  occurredAtLabel: string;
-};
-
-type ReceivableRecord = {
-  id: string;
-  customerId: string;
-  customerName: string;
-  saleId: string;
-  amountMinor: number;
-  dueAt: string;
-  status: "pending";
-};
-
-type SupplierRecord = {
-  id: string;
-  active: boolean;
-  address: string;
-  city: string;
-  department: string;
-  document: string;
-  email: string;
-  name: string;
-  phone: string;
 };
 
 type PurchasePaymentStatus = "paid" | "pending";
@@ -145,32 +98,6 @@ type PurchaseRecord = {
   occurredAtLabel: string;
 };
 
-type SupplierPayableStatus = "pending" | "partial" | "paid";
-
-type SupplierPayableRecord = {
-  id: string;
-  supplierId: string;
-  supplierName: string;
-  purchaseId: string;
-  invoiceNumber: string;
-  originalAmountMinor: number;
-  paidAmountMinor: number;
-  balanceMinor: number;
-  dueAt: string;
-  status: SupplierPayableStatus;
-};
-
-type SupplierPaymentRecord = {
-  id: string;
-  payableId: string;
-  purchaseId: string;
-  supplierId: string;
-  supplierName: string;
-  amountMinor: number;
-  paidAtMs: number;
-  paidAtLabel: string;
-};
-
 type SalesFormState = {
   customerId: string;
   dueAt: string;
@@ -193,33 +120,6 @@ type SalesDraftState = {
   form: SalesFormState;
   saleLines: SaleDraftLine[];
 };
-
-type CustomerFormState = {
-  name: string;
-  document: string;
-  address: string;
-  city: string;
-  email: string;
-};
-
-type CustomerFormErrors = Partial<Record<keyof CustomerFormState, string>>;
-
-type CustomerValidationOptions = {
-  customers: CustomerRecord[];
-  currentCustomerId?: string | undefined;
-};
-
-type SupplierFormState = {
-  address: string;
-  city: string;
-  department: string;
-  document: string;
-  email: string;
-  name: string;
-  phone: string;
-};
-
-type SupplierFormErrors = Partial<Record<keyof SupplierFormState, string>>;
 
 type PurchaseFormState = {
   supplierId: string;
@@ -333,133 +233,6 @@ const emptySupplierForm: SupplierFormState = {
   phone: ""
 };
 
-const antioquiaMunicipalities = [
-  "Abejorral",
-  "Abriaqui",
-  "Alejandria",
-  "Amaga",
-  "Amalfi",
-  "Andes",
-  "Angelopolis",
-  "Angostura",
-  "Anori",
-  "Anza",
-  "Apartado",
-  "Arboletes",
-  "Argelia",
-  "Armenia",
-  "Barbosa",
-  "Bello",
-  "Belmira",
-  "Betania",
-  "Betulia",
-  "Briceño",
-  "Buritica",
-  "Caceres",
-  "Caicedo",
-  "Caldas",
-  "Campamento",
-  "Cañasgordas",
-  "Caracoli",
-  "Caramanta",
-  "Carepa",
-  "Carolina del Principe",
-  "Caucasia",
-  "Chigorodo",
-  "Cisneros",
-  "Ciudad Bolivar",
-  "Cocorna",
-  "Concepcion",
-  "Concordia",
-  "Copacabana",
-  "Dabeiba",
-  "Donmatias",
-  "Ebejico",
-  "El Bagre",
-  "El Carmen de Viboral",
-  "El Peñol",
-  "El Retiro",
-  "El Santuario",
-  "Entrerrios",
-  "Envigado",
-  "Fredonia",
-  "Frontino",
-  "Giraldo",
-  "Girardota",
-  "Gomez Plata",
-  "Granada",
-  "Guadalupe",
-  "Guarne",
-  "Guatape",
-  "Heliconia",
-  "Hispania",
-  "Itagui",
-  "Ituango",
-  "Jardin",
-  "Jerico",
-  "La Ceja",
-  "La Estrella",
-  "La Pintada",
-  "La Union",
-  "Liborina",
-  "Maceo",
-  "Marinilla",
-  "Medellin",
-  "Montebello",
-  "Murindo",
-  "Mutata",
-  "Nariño",
-  "Nechi",
-  "Necocli",
-  "Olaya",
-  "Peque",
-  "Pueblorrico",
-  "Puerto Berrio",
-  "Puerto Nare",
-  "Puerto Triunfo",
-  "Remedios",
-  "Rionegro",
-  "Sabanalarga",
-  "Sabaneta",
-  "Salgar",
-  "San Andres de Cuerquia",
-  "San Carlos",
-  "San Francisco",
-  "San Jeronimo",
-  "San Jose de la Montaña",
-  "San Juan de Uraba",
-  "San Luis",
-  "San Pedro de los Milagros",
-  "San Pedro de Uraba",
-  "San Rafael",
-  "San Roque",
-  "San Vicente Ferrer",
-  "Santa Barbara",
-  "Santa Fe de Antioquia",
-  "Santa Rosa de Osos",
-  "Santo Domingo",
-  "Segovia",
-  "Sonson",
-  "Sopetran",
-  "Tamesis",
-  "Taraza",
-  "Tarso",
-  "Titiribi",
-  "Toledo",
-  "Turbo",
-  "Uramita",
-  "Urrao",
-  "Valdivia",
-  "Valparaiso",
-  "Vegachi",
-  "Venecia",
-  "Vigia del Fuerte",
-  "Yali",
-  "Yarumal",
-  "Yolombo",
-  "Yondo",
-  "Zaragoza"
-];
 
 const emptyPurchaseForm: PurchaseFormState = {
   dueAt: "",
@@ -2767,7 +2540,9 @@ function SectionContent({
   if (section.id === "customers") {
     return (
       <CustomersSection
+        buildCustomerSummary={buildCustomerSummary}
         customers={customers}
+        formatCurrency={formatCurrency}
         onCreateCustomer={onCreateCustomer}
         onSetCustomerActive={onSetCustomerActive}
         onUpdateCustomer={onUpdateCustomer}
@@ -2794,9 +2569,15 @@ function SectionContent({
         formVisible={supplierFormVisible}
         onCloseForm={onCloseSupplierForm}
         onCreateSupplier={onCreateSupplier}
-        onRegisterSupplierPayment={onRegisterSupplierPayment}
         onSetSupplierActive={onSetSupplierActive}
         onUpdateSupplier={onUpdateSupplier}
+        renderPayablesTable={({ supplierPayables, tableLabel }) => (
+          <PayablesTable
+            onRegisterSupplierPayment={onRegisterSupplierPayment}
+            supplierPayables={supplierPayables}
+            tableLabel={tableLabel}
+          />
+        )}
         supplierPayables={supplierPayables}
         suppliers={suppliers}
       />
@@ -2822,399 +2603,6 @@ function SectionContent({
         className="section-empty"
         title={section.emptyTitle}
       />
-    </section>
-  );
-}
-
-type CustomersSectionProps = {
-  customers: CustomerRecord[];
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
-  onSetCustomerActive: (customerId: string, active: boolean) => void;
-  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
-  onValidateCustomer: (
-    input: CustomerFormState,
-    currentCustomerId?: string | undefined
-  ) => CustomerFormErrors;
-  receivables: ReceivableRecord[];
-  sales: SaleRecord[];
-};
-
-function CustomersSection({
-  customers,
-  onCreateCustomer,
-  onSetCustomerActive,
-  onUpdateCustomer,
-  onValidateCustomer,
-  receivables,
-  sales
-}: CustomersSectionProps) {
-  const [formVisible, setFormVisible] = useState(false);
-  const [form, setForm] = useState<CustomerFormState>(emptyCustomerForm);
-  const [errors, setErrors] = useState<CustomerFormErrors>({});
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<CustomerFormState>(emptyCustomerForm);
-  const [editErrors, setEditErrors] = useState<CustomerFormErrors>({});
-  const [search, setSearch] = useState("");
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  const filteredCustomers = customers.filter((customer) => {
-    if (normalizedSearch === "") {
-      return true;
-    }
-
-    return [
-      customer.name,
-      customer.document,
-      customer.address,
-      customer.city,
-      customer.email
-    ].some((value) => value.toLocaleLowerCase().includes(normalizedSearch));
-  });
-  const selectedCustomer =
-    filteredCustomers.find((customer) => customer.id === selectedCustomerId) ??
-    customers.find((customer) => customer.id === selectedCustomerId) ??
-    null;
-  const editingCustomer = editingCustomerId === selectedCustomer?.id ? selectedCustomer : null;
-  const selectedCustomerSales = selectedCustomer
-    ? sales.filter((sale) => sale.customerId === selectedCustomer.id)
-    : [];
-  const selectedCustomerReceivables = selectedCustomer
-    ? receivables.filter((receivable) => receivable.customerId === selectedCustomer.id)
-    : [];
-  const selectedCustomerSummary = selectedCustomer
-    ? buildCustomerSummary({ customer: selectedCustomer, receivables, sales })
-    : null;
-
-  function getCustomerFormState(customer: CustomerRecord): CustomerFormState {
-    return {
-      address: customer.address,
-      city: customer.city,
-      document: customer.document,
-      email: customer.email,
-      name: customer.name
-    };
-  }
-
-  function updateField(field: keyof CustomerFormState, value: string) {
-    setForm((currentForm) => ({ ...currentForm, [field]: value }));
-    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
-  }
-
-  function updateEditField(field: keyof CustomerFormState, value: string) {
-    setEditForm((currentForm) => ({ ...currentForm, [field]: value }));
-    setEditErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
-  }
-
-  function selectCustomer(customer: CustomerRecord) {
-    setSelectedCustomerId(customer.id);
-    setEditingCustomerId(null);
-    setEditForm(getCustomerFormState(customer));
-    setEditErrors({});
-    setFormVisible(false);
-  }
-
-  function startEditingCustomer(customer: CustomerRecord) {
-    setEditingCustomerId(customer.id);
-    setEditForm(getCustomerFormState(customer));
-    setEditErrors({});
-  }
-
-  function submitCustomer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const nextErrors = onValidateCustomer(form);
-
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    onCreateCustomer(form);
-    setForm(emptyCustomerForm);
-    setErrors({});
-    setFormVisible(false);
-  }
-
-  function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!editingCustomer) {
-      return;
-    }
-
-    const nextErrors = onValidateCustomer(editForm, editingCustomer.id);
-
-    setEditErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    onUpdateCustomer(editingCustomer.id, editForm);
-    setEditErrors({});
-    setEditingCustomerId(null);
-  }
-
-  return (
-    <section className="customers-layout">
-      <div className="customers-toolbar">
-        <TextField
-          label="Buscar clientes"
-          onChange={setSearch}
-          value={search}
-        />
-        <button
-          className="primary-action"
-          onClick={() => {
-            setFormVisible((visible) => !visible);
-            setEditingCustomerId(null);
-            setEditErrors({});
-          }}
-          type="button"
-        >
-          Nuevo cliente
-        </button>
-      </div>
-
-      {formVisible ? (
-        <form className="customer-form" onSubmit={submitCustomer}>
-          <div className="form-grid">
-            <TextField
-              error={errors.name}
-              label="Nombre o razon social"
-              onChange={(value) => updateField("name", value)}
-              value={form.name}
-            />
-            <TextField
-              error={errors.document}
-              label="NIT o C.C."
-              onChange={(value) => updateField("document", value)}
-              value={form.document}
-            />
-            <TextField
-              error={errors.address}
-              label="Direccion"
-              onChange={(value) => updateField("address", value)}
-              value={form.address}
-            />
-            <TextField
-              error={errors.city}
-              label="Ciudad"
-              onChange={(value) => updateField("city", value)}
-              value={form.city}
-            />
-            <TextField
-              error={errors.email}
-              label="Email"
-              onChange={(value) => updateField("email", value)}
-              value={form.email}
-            />
-          </div>
-          <div className="form-actions">
-            <button type="submit">Guardar cliente</button>
-          </div>
-        </form>
-      ) : null}
-
-      {customers.length === 0 ? (
-        <EmptyState
-          body="Crea clientes para ventas y cartera."
-          className="section-empty"
-          title="Sin clientes registrados"
-        />
-      ) : filteredCustomers.length === 0 ? (
-        <EmptyState
-          body="Ajusta la busqueda para ver mas clientes."
-          className="section-empty"
-          title="Sin resultados"
-        />
-      ) : (
-        <table className="data-table" aria-label="Clientes registrados">
-          <thead>
-            <tr>
-              <th>Cliente</th>
-              <th>Documento</th>
-              <th>Estado</th>
-              <th>Total vendido</th>
-              <th>Cartera</th>
-              <th>Ultima venta</th>
-              <th>Accion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredCustomers.map((customer) => {
-              const summary = buildCustomerSummary({ customer, receivables, sales });
-
-              return (
-                <tr key={customer.id}>
-                  <td>{customer.name}</td>
-                  <td>{customer.document}</td>
-                  <td>{customer.active ? "Activo" : "Inactivo"}</td>
-                  <td>{formatCurrency(summary.totalSoldMinor)}</td>
-                  <td>{formatCurrency(summary.pendingReceivableMinor)}</td>
-                  <td>{summary.lastSaleLabel}</td>
-                  <td>
-                    <button
-                      className="table-action"
-                      onClick={() => selectCustomer(customer)}
-                      type="button"
-                    >
-                      Ver cliente {customer.name}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-
-      {selectedCustomer ? (
-        <section className="customer-file" aria-label="Ficha de cliente">
-          <div className="section-heading">
-            <div>
-              <h2>{selectedCustomer.name}</h2>
-              <p>{selectedCustomer.document}</p>
-              <StatusBadge
-                tone={selectedCustomer.active ? "active" : "inactive"}
-                variant="pill"
-              >
-                {selectedCustomer.active ? "Activo" : "Inactivo"}
-              </StatusBadge>
-            </div>
-            <div className="form-actions">
-              <button
-                className="table-action"
-                onClick={() => startEditingCustomer(selectedCustomer)}
-                type="button"
-              >
-                Editar cliente
-              </button>
-              <button
-                className="table-action"
-                onClick={() =>
-                  onSetCustomerActive(selectedCustomer.id, !selectedCustomer.active)
-                }
-                type="button"
-              >
-                {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}
-              </button>
-            </div>
-          </div>
-
-          {editingCustomer ? (
-            <form className="customer-form" onSubmit={submitCustomerEdit}>
-              <div className="form-grid">
-                <TextField
-                  error={editErrors.name}
-                  label="Nombre o razon social"
-                  onChange={(value) => updateEditField("name", value)}
-                  value={editForm.name}
-                />
-                <TextField
-                  error={editErrors.document}
-                  label="NIT o C.C."
-                  onChange={(value) => updateEditField("document", value)}
-                  value={editForm.document}
-                />
-                <TextField
-                  error={editErrors.address}
-                  label="Direccion"
-                  onChange={(value) => updateEditField("address", value)}
-                  value={editForm.address}
-                />
-                <TextField
-                  error={editErrors.city}
-                  label="Ciudad"
-                  onChange={(value) => updateEditField("city", value)}
-                  value={editForm.city}
-                />
-                <TextField
-                  error={editErrors.email}
-                  label="Email"
-                  onChange={(value) => updateEditField("email", value)}
-                  value={editForm.email}
-                />
-              </div>
-              <div className="form-actions">
-                <button type="submit">Guardar cambios</button>
-              </div>
-            </form>
-          ) : null}
-
-          {selectedCustomerSummary ? (
-            <div className="customer-summary" aria-label="Resumen del cliente">
-              <SummaryCard
-                label="Total vendido"
-                value={formatCurrency(selectedCustomerSummary.totalSoldMinor)}
-              />
-              <SummaryCard
-                label="Ventas"
-                value={selectedCustomerSummary.saleCount}
-              />
-              <SummaryCard
-                label="Cartera pendiente"
-                value={formatCurrency(selectedCustomerSummary.pendingReceivableMinor)}
-              />
-              <SummaryCard
-                label="Ultima venta"
-                value={selectedCustomerSummary.lastSaleLabel}
-              />
-            </div>
-          ) : null}
-
-          {selectedCustomerSales.length > 0 ? (
-            <table className="data-table" aria-label="Historial de ventas del cliente">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Producto</th>
-                  <th>Estado</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedCustomerSales.map((sale) => (
-                  <tr key={sale.id}>
-                    <td>{sale.occurredAtLabel}</td>
-                    <td>{sale.productName}</td>
-                    <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
-                    <td>{formatCurrency(sale.totalMinor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <EmptyState
-              body="Las ventas apareceran cuando se registren movimientos."
-              className="section-empty"
-              title="Sin ventas del cliente"
-            />
-          )}
-
-          {selectedCustomerReceivables.length > 0 ? (
-            <table className="data-table" aria-label="Cartera pendiente del cliente">
-              <thead>
-                <tr>
-                  <th>Venta</th>
-                  <th>Vencimiento</th>
-                  <th>Saldo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedCustomerReceivables.map((receivable) => (
-                  <tr key={receivable.id}>
-                    <td>{receivable.saleId}</td>
-                    <td>{receivable.dueAt || "Sin vencimiento"}</td>
-                    <td>{formatCurrency(receivable.amountMinor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-        </section>
-      ) : null}
     </section>
   );
 }
@@ -3742,20 +3130,6 @@ function PurchasesSection({
   );
 }
 
-type SuppliersSectionProps = {
-  formVisible: boolean;
-  onCloseForm: () => void;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
-  onRegisterSupplierPayment: (input: {
-    payableId: string;
-    amountMinor: number;
-  }) => void;
-  onSetSupplierActive: (supplierId: string, active: boolean) => void;
-  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
-  supplierPayables: SupplierPayableRecord[];
-  suppliers: SupplierRecord[];
-};
-
 function formatPayableStatus(status: SupplierPayableStatus): string {
   if (status === "paid") {
     return "Pagada";
@@ -3764,222 +3138,6 @@ function formatPayableStatus(status: SupplierPayableStatus): string {
   return status === "partial" ? "Abonada" : "Pendiente";
 }
 
-function SuppliersSection({
-  formVisible,
-  onCloseForm,
-  onCreateSupplier,
-  onRegisterSupplierPayment,
-  onSetSupplierActive,
-  onUpdateSupplier,
-  supplierPayables,
-  suppliers
-}: SuppliersSectionProps) {
-  const [form, setForm] = useState<SupplierFormState>(emptySupplierForm);
-  const [errors, setErrors] = useState<SupplierFormErrors>({});
-  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
-  const editingSupplier =
-    suppliers.find((supplier) => supplier.id === editingSupplierId) ?? null;
-
-  function getSupplierFormState(supplier: SupplierRecord): SupplierFormState {
-    return {
-      address: supplier.address,
-      city: supplier.city,
-      department: supplier.department,
-      document: supplier.document,
-      email: supplier.email,
-      name: supplier.name,
-      phone: supplier.phone
-    };
-  }
-
-  function updateField(field: keyof SupplierFormState, value: string) {
-    setForm((currentForm) => {
-      if (field === "department") {
-        return {
-          ...currentForm,
-          department: value,
-          city: value.trim() !== "Antioquia" ? "" : currentForm.city
-        };
-      }
-
-      return { ...currentForm, [field]: value };
-    });
-    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
-  }
-
-  function startEditingSupplier(supplier: SupplierRecord) {
-    setEditingSupplierId(supplier.id);
-    setForm(getSupplierFormState(supplier));
-    setErrors({});
-  }
-
-  function submitSupplier(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const nextErrors: SupplierFormErrors = {};
-
-    if (form.name.trim() === "") {
-      nextErrors.name = "El nombre del proveedor es obligatorio.";
-    }
-
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    if (editingSupplier) {
-      onUpdateSupplier(editingSupplier.id, form);
-      setEditingSupplierId(null);
-    } else {
-      onCreateSupplier(form);
-      onCloseForm();
-    }
-
-    setForm(emptySupplierForm);
-    setErrors({});
-  }
-
-  return (
-    <section className="suppliers-layout">
-      {formVisible || editingSupplier ? (
-        <form className="customer-form" onSubmit={submitSupplier}>
-          <div className="form-grid">
-            <TextField
-              error={errors.name}
-              label="Nombre proveedor"
-              onChange={(value) => updateField("name", value)}
-              value={form.name}
-            />
-            <TextField
-              error={errors.document}
-              label="NIT o C.C. proveedor"
-              onChange={(value) => updateField("document", value)}
-              value={form.document}
-            />
-            <TextField
-              error={errors.phone}
-              label="Telefono proveedor"
-              onChange={(value) => updateField("phone", value)}
-              value={form.phone}
-            />
-            <TextField
-              error={errors.email}
-              label="Email proveedor"
-              onChange={(value) => updateField("email", value)}
-              value={form.email}
-            />
-            <TextField
-              error={errors.address}
-              label="Direccion proveedor"
-              onChange={(value) => updateField("address", value)}
-              value={form.address}
-            />
-            <TextField
-              error={errors.department}
-              label="Departamento"
-              onChange={(value) => updateField("department", value)}
-              value={form.department}
-            />
-            {form.department.trim() === "Antioquia" ? (
-              <label className="field" htmlFor="municipio-proveedor">
-                <span>Municipio</span>
-                <select
-                  id="municipio-proveedor"
-                  onChange={(event) => updateField("city", event.target.value)}
-                  value={form.city}
-                >
-                  <option value="">Selecciona un municipio</option>
-                  {antioquiaMunicipalities.map((municipality) => (
-                    <option key={municipality} value={municipality}>
-                      {municipality}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <TextField
-                error={errors.city}
-                label="Municipio"
-                onChange={(value) => updateField("city", value)}
-                value={form.city}
-              />
-            )}
-          </div>
-          <div className="form-actions">
-            <button type="submit">
-              {editingSupplier ? "Guardar cambios proveedor" : "Guardar proveedor"}
-            </button>
-          </div>
-        </form>
-      ) : null}
-
-      {suppliers.length > 0 ? (
-        <table className="data-table" aria-label="Proveedores registrados">
-          <thead>
-            <tr>
-              <th>Proveedor</th>
-              <th>Documento</th>
-              <th>Telefono</th>
-              <th>Email</th>
-              <th>Departamento</th>
-              <th>Municipio</th>
-              <th>Estado</th>
-              <th>Accion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {suppliers.map((supplier) => (
-              <tr key={supplier.id}>
-                <td>{supplier.name}</td>
-                <td>{supplier.document || "Sin documento"}</td>
-                <td>{supplier.phone || "Sin telefono"}</td>
-                <td>{supplier.email || "Sin email"}</td>
-                <td>{supplier.department || "Antioquia"}</td>
-                <td>{supplier.city || "Sin municipio"}</td>
-                <td>{supplier.active ? "Activo" : "Inactivo"}</td>
-                <td>
-                  <button
-                    className="table-action"
-                    onClick={() => startEditingSupplier(supplier)}
-                    type="button"
-                  >
-                    Editar proveedor {supplier.name}
-                  </button>
-                  <button
-                    className="table-action"
-                    onClick={() => onSetSupplierActive(supplier.id, !supplier.active)}
-                    type="button"
-                  >
-                    {supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin proveedores registrados</strong>
-          <span>Crea proveedores para asociarlos a tus compras.</span>
-        </div>
-      )}
-
-      {supplierPayables.length > 0 ? (
-        <PayablesTable
-          onRegisterSupplierPayment={onRegisterSupplierPayment}
-          supplierPayables={supplierPayables}
-          tableLabel="Cuentas por pagar"
-        />
-      ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin cuentas por pagar</strong>
-          <span>Las facturas pendientes de proveedor apareceran aqui.</span>
-        </div>
-      )}
-    </section>
-  );
-}
 
 type CarteraView = "receivables" | "payables";
 
