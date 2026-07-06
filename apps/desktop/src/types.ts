@@ -1,3 +1,23 @@
+export type SectionId =
+  | "dashboard"
+  | "products"
+  | "purchases"
+  | "sales"
+  | "customers"
+  | "suppliers"
+  | "receivables"
+  | "reports";
+
+export type SectionConfig = {
+  id: SectionId;
+  label: string;
+  title: string;
+  description: string;
+  primaryAction?: string | undefined;
+  emptyTitle: string;
+  emptyBody: string;
+};
+
 export type ProductRecord = {
   id: string;
   sku: string;
