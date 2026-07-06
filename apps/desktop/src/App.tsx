@@ -4,6 +4,11 @@ import {
   useState
 } from "react";
 import { SectionHeader } from "./components/SectionHeader";
+import {
+  formatCurrency,
+  formatIntegerInput,
+  parseNonNegativeInteger
+} from "./lib/formatters";
 import { SectionContent } from "./sections/SectionContent";
 import { DashboardContent } from "./sections/dashboard/DashboardContent";
 import {
@@ -137,46 +142,6 @@ const navigationItems: SectionConfig[] = [
 const sidebarNavigationItems = navigationItems.filter(
   (item) => item.id !== "dashboard"
 );
-
-function stripNonDigits(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-function parseNonNegativeInteger(value: string): number | null {
-  const digits = stripNonDigits(value);
-
-  if (digits === "") {
-    return null;
-  }
-
-  const parsed = Number(digits);
-
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    return null;
-  }
-
-  return parsed;
-}
-
-function formatIntegerInput(value: string): string {
-  const digits = stripNonDigits(value);
-
-  if (digits === "") {
-    return "";
-  }
-
-  return new Intl.NumberFormat("es-CO", {
-    maximumFractionDigits: 0
-  }).format(Number(digits));
-}
-
-function formatCurrency(minor: number): string {
-  return new Intl.NumberFormat("es-CO", {
-    currency: "COP",
-    maximumFractionDigits: 0,
-    style: "currency"
-  }).format(minor);
-}
 
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
