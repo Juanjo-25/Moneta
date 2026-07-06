@@ -73,6 +73,35 @@ export type ReceivableRecord = {
   status: "pending";
 };
 
+export type PurchasePaymentStatus = "paid" | "pending";
+
+export type PurchaseLineRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+};
+
+export type PurchaseRecord = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  dueAt: string;
+  occurredAtMs: number;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+  lines: PurchaseLineRecord[];
+  paymentStatus: PurchasePaymentStatus;
+  occurredAtLabel: string;
+};
+
 export type SupplierRecord = {
   id: string;
   active: boolean;
