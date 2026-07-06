@@ -653,23 +653,23 @@ export function ReportsSection({
   function renderProfitabilitySummary() {
     return (
       <div className="cartera-summary" aria-label="Resumen rentabilidad general">
-        <div className="summary-card">
+        <div className="summary-card summary-card-compact">
           <span>Ingresos totales</span>
           <strong>{formatCurrency(summary.revenueMinor)}</strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card-compact">
           <span>Costo de ventas</span>
           <strong>{formatCurrency(summary.costMinor)}</strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card-compact">
           <span>Margen bruto</span>
           <strong>{formatCurrency(summary.marginMinor)}</strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card-compact">
           <span>Margen neto</span>
           <strong>{formatCurrency(netMarginMinor)}</strong>
         </div>
-        <div className="summary-card">
+        <div className="summary-card summary-card-compact">
           <span>% margen</span>
           <strong>{formatPercent(summary.marginPercent)}</strong>
         </div>
@@ -723,19 +723,19 @@ export function ReportsSection({
         {renderReportTabs()}
         <section className="reports-summary-shell" aria-label="Resumen del reporte">
           <div className="cartera-summary" aria-label="Resumen DSO">
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>DSO global</span>
               <strong>{formatDays(dsoSummary.dsoDays)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Cartera abierta</span>
               <strong>{formatCurrency(dsoSummary.activeReceivablesMinor)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Clientes con saldo</span>
               <strong>{String(dsoSummary.clientCount)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Facturas abiertas</span>
               <strong>{String(dsoSummary.openInvoiceCount)}</strong>
             </div>
@@ -790,19 +790,19 @@ export function ReportsSection({
         {renderReportTabs()}
         <section className="reports-summary-shell" aria-label="Resumen del reporte">
           <div className="cartera-summary" aria-label="Resumen flujo de caja">
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Entradas reales</span>
               <strong>{formatCurrency(cashflowSummary.realInflowMinor)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Salidas reales</span>
               <strong>{formatCurrency(cashflowSummary.realOutflowMinor)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Flujo neto real</span>
               <strong>{formatCurrency(cashflowSummary.realNetMinor)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Flujo neto proyectado</span>
               <strong>{formatCurrency(cashflowSummary.projectedNetMinor)}</strong>
             </div>
@@ -895,21 +895,21 @@ export function ReportsSection({
         {renderReportTabs()}
         <section className="reports-summary-shell" aria-label="Resumen del reporte">
           <div className="cartera-summary" aria-label="Resumen utilidades">
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Utilidad total</span>
               <strong>{formatCurrency(utilitySummary.totalMarginMinor)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Promedio por periodo</span>
               <strong>{formatCurrency(utilitySummary.averageMarginMinor)}</strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Mejor periodo</span>
               <strong>
                 {utilitySummary.bestPeriodLabel} · {formatCurrency(utilitySummary.bestPeriodMarginMinor)}
               </strong>
             </div>
-            <div className="summary-card">
+            <div className="summary-card summary-card-compact">
               <span>Peor periodo</span>
               <strong>
                 {utilitySummary.worstPeriodLabel} · {formatCurrency(utilitySummary.worstPeriodMarginMinor)}
@@ -1245,23 +1245,23 @@ export function ReportsSection({
 
           <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
             <div className="report-sale-summary">
-              <div className="summary-card">
+              <div className="summary-card summary-card-compact">
                 <span>Cliente</span>
                 <strong>{selectedSale.customerName}</strong>
               </div>
-              <div className="summary-card">
+              <div className="summary-card summary-card-compact">
                 <span>Venta total</span>
                 <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
               </div>
-              <div className="summary-card">
+              <div className="summary-card summary-card-compact">
                 <span>Costo total</span>
                 <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
               </div>
-              <div className="summary-card">
+              <div className="summary-card summary-card-compact">
                 <span>Margen total</span>
                 <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
               </div>
-              <div className="summary-card">
+              <div className="summary-card summary-card-compact">
                 <span>% margen</span>
                 <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
               </div>

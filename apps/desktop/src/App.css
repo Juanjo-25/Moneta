@@ -961,6 +961,23 @@ button {
   font-size: 18px;
 }
 
+.summary-card-compact {
+  margin-top: 0;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.summary-card-compact span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.summary-card-compact strong {
+  font-size: 16px;
+}
+
 .cartera-dashboard {
   display: grid;
   gap: 18px;
@@ -1182,23 +1199,6 @@ button {
   gap: 12px;
 }
 
-.reports-summary-shell .summary-card {
-  margin-top: 0;
-  background: #f8fafc;
-  padding: 12px 14px;
-}
-
-.reports-summary-shell .summary-card span {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.reports-summary-shell .summary-card strong {
-  font-size: 16px;
-}
-
 .report-panel-single {
   max-width: 960px;
 }
@@ -1336,11 +1336,6 @@ button {
 
 .report-sale-summary-shell .report-sale-summary {
   gap: 12px;
-}
-
-.report-sale-summary-shell .summary-card {
-  margin-top: 0;
-  background: #f8fafc;
 }
 
 .report-chart-detail {

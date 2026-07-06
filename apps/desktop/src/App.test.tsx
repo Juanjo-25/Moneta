@@ -663,6 +663,7 @@ describe("App navigation", () => {
     const summary = screen.getByLabelText("Resumen rentabilidad general");
     const grossMarginCard = within(summary).getByText("Margen bruto").closest(".summary-card");
     expect(grossMarginCard).toBeTruthy();
+    expect((grossMarginCard as HTMLElement).className).toContain("summary-card-compact");
     expect(within(grossMarginCard as HTMLElement).getByText(/\$\s*2\.600/)).toBeTruthy();
     expect(screen.getByLabelText("Grafico cascada de utilidad")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Detalle margen por producto" })).toBeNull();
@@ -1102,6 +1103,7 @@ describe("App navigation", () => {
     ).toBeTruthy();
     const saleSummary = screen.getByText("Margen total").closest(".summary-card");
     expect(saleSummary).toBeTruthy();
+    expect((saleSummary as HTMLElement).className).toContain("summary-card-compact");
     expect(within(saleSummary as HTMLElement).getByText(/\$\s*3\.300/)).toBeTruthy();
 
     const detailTable = screen.getByRole("table", { name: "Detalle margen por producto de la venta" });
