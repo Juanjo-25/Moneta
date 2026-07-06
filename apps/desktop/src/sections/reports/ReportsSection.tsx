@@ -1016,7 +1016,7 @@ export function ReportsSection({
           {renderProfitabilitySummary()}
         </section>
 
-        <section className="report-detail-panel">
+        <section className="report-detail-panel report-detail-panel-primary" aria-label="Insight principal del reporte">
           <div className="report-detail-header">
             <button className="table-action" onClick={() => setDetailView(null)} type="button">
               Volver a resumen
@@ -1082,7 +1082,7 @@ export function ReportsSection({
           {renderProfitabilitySummary()}
         </section>
 
-        <section className="report-detail-panel">
+        <section className="report-detail-panel report-detail-panel-primary" aria-label="Insight principal del reporte">
           <div className="report-detail-header">
             <button className="table-action" onClick={() => setDetailView(null)} type="button">
               Volver a resumen
@@ -1148,7 +1148,7 @@ export function ReportsSection({
           {renderProfitabilitySummary()}
         </section>
 
-        <section className="report-detail-panel">
+        <section className="report-detail-panel report-detail-panel-primary" aria-label="Insight principal del reporte">
           <div className="report-detail-header">
             <button className="table-action" onClick={() => setDetailView(null)} type="button">
               Volver a resumen
@@ -1223,7 +1223,7 @@ export function ReportsSection({
           {renderProfitabilitySummary()}
         </section>
 
-        <section className="report-detail-panel">
+        <section className="report-detail-panel report-detail-panel-primary" aria-label="Insight principal del reporte">
           <div className="report-detail-header">
             <button
               className="table-action"
@@ -1243,28 +1243,30 @@ export function ReportsSection({
             </div>
           </div>
 
-          <div className="report-sale-summary">
-            <div className="summary-card">
-              <span>Cliente</span>
-              <strong>{selectedSale.customerName}</strong>
+          <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
+            <div className="report-sale-summary">
+              <div className="summary-card">
+                <span>Cliente</span>
+                <strong>{selectedSale.customerName}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Venta total</span>
+                <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Costo total</span>
+                <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
+              </div>
+              <div className="summary-card">
+                <span>Margen total</span>
+                <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
+              </div>
+              <div className="summary-card">
+                <span>% margen</span>
+                <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
+              </div>
             </div>
-            <div className="summary-card">
-              <span>Venta total</span>
-              <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
-            </div>
-            <div className="summary-card">
-              <span>Costo total</span>
-              <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
-            </div>
-            <div className="summary-card">
-              <span>Margen total</span>
-              <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
-            </div>
-            <div className="summary-card">
-              <span>% margen</span>
-              <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
-            </div>
-          </div>
+          </section>
 
           <table className="data-table" aria-label="Detalle margen por producto de la venta">
             <thead>

@@ -1088,6 +1088,18 @@ describe("App navigation", () => {
 
     expect(screen.getByRole("heading", { name: "Margen por venta" })).toBeTruthy();
     expect(screen.getByText("Cliente Mixto")).toBeTruthy();
+    const reportSummary = screen.getByRole("region", { name: "Resumen del reporte" });
+    const primaryInsight = screen.getByRole("region", { name: "Insight principal del reporte" });
+    const detailContext = screen.getByRole("region", { name: "Contexto del detalle" });
+    expect(
+      reportSummary.compareDocumentPosition(primaryInsight) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      detailContext.compareDocumentPosition(
+        screen.getByRole("table", { name: "Detalle margen por producto de la venta" })
+      ) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
     const saleSummary = screen.getByText("Margen total").closest(".summary-card");
     expect(saleSummary).toBeTruthy();
     expect(within(saleSummary as HTMLElement).getByText(/\$\s*3\.300/)).toBeTruthy();

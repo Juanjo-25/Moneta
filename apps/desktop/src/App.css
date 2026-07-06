@@ -1334,6 +1334,15 @@ button {
   gap: 14px;
 }
 
+.report-sale-summary-shell .report-sale-summary {
+  gap: 12px;
+}
+
+.report-sale-summary-shell .summary-card {
+  margin-top: 0;
+  background: #f8fafc;
+}
+
 .report-chart-detail {
   padding: 18px;
   border: 1px solid #d8dee5;
