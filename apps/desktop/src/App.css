@@ -1128,6 +1128,15 @@ button {
   gap: 18px;
 }
 
+.reports-nav-group,
+.reports-summary-shell {
+  display: grid;
+}
+
+.reports-nav-group-secondary {
+  margin-top: -6px;
+}
+
 .reports-submenu {
   display: flex;
   flex-wrap: wrap;
@@ -1144,7 +1153,7 @@ button {
   border-radius: 6px;
   background: transparent;
   color: #475569;
-  padding: 10px 16px;
+  padding: 9px 14px;
   font-weight: 600;
 }
 
@@ -1167,6 +1176,27 @@ button {
   border-radius: 8px;
   background: #ffffff;
   padding: 18px;
+}
+
+.reports-summary-shell .cartera-summary {
+  gap: 12px;
+}
+
+.reports-summary-shell .summary-card {
+  margin-top: 0;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.reports-summary-shell .summary-card span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reports-summary-shell .summary-card strong {
+  font-size: 16px;
 }
 
 .report-panel-single {
@@ -1265,6 +1295,15 @@ button {
   border-radius: 8px;
   background: #ffffff;
   padding: 18px;
+}
+
+.report-detail-panel-primary {
+  padding: 22px;
+  gap: 22px;
+}
+
+.report-detail-panel-primary .report-detail-header h2 {
+  font-size: 22px;
 }
 
 .report-placeholder-panel {
