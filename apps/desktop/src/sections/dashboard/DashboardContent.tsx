@@ -72,7 +72,10 @@ export function DashboardContent({
 
   return (
     <>
-      <section className="metric-grid" aria-label="Indicadores">
+      <section
+        className="metric-grid dashboard-metric-grid"
+        aria-label="Resumen analitico"
+      >
         {metrics.map((metric) => (
           <article className="metric-card" key={metric.label}>
             <span>{metric.label}</span>
@@ -81,10 +84,16 @@ export function DashboardContent({
         ))}
       </section>
 
-      <section className="dashboard-chart-grid" aria-label="Graficos del negocio">
-        <div className="panel dashboard-chart-panel dashboard-chart-panel-wide">
+      <section
+        className="dashboard-primary-analysis"
+        aria-label="Analisis principal"
+      >
+        <div className="panel dashboard-chart-panel dashboard-hero-panel">
           <div className="panel-header">
-            <h2>Ventas diarias</h2>
+            <div className="dashboard-hero-copy">
+              <span>Tendencia principal</span>
+              <h2>Ventas diarias</h2>
+            </div>
             <button onClick={onOpenReports}>Ver todo</button>
           </div>
           <div className="dashboard-period-controls">
@@ -126,7 +135,12 @@ export function DashboardContent({
             series={dailySalesSeries}
           />
         </div>
+      </section>
 
+      <section
+        className="dashboard-chart-grid dashboard-secondary-analysis"
+        aria-label="Analisis secundario"
+      >
         <div className="panel dashboard-chart-panel">
           <div className="panel-header">
             <h2>Ventas por mes</h2>
@@ -155,8 +169,10 @@ export function DashboardContent({
             rows={customerRows}
           />
         </div>
+      </section>
 
-        <div className="panel">
+      <section className="dashboard-operational-grid" aria-label="Alertas operativas">
+        <div className="panel dashboard-operational-panel">
           <div className="panel-header">
             <h2>Inventario bajo</h2>
             <button onClick={onOpenProducts}>Revisar</button>

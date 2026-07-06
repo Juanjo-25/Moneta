@@ -281,6 +281,46 @@ describe("App navigation", () => {
     expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 
+  it("renders the dashboard with analytical hierarchy", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+
+    const analyticsSummary = screen.getByRole("region", { name: "Resumen analitico" });
+    const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
+    const secondaryAnalysis = screen.getByRole("region", { name: "Analisis secundario" });
+    const operationalAlerts = screen.getByRole("region", { name: "Alertas operativas" });
+
+    expect(
+      analyticsSummary.compareDocumentPosition(primaryAnalysis) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      primaryAnalysis.compareDocumentPosition(secondaryAnalysis) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      secondaryAnalysis.compareDocumentPosition(operationalAlerts) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
   it("registers a pending sale, decreases stock, and exposes receivable data", async () => {
     const user = userEvent.setup();
 

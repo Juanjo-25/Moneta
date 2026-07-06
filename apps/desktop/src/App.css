@@ -136,6 +136,10 @@ button {
   margin-bottom: 20px;
 }
 
+.dashboard-metric-grid {
+  margin-bottom: 26px;
+}
+
 .metric-card,
 .panel {
   border: 1px solid #d8dee5;
@@ -146,16 +150,21 @@ button {
 .metric-card {
   display: grid;
   gap: 10px;
-  padding: 18px;
+  padding: 16px;
+  background: #f8fafc;
 }
 
 .metric-card span {
-  color: #64748b;
-  font-size: 14px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .metric-card strong {
-  font-size: 26px;
+  color: #0f172a;
+  font-size: 23px;
 }
 
 .content-grid,
@@ -167,6 +176,16 @@ button {
 
 .dashboard-chart-grid {
   align-items: stretch;
+}
+
+.dashboard-primary-analysis,
+.dashboard-operational-grid {
+  display: grid;
+  margin-bottom: 22px;
+}
+
+.dashboard-secondary-analysis {
+  margin-bottom: 22px;
 }
 
 .panel {
@@ -184,11 +203,18 @@ button {
   grid-column: span 2;
 }
 
+.dashboard-hero-panel {
+  min-height: 360px;
+  padding: 22px;
+  gap: 18px;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24px;
+  gap: 16px;
 }
 
 .panel-header h2 {
@@ -196,11 +222,33 @@ button {
   font-size: 18px;
 }
 
+.dashboard-hero-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-hero-copy span {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-hero-copy h2 {
+  font-size: 22px;
+}
+
 .panel-header button {
   border-radius: 8px;
   background: #eef2f7;
   color: #334155;
   padding: 8px 12px;
+}
+
+.dashboard-operational-panel {
+  min-height: 0;
+  background: #fcfcfd;
 }
 
 .empty-state {
@@ -233,6 +281,7 @@ button {
   grid-template-columns: repeat(2, minmax(180px, 240px));
   gap: 14px;
   align-items: end;
+  margin-bottom: 4px;
 }
 
 .dashboard-series-legend {
@@ -739,18 +788,18 @@ button {
 .alert-list li {
   display: grid;
   gap: 4px;
-  border: 1px solid #fecaca;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: #fff7f7;
+  background: #ffffff;
   padding: 14px;
 }
 
 .alert-list strong {
-  color: #7f1d1d;
+  color: #0f172a;
 }
 
 .alert-list span {
-  color: #991b1b;
+  color: #64748b;
 }
 
 .sales-layout {
