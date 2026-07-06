@@ -2,6 +2,7 @@ import { useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
 import { PayablesTable } from "../../components/PayablesTable";
 import { SummaryCard } from "../../components/SummaryCard";
+import type { DueMetadata } from "../../lib/dates";
 import type {
   ReceivableRecord,
   SupplierPayableRecord,
@@ -9,12 +10,6 @@ import type {
 } from "../../types";
 
 type CarteraView = "receivables" | "payables";
-
-type DueMetadata = {
-  alert: "overdue" | "upcoming" | "current" | "none";
-  alertLabel: string;
-  bucketLabel: string;
-};
 
 type CarteraAlertItem = {
   id: string;

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { EmptyState } from "./EmptyState";
 import { TextField } from "./TextField";
+import type { DueMetadata } from "../lib/dates";
 import type { SupplierPayableRecord, SupplierPayableStatus } from "../types";
 
 type SupplierPaymentFormState = {
@@ -10,11 +11,6 @@ type SupplierPaymentFormState = {
 
 type SupplierPaymentFormErrors = {
   amount?: string | undefined;
-};
-
-type DueMetadata = {
-  alertLabel: string;
-  bucketLabel: string;
 };
 
 type PayablesTableProps = {

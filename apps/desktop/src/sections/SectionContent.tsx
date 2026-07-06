@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { EmptyState } from "../components/EmptyState";
 import { PayablesTable } from "../components/PayablesTable";
+import type { DueMetadata } from "../lib/dates";
 import { CarteraDashboardSection } from "./cartera/CarteraDashboardSection";
 import { CustomersSection } from "./customers/CustomersSection";
 import { ProductsSection } from "./products/ProductsSection";
@@ -27,12 +28,6 @@ import type {
   SupplierPaymentRecord,
   SupplierRecord
 } from "../types";
-
-type DueMetadata = {
-  alert: "overdue" | "upcoming" | "current" | "none";
-  alertLabel: string;
-  bucketLabel: string;
-};
 
 type CustomerSummary = {
   lastSaleLabel: string;
