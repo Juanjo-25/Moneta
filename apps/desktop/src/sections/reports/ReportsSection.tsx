@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { parseLocalDate } from "../../lib/dates";
 import type {
   PurchaseRecord,
   ReceivableRecord,
@@ -151,40 +152,6 @@ function formatLocalDateLabel(value: string): string {
   }
 
   return formatDateLabel(parsed);
-}
-
-function parseLocalDate(value: string): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return null;
-  }
-
-  const parts = value.split("-").map(Number);
-
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  const [year, month, day] = parts;
-
-  if (
-    year === undefined ||
-    month === undefined ||
-    day === undefined
-  ) {
-    return null;
-  }
-
-  const parsed = new Date(year, month - 1, day);
-
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return parsed;
 }
 
 function buildMarginSummary(sales: SaleRecord[]): MarginSummary {
