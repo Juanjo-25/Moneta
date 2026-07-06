@@ -4,11 +4,16 @@ import {
   useState,
   type Dispatch,
   type FormEvent,
-  type HTMLAttributes,
-  type HTMLInputTypeAttribute,
   type SetStateAction
 } from "react";
+import { EmptyState } from "./components/EmptyState";
+import { SectionHeader } from "./components/SectionHeader";
+import { StatusBadge } from "./components/StatusBadge";
+import { SummaryCard } from "./components/SummaryCard";
+import { TextField } from "./components/TextField";
 import type { InvoicePdfResult } from "./invoice-pdf";
+import { ProductsSection } from "./sections/products/ProductsSection";
+import type { ProductRecord } from "./types";
 
 type SectionId =
   | "dashboard"
@@ -28,17 +33,6 @@ type SectionConfig = {
   primaryAction?: string | undefined;
   emptyTitle: string;
   emptyBody: string;
-};
-
-type ProductRecord = {
-  id: string;
-  sku: string;
-  name: string;
-  costMinor: number;
-  salePriceMinor: number;
-  minimumStock: number;
-  stock: number;
-  active: boolean;
 };
 
 type CustomerRecord = {
@@ -177,17 +171,6 @@ type SupplierPaymentRecord = {
   paidAtLabel: string;
 };
 
-type ProductFormState = {
-  sku: string;
-  name: string;
-  quantity: string;
-  cost: string;
-  salePrice: string;
-  minimumStock: string;
-};
-
-type ProductFormErrors = Partial<Record<keyof ProductFormState, string>>;
-
 type SalesFormState = {
   customerId: string;
   dueAt: string;
@@ -284,15 +267,6 @@ type SupplierPaymentFormState = {
 
 type SupplierPaymentFormErrors = {
   amount?: string | undefined;
-};
-
-const emptyProductForm: ProductFormState = {
-  sku: "",
-  name: "",
-  quantity: "",
-  cost: "",
-  salePrice: "",
-  minimumStock: ""
 };
 
 const emptySalesForm: SalesFormState = {
@@ -2055,13 +2029,8 @@ export function App() {
       </aside>
 
       <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p>{activeSection.label}</p>
-            <h1>{activeSection.title}</h1>
-            <span>{activeSection.description}</span>
-          </div>
-          {activeSection.primaryAction ? (
+        <SectionHeader
+          action={activeSection.primaryAction ? (
             <button
               className="primary-action"
               onClick={handlePrimaryAction}
@@ -2069,7 +2038,10 @@ export function App() {
               {activeSection.primaryAction}
             </button>
           ) : null}
-        </header>
+          description={activeSection.description}
+          eyebrow={activeSection.label}
+          title={activeSection.title}
+        />
 
         {activeSection.id === "dashboard" ? (
           <DashboardContent
@@ -2751,9 +2723,13 @@ function SectionContent({
   if (section.id === "products") {
     return (
       <ProductsSection
+        formatCurrency={formatCurrency}
+        formatIntegerInput={formatIntegerInput}
         formVisible={productFormVisible}
+        isLowStock={isLowStock}
         onCloseForm={onCloseProductForm}
         onCreateProduct={onCreateProduct}
+        parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
       />
     );
@@ -2841,10 +2817,11 @@ function SectionContent({
 
   return (
     <section className="section-panel">
-      <div className="empty-state section-empty">
-        <strong>{section.emptyTitle}</strong>
-        <span>{section.emptyBody}</span>
-      </div>
+      <EmptyState
+        body={section.emptyBody}
+        className="section-empty"
+        title={section.emptyTitle}
+      />
     </section>
   );
 }
@@ -3041,15 +3018,17 @@ function CustomersSection({
       ) : null}
 
       {customers.length === 0 ? (
-        <div className="empty-state section-empty">
-          <strong>Sin clientes registrados</strong>
-          <span>Crea clientes para ventas y cartera.</span>
-        </div>
+        <EmptyState
+          body="Crea clientes para ventas y cartera."
+          className="section-empty"
+          title="Sin clientes registrados"
+        />
       ) : filteredCustomers.length === 0 ? (
-        <div className="empty-state section-empty">
-          <strong>Sin resultados</strong>
-          <span>Ajusta la busqueda para ver mas clientes.</span>
-        </div>
+        <EmptyState
+          body="Ajusta la busqueda para ver mas clientes."
+          className="section-empty"
+          title="Sin resultados"
+        />
       ) : (
         <table className="data-table" aria-label="Clientes registrados">
           <thead>
@@ -3097,13 +3076,12 @@ function CustomersSection({
             <div>
               <h2>{selectedCustomer.name}</h2>
               <p>{selectedCustomer.document}</p>
-              <span
-                className={
-                  selectedCustomer.active ? "status-pill active" : "status-pill inactive"
-                }
+              <StatusBadge
+                tone={selectedCustomer.active ? "active" : "inactive"}
+                variant="pill"
               >
                 {selectedCustomer.active ? "Activo" : "Inactivo"}
-              </span>
+              </StatusBadge>
             </div>
             <div className="form-actions">
               <button
@@ -3167,24 +3145,22 @@ function CustomersSection({
 
           {selectedCustomerSummary ? (
             <div className="customer-summary" aria-label="Resumen del cliente">
-              <div className="summary-card">
-                <span>Total vendido</span>
-                <strong>{formatCurrency(selectedCustomerSummary.totalSoldMinor)}</strong>
-              </div>
-              <div className="summary-card">
-                <span>Ventas</span>
-                <strong>{selectedCustomerSummary.saleCount}</strong>
-              </div>
-              <div className="summary-card">
-                <span>Cartera pendiente</span>
-                <strong>
-                  {formatCurrency(selectedCustomerSummary.pendingReceivableMinor)}
-                </strong>
-              </div>
-              <div className="summary-card">
-                <span>Ultima venta</span>
-                <strong>{selectedCustomerSummary.lastSaleLabel}</strong>
-              </div>
+              <SummaryCard
+                label="Total vendido"
+                value={formatCurrency(selectedCustomerSummary.totalSoldMinor)}
+              />
+              <SummaryCard
+                label="Ventas"
+                value={selectedCustomerSummary.saleCount}
+              />
+              <SummaryCard
+                label="Cartera pendiente"
+                value={formatCurrency(selectedCustomerSummary.pendingReceivableMinor)}
+              />
+              <SummaryCard
+                label="Ultima venta"
+                value={selectedCustomerSummary.lastSaleLabel}
+              />
             </div>
           ) : null}
 
@@ -3210,10 +3186,11 @@ function CustomersSection({
               </tbody>
             </table>
           ) : (
-            <div className="empty-state section-empty">
-              <strong>Sin ventas del cliente</strong>
-              <span>Las ventas apareceran cuando se registren movimientos.</span>
-            </div>
+            <EmptyState
+              body="Las ventas apareceran cuando se registren movimientos."
+              className="section-empty"
+              title="Sin ventas del cliente"
+            />
           )}
 
           {selectedCustomerReceivables.length > 0 ? (
@@ -3238,150 +3215,6 @@ function CustomersSection({
           ) : null}
         </section>
       ) : null}
-    </section>
-  );
-}
-
-type ProductsSectionProps = {
-  formVisible: boolean;
-  onCloseForm: () => void;
-  onCreateProduct: (product: ProductRecord) => void;
-  products: ProductRecord[];
-};
-
-function ProductsSection({
-  formVisible,
-  onCloseForm,
-  onCreateProduct,
-  products
-}: ProductsSectionProps) {
-  const [form, setForm] = useState<ProductFormState>(emptyProductForm);
-  const [errors, setErrors] = useState<ProductFormErrors>({});
-
-  function updateField(
-    field: "sku" | "name" | "quantity" | "minimumStock",
-    value: string
-  ) {
-    setForm((currentForm) => ({ ...currentForm, [field]: value }));
-    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
-  }
-
-  function updateMoneyField(field: "cost" | "salePrice", value: string) {
-    setForm((currentForm) => ({
-      ...currentForm,
-      [field]: formatIntegerInput(value)
-    }));
-    setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
-  }
-
-  function submitProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const nextErrors: ProductFormErrors = {};
-    const quantity = parseNonNegativeInteger(form.quantity);
-    const cost = parseNonNegativeInteger(form.cost);
-    const salePrice = parseNonNegativeInteger(form.salePrice);
-    const minimumStock = parseNonNegativeInteger(form.minimumStock);
-
-    if (form.sku.trim() === "") {
-      nextErrors.sku = "El codigo es obligatorio.";
-    }
-    if (form.name.trim() === "") {
-      nextErrors.name = "El nombre es obligatorio.";
-    }
-    if (quantity === null) {
-      nextErrors.quantity = "La unidad debe ser cero o mayor.";
-    }
-    if (cost === null) {
-      nextErrors.cost = "El costo debe ser cero o mayor.";
-    }
-    if (salePrice === null) {
-      nextErrors.salePrice = "El precio de venta debe ser cero o mayor.";
-    }
-    if (minimumStock === null) {
-      nextErrors.minimumStock = "El stock minimo debe ser cero o mayor.";
-    }
-
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
-
-    onCreateProduct({
-      active: true,
-      costMinor: cost!,
-      id: `product-${Date.now()}`,
-      minimumStock: minimumStock!,
-      name: form.name.trim(),
-      salePriceMinor: salePrice!,
-      sku: form.sku.trim(),
-      stock: quantity!
-    });
-    setForm(emptyProductForm);
-    onCloseForm();
-  }
-
-  return (
-    <section className="products-layout">
-      {formVisible ? (
-        <form className="product-form" onSubmit={submitProduct}>
-          <div className="form-grid">
-            <TextField
-              error={errors.sku}
-              label="Codigo"
-              onChange={(value) => updateField("sku", value)}
-              value={form.sku}
-            />
-            <TextField
-              error={errors.name}
-              label="Producto"
-              onChange={(value) => updateField("name", value)}
-              value={form.name}
-            />
-            <TextField
-              error={errors.quantity}
-              inputMode="numeric"
-              label="Unidad"
-              onChange={(value) => updateField("quantity", value)}
-              value={form.quantity}
-            />
-            <TextField
-              error={errors.cost}
-              inputMode="numeric"
-              label="Costo"
-              onChange={(value) => updateMoneyField("cost", value)}
-              value={form.cost}
-            />
-            <TextField
-              error={errors.salePrice}
-              inputMode="numeric"
-              label="Precio venta"
-              onChange={(value) => updateMoneyField("salePrice", value)}
-              value={form.salePrice}
-            />
-            <TextField
-              error={errors.minimumStock}
-              inputMode="numeric"
-              label="Stock minimo"
-              onChange={(value) => updateField("minimumStock", value)}
-              value={form.minimumStock}
-            />
-          </div>
-          <div className="form-actions">
-            <button type="submit">Guardar producto</button>
-          </div>
-        </form>
-      ) : null}
-
-      {products.length > 0 ? (
-        <ProductTable products={products} />
-      ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin productos registrados</strong>
-          <span>Crea productos para empezar a controlar inventario.</span>
-        </div>
-      )}
     </section>
   );
 }
@@ -5973,82 +5806,5 @@ function SalesSection({
         </div>
       )}
     </section>
-  );
-}
-
-type TextFieldProps = {
-  error?: string | undefined;
-  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
-  label: string;
-  onChange: (value: string) => void;
-  readOnly?: boolean | undefined;
-  type?: HTMLInputTypeAttribute;
-  value: string;
-};
-
-function TextField({
-  error,
-  inputMode,
-  label,
-  onChange,
-  readOnly = false,
-  type = "text",
-  value
-}: TextFieldProps) {
-  const id = label.toLowerCase().replace(/\s+/g, "-");
-
-  return (
-    <label className="field" htmlFor={id}>
-      <span>{label}</span>
-      <input
-        aria-invalid={Boolean(error)}
-        id={id}
-        inputMode={inputMode}
-        onChange={(event) => onChange(event.target.value)}
-        readOnly={readOnly}
-        type={type}
-        value={value}
-      />
-      {error ? <small>{error}</small> : null}
-    </label>
-  );
-}
-
-type ProductTableProps = {
-  products: ProductRecord[];
-};
-
-function ProductTable({ products }: ProductTableProps) {
-  return (
-    <table className="data-table" aria-label="Productos registrados">
-      <thead>
-        <tr>
-          <th>Codigo</th>
-          <th>Producto</th>
-          <th>Costo</th>
-          <th>Precio venta</th>
-          <th>Stock</th>
-          <th>Minimo</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody>
-        {products.map((product) => (
-          <tr key={product.id}>
-            <td>{product.sku}</td>
-            <td>{product.name}</td>
-            <td>{formatCurrency(product.costMinor)}</td>
-            <td>{formatCurrency(product.salePriceMinor)}</td>
-            <td>{product.stock}</td>
-            <td>{product.minimumStock}</td>
-            <td>
-              <span className={isLowStock(product) ? "status warning" : "status ok"}>
-                {isLowStock(product) ? "Bajo stock" : "Disponible"}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
