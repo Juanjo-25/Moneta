@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
 import { PanelHeader } from "../../components/PanelHeader";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import type { ProductRecord, SaleRecord } from "../../types";
 
 type DashboardTrendRow = {
@@ -91,7 +92,13 @@ export function DashboardContent({
         aria-label="Analisis principal"
       >
         <div className="panel dashboard-chart-panel dashboard-hero-panel">
-          <PanelHeader action={<button onClick={onOpenReports}>Ver todo</button>}>
+          <PanelHeader
+            action={
+              <SecondaryActionButton onClick={onOpenReports} variant="compact">
+                Ver todo
+              </SecondaryActionButton>
+            }
+          >
             <div className="dashboard-hero-copy">
               <span>Tendencia principal</span>
               <h2>Ventas diarias</h2>
@@ -174,7 +181,13 @@ export function DashboardContent({
 
       <section className="dashboard-operational-grid" aria-label="Alertas operativas">
         <div className="panel dashboard-operational-panel">
-          <PanelHeader action={<button onClick={onOpenProducts}>Revisar</button>}>
+          <PanelHeader
+            action={
+              <SecondaryActionButton onClick={onOpenProducts} variant="compact">
+                Revisar
+              </SecondaryActionButton>
+            }
+          >
             <h2>Inventario bajo</h2>
           </PanelHeader>
           {lowStockProducts.length > 0 ? (

@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
 import type { ProductRecord } from "../../types";
@@ -160,9 +162,9 @@ export function ProductsSection({
               value={form.minimumStock}
             />
           </div>
-          <div className="form-actions">
-            <button type="submit">Guardar producto</button>
-          </div>
+          <FormActions>
+            <PrimaryActionButton type="submit">Guardar producto</PrimaryActionButton>
+          </FormActions>
         </form>
       ) : null}
 

@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -175,17 +177,15 @@ export function CustomersSection({
           onChange={setSearch}
           value={search}
         />
-        <button
-          className="primary-action"
+        <PrimaryActionButton
           onClick={() => {
             setFormVisible((visible) => !visible);
             setEditingCustomerId(null);
             setEditErrors({});
           }}
-          type="button"
         >
           Nuevo cliente
-        </button>
+        </PrimaryActionButton>
       </div>
 
       {formVisible ? (
@@ -222,9 +222,9 @@ export function CustomersSection({
               value={form.email}
             />
           </div>
-          <div className="form-actions">
-            <button type="submit">Guardar cliente</button>
-          </div>
+          <FormActions>
+            <PrimaryActionButton type="submit">Guardar cliente</PrimaryActionButton>
+          </FormActions>
         </form>
       ) : null}
 
@@ -293,7 +293,7 @@ export function CustomersSection({
                 {selectedCustomer.active ? "Activo" : "Inactivo"}
               </StatusBadge>
             </div>
-            <div className="form-actions">
+            <FormActions>
               <SecondaryActionButton
                 onClick={() => startEditingCustomer(selectedCustomer)}
                 variant="compact"
@@ -308,7 +308,7 @@ export function CustomersSection({
               >
                 {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}
               </SecondaryActionButton>
-            </div>
+            </FormActions>
           </div>
 
           {editingCustomer ? (
@@ -345,9 +345,9 @@ export function CustomersSection({
                   value={editForm.email}
                 />
               </div>
-              <div className="form-actions">
-                <button type="submit">Guardar cambios</button>
-              </div>
+              <FormActions>
+                <PrimaryActionButton type="submit">Guardar cambios</PrimaryActionButton>
+              </FormActions>
             </form>
           ) : null}
 

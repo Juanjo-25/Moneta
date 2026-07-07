@@ -2,6 +2,8 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { TextField } from "../../components/TextField";
 import type {
@@ -305,11 +307,11 @@ export function SuppliersSection({
               />
             )}
           </div>
-          <div className="form-actions">
-            <button type="submit">
+          <FormActions>
+            <PrimaryActionButton type="submit">
               {editingSupplier ? "Guardar cambios proveedor" : "Guardar proveedor"}
-            </button>
-          </div>
+            </PrimaryActionButton>
+          </FormActions>
         </form>
       ) : null}
 
