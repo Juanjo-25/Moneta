@@ -1228,6 +1228,21 @@ describe("App navigation", () => {
     expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
   });
 
+  it("renders the shared view switch wrapper in cartera", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    const switchGroup = screen.getByRole("group", { name: "Vistas de cartera" });
+
+    expect(switchGroup.className).toContain("view-switch");
+    expect(screen.getByRole("button", { name: "Por cobrar" }).className).toContain(
+      "view-switch-button"
+    );
+  });
+
   it("registers supplier payable payments from cartera por pagar", async () => {
     const user = userEvent.setup();
 

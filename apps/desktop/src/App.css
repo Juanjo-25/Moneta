@@ -1104,7 +1104,7 @@ textarea:focus-visible {
   padding: 4px;
 }
 
-.view-switch button {
+.view-switch-button {
   min-width: 124px;
   border-radius: 8px;
   background: transparent;
@@ -1113,7 +1113,7 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
-.view-switch button.active {
+.view-switch-button.active {
   background: var(--surface-elevated);
   color: var(--text-primary);
   box-shadow: var(--shadow-subtle);

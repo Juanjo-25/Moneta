@@ -4,6 +4,7 @@ import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { PayablesTable } from "../../components/PayablesTable";
 import { SummaryCard } from "../../components/SummaryCard";
+import { ViewSwitch } from "../../components/ViewSwitch";
 import type { DueMetadata } from "../../lib/dates";
 import type {
   ReceivableRecord,
@@ -115,24 +116,15 @@ export function CarteraDashboardSection({
 
       <CarteraAlerts formatCurrency={formatCurrency} items={alertItems} />
 
-      <div className="view-switch" aria-label="Vistas de cartera">
-        <button
-          aria-selected={activeView === "receivables"}
-          className={activeView === "receivables" ? "active" : ""}
-          onClick={() => setActiveView("receivables")}
-          type="button"
-        >
-          Por cobrar
-        </button>
-        <button
-          aria-selected={activeView === "payables"}
-          className={activeView === "payables" ? "active" : ""}
-          onClick={() => setActiveView("payables")}
-          type="button"
-        >
-          Por pagar
-        </button>
-      </div>
+      <ViewSwitch
+        ariaLabel="Vistas de cartera"
+        onSelect={(value) => setActiveView(value as CarteraView)}
+        options={[
+          { label: "Por cobrar", value: "receivables" },
+          { label: "Por pagar", value: "payables" }
+        ]}
+        selectedValue={activeView}
+      />
 
       {activeView === "receivables" ? (
         <ReceivablesTable
