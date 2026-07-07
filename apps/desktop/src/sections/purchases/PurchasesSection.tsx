@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
@@ -519,15 +521,10 @@ export function PurchasesSection({
         ) : null}
 
         {purchaseLines.length > 0 ? (
-          <table className="data-table purchase-lines-table" aria-label="Productos de la compra">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Costo unitario</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Productos de la compra" className="purchase-lines-table">
+            <DataTableHeader
+              labels={["Producto", "Cantidad", "Costo unitario", "Total"]}
+            />
             <tbody>
               {purchaseLines.map((line) => (
                 <tr key={line.id}>
@@ -538,7 +535,7 @@ export function PurchasesSection({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         ) : null}
 
         <div
@@ -579,18 +576,18 @@ export function PurchasesSection({
       </form>
 
       {purchases.length > 0 ? (
-        <table className="data-table" aria-label="Compras registradas">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Proveedor</th>
-              <th>Factura</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Estado</th>
-              <th>Total</th>
-            </tr>
-          </thead>
+        <DataTable ariaLabel="Compras registradas">
+          <DataTableHeader
+            labels={[
+              "Fecha",
+              "Proveedor",
+              "Factura",
+              "Producto",
+              "Cantidad",
+              "Estado",
+              "Total"
+            ]}
+          />
           <tbody>
             {purchases.map((purchase) => (
               <tr key={purchase.id}>
@@ -604,7 +601,7 @@ export function PurchasesSection({
               </tr>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       ) : (
         <div className="empty-state section-empty">
           <strong>Sin compras registradas</strong>

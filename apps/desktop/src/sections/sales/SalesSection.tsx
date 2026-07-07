@@ -5,6 +5,8 @@ import {
   type FormEvent,
   type SetStateAction
 } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type { InvoicePdfResult } from "../../invoice-pdf";
@@ -563,15 +565,10 @@ export function SalesSection({
         ) : null}
 
         {saleLines.length > 0 ? (
-          <table className="data-table purchase-lines-table" aria-label="Productos de la venta">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio unitario</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Productos de la venta" className="purchase-lines-table">
+            <DataTableHeader
+              labels={["Producto", "Cantidad", "Precio unitario", "Total"]}
+            />
             <tbody>
               {saleLines.map((line) => (
                 <tr key={line.id}>
@@ -582,7 +579,7 @@ export function SalesSection({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         ) : null}
 
         <SummaryCard compact>
@@ -602,18 +599,18 @@ export function SalesSection({
 
       {sales.length > 0 ? (
         <>
-          <table className="data-table" aria-label="Ventas registradas">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Estado</th>
-                <th>Total</th>
-                <th>Factura</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Ventas registradas">
+            <DataTableHeader
+              labels={[
+                "Fecha",
+                "Cliente",
+                "Producto",
+                "Cantidad",
+                "Estado",
+                "Total",
+                "Factura"
+              ]}
+            />
             <tbody>
               {sales.map((sale) => (
                 <tr key={sale.id}>
@@ -637,7 +634,7 @@ export function SalesSection({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
           {invoicePreview ? (
             <section className="invoice-preview" aria-label="Factura PDF generada">
               <div className="invoice-preview-header">

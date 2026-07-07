@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { DataTable } from "./DataTable";
+import { DataTableHeader } from "./DataTableHeader";
 import { EmptyState } from "./EmptyState";
 import { SummaryCard } from "./SummaryCard";
 import { TextField } from "./TextField";
@@ -96,21 +98,21 @@ export function PayablesTable({
 
   return (
     <>
-      <table className="data-table" aria-label={tableLabel}>
-        <thead>
-          <tr>
-            <th>Proveedor</th>
-            <th>Factura</th>
-            <th>Vence</th>
-            <th>Original</th>
-            <th>Abonado</th>
-            <th>Saldo</th>
-            <th>Rango</th>
-            <th>Alerta</th>
-            <th>Estado</th>
-            <th>Accion</th>
-          </tr>
-        </thead>
+      <DataTable ariaLabel={tableLabel}>
+        <DataTableHeader
+          labels={[
+            "Proveedor",
+            "Factura",
+            "Vence",
+            "Original",
+            "Abonado",
+            "Saldo",
+            "Rango",
+            "Alerta",
+            "Estado",
+            "Accion"
+          ]}
+        />
         <tbody>
           {supplierPayables.map((payable) => {
             const dueMetadata = getDueMetadata(payable.dueAt);
@@ -141,7 +143,7 @@ export function PayablesTable({
             );
           })}
         </tbody>
-      </table>
+      </DataTable>
 
       {selectedPayable ? (
         <form className="supplier-payment-form" onSubmit={submitPayment}>
