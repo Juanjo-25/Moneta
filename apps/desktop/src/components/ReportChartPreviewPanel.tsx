@@ -1,3 +1,5 @@
+import { PanelHeader } from "./PanelHeader";
+
 type ReportChartPreviewRow = {
   id: string;
   label: string;
@@ -24,15 +26,19 @@ export function ReportChartPreviewPanel({
 }: ReportChartPreviewPanelProps) {
   return (
     <section className="report-panel report-panel-single">
-      <div className="report-panel-header">
+      <PanelHeader
+        action={
+          <button className="table-action" onClick={onOpenDetail} type="button">
+            Ver detalle
+          </button>
+        }
+        className="report-panel-header"
+      >
         <div>
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
-        <button className="table-action" onClick={onOpenDetail} type="button">
-          Ver detalle
-        </button>
-      </div>
+      </PanelHeader>
       <button
         aria-label={actionLabel}
         className="report-chart-button"
