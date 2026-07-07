@@ -3,6 +3,8 @@ import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
+import { InlineActionGroup } from "../../components/InlineActionGroup";
+import { InlineFormSection } from "../../components/InlineFormSection";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -408,13 +410,13 @@ export function PurchasesSection({
             {errors.supplierId ? <small>{errors.supplierId}</small> : null}
           </label>
 
-          <div className="inline-action-group">
+          <InlineActionGroup>
             <SecondaryActionButton
               onClick={() => setSupplierFormVisible((visible) => !visible)}
             >
               Nuevo proveedor
             </SecondaryActionButton>
-          </div>
+          </InlineActionGroup>
 
           <TextField
             error={errors.invoiceNumber}
@@ -456,13 +458,13 @@ export function PurchasesSection({
             </select>
             {errors.productId ? <small>{errors.productId}</small> : null}
           </label>
-          <div className="inline-action-group">
+          <InlineActionGroup>
             <SecondaryActionButton
               onClick={() => setProductFormVisible((visible) => !visible)}
             >
               Nuevo producto
             </SecondaryActionButton>
-          </div>
+          </InlineActionGroup>
           <TextField
             error={errors.quantity}
             inputMode="numeric"
@@ -477,15 +479,15 @@ export function PurchasesSection({
             onChange={updateMoneyField}
             value={form.unitCost}
           />
-          <div className="inline-action-group">
+          <InlineActionGroup>
             <SecondaryActionButton onClick={addPurchaseLine}>
               Agregar producto
             </SecondaryActionButton>
-          </div>
+          </InlineActionGroup>
         </div>
 
         {supplierFormVisible ? (
-          <div className="inline-supplier-form">
+          <InlineFormSection className="inline-supplier-form">
             <TextField
               error={supplierErrors.name}
               label="Nombre proveedor"
@@ -498,11 +500,11 @@ export function PurchasesSection({
             <SecondaryActionButton onClick={submitSupplier}>
               Guardar proveedor
             </SecondaryActionButton>
-          </div>
+          </InlineFormSection>
         ) : null}
 
         {productFormVisible ? (
-          <div className="inline-purchase-product-form">
+          <InlineFormSection className="inline-purchase-product-form">
             <TextField
               error={productErrors.name}
               label="Nombre producto"
@@ -519,7 +521,7 @@ export function PurchasesSection({
             <SecondaryActionButton onClick={submitProduct}>
               Guardar producto compra
             </SecondaryActionButton>
-          </div>
+          </InlineFormSection>
         ) : null}
 
         {purchaseLines.length > 0 ? (

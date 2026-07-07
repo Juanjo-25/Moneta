@@ -9,6 +9,8 @@ import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
+import { InlineActionGroup } from "../../components/InlineActionGroup";
+import { InlineFormSection } from "../../components/InlineFormSection";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -437,13 +439,13 @@ export function SalesSection({
             {errors.customerId ? <small>{errors.customerId}</small> : null}
           </label>
 
-          <div className="inline-action-group">
+          <InlineActionGroup>
             <SecondaryActionButton
               onClick={() => setCustomerFormVisible((visible) => !visible)}
             >
               Nuevo cliente
             </SecondaryActionButton>
-          </div>
+          </InlineActionGroup>
 
           <label className="field" htmlFor="producto-venta">
             <span>Producto</span>
@@ -483,15 +485,15 @@ export function SalesSection({
             }}
             value={form.unitPrice}
           />
-          <div className="inline-action-group">
+          <InlineActionGroup>
             <SecondaryActionButton onClick={addSaleLine}>
               Agregar producto
             </SecondaryActionButton>
-          </div>
+          </InlineActionGroup>
         </div>
 
         {customerFormVisible ? (
-          <div className="inline-customer-form">
+          <InlineFormSection className="inline-customer-form">
             <TextField
               error={customerErrors.name}
               label="Nombre o razon social"
@@ -525,7 +527,7 @@ export function SalesSection({
             <SecondaryActionButton onClick={submitCustomer}>
               Guardar cliente
             </SecondaryActionButton>
-          </div>
+          </InlineFormSection>
         ) : null}
 
         <div

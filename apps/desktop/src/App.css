@@ -960,13 +960,16 @@ textarea:focus-visible {
   align-items: flex-end;
 }
 
+.inline-form-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
 .inline-customer-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
 }
 
 .inline-customer-form .secondary-action {
@@ -1147,9 +1150,6 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
 }
 
 .inline-supplier-form .secondary-action {
@@ -1160,9 +1160,6 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
   gap: 14px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
 }
 
 .inline-purchase-product-form .secondary-action {
