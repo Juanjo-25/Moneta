@@ -3,6 +3,7 @@ import {
   useMemo,
   useState
 } from "react";
+import { PrimaryActionButton } from "./components/PrimaryActionButton";
 import { SectionHeader } from "./components/SectionHeader";
 import {
   compareDueDates,
@@ -700,12 +701,9 @@ export function App() {
       <section className="workspace">
         <SectionHeader
           action={activeSection.primaryAction ? (
-            <button
-              className="primary-action"
-              onClick={handlePrimaryAction}
-            >
+            <PrimaryActionButton onClick={handlePrimaryAction}>
               {activeSection.primaryAction}
-            </button>
+            </PrimaryActionButton>
           ) : null}
           description={activeSection.description}
           eyebrow={activeSection.label}

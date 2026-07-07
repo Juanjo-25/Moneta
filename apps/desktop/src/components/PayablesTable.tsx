@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { DataTable } from "./DataTable";
 import { DataTableHeader } from "./DataTableHeader";
 import { EmptyState } from "./EmptyState";
+import { FormActions } from "./FormActions";
+import { PrimaryActionButton } from "./PrimaryActionButton";
 import { SecondaryActionButton } from "./SecondaryActionButton";
 import { SummaryCard } from "./SummaryCard";
 import { TextField } from "./TextField";
@@ -158,9 +160,9 @@ export function PayablesTable({
             onChange={updateAmount}
             value={form.amount}
           />
-          <div className="form-actions">
-            <button type="submit">Guardar abono</button>
-          </div>
+          <FormActions>
+            <PrimaryActionButton type="submit">Guardar abono</PrimaryActionButton>
+          </FormActions>
         </form>
       ) : null}
     </>

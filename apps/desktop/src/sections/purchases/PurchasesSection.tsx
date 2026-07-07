@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
@@ -570,9 +572,9 @@ export function PurchasesSection({
           <strong>Total factura {formatCurrency(totalMinor)}</strong>
         </SummaryCard>
 
-        <div className="form-actions">
-          <button type="submit">Registrar compra</button>
-        </div>
+        <FormActions>
+          <PrimaryActionButton type="submit">Registrar compra</PrimaryActionButton>
+        </FormActions>
       </form>
 
       {purchases.length > 0 ? (

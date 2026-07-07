@@ -8,6 +8,8 @@ import {
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
@@ -593,9 +595,9 @@ export function SalesSection({
 
         {errors.submit ? <p className="form-error">{errors.submit}</p> : null}
 
-        <div className="form-actions">
-          <button type="submit">Registrar venta</button>
-        </div>
+        <FormActions>
+          <PrimaryActionButton type="submit">Registrar venta</PrimaryActionButton>
+        </FormActions>
       </form>
 
       {sales.length > 0 ? (
