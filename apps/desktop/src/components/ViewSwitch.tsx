@@ -1,29 +1,33 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type ViewSwitchOption = {
+type ViewSwitchOption<T extends string> = {
   label: string;
-  value: string;
+  value: T;
 };
 
-type ViewSwitchProps = {
+type ViewSwitchProps<T extends string> = {
   ariaLabel: string;
   className?: string | undefined;
-  onSelect: (value: string) => void;
-  options: ViewSwitchOption[];
-  selectedValue: string;
+  onSelect: (value: T) => void;
+  options: ViewSwitchOption<T>[];
+  selectedValue: T;
 };
 
-export function ViewSwitch({
+export function ViewSwitch<T extends string>({
   ariaLabel,
   className,
   onSelect,
   options,
   selectedValue
-}: ViewSwitchProps) {
+}: ViewSwitchProps<T>) {
   const classNames = ["view-switch", className].filter(Boolean).join(" ");
 
   return (
-    <div className={classNames} aria-label={ariaLabel} role="group">
+    <div
+      className={classNames}
+      aria-label={ariaLabel}
+      role="radiogroup"
+    >
       {options.map((option) => (
         <ViewSwitchButton
           key={option.value}
@@ -47,8 +51,9 @@ function ViewSwitchButton({ active, label, ...buttonProps }: ViewSwitchButtonPro
   return (
     <button
       {...buttonProps}
-      aria-selected={active}
+      aria-checked={active}
       className={classNames}
+      role="radio"
       type="button"
     >
       {label}

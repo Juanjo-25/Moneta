@@ -118,7 +118,7 @@ export function CarteraDashboardSection({
 
       <ViewSwitch
         ariaLabel="Vistas de cartera"
-        onSelect={(value) => setActiveView(value as CarteraView)}
+        onSelect={setActiveView}
         options={[
           { label: "Por cobrar", value: "receivables" },
           { label: "Por pagar", value: "payables" }

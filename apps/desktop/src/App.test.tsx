@@ -887,7 +887,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar compra" }));
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
     await user.type(screen.getByLabelText("Valor abono"), "4000");
@@ -1216,11 +1216,11 @@ describe("App navigation", () => {
     expect(screen.getByText("Total por pagar")).toBeTruthy();
     expect(screen.getByText("Facturas vencidas")).toBeTruthy();
     expect(screen.getByText("Proximas a vencer")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Por cobrar" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Por pagar" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Por cobrar" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Por pagar" })).toBeTruthy();
     expect(screen.getByRole("table", { name: "Cartera por cobrar" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
 
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     expect(within(payablesTable).getByText("Proveedor Central")).toBeTruthy();
@@ -1235,12 +1235,21 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
-    const switchGroup = screen.getByRole("group", { name: "Vistas de cartera" });
+    const switchGroup = screen.getByRole("radiogroup", {
+      name: "Vistas de cartera"
+    });
+    const receivablesButton = screen.getByRole("radio", { name: "Por cobrar" });
+    const payablesButton = screen.getByRole("radio", { name: "Por pagar" });
 
     expect(switchGroup.className).toContain("view-switch");
-    expect(screen.getByRole("button", { name: "Por cobrar" }).className).toContain(
-      "view-switch-button"
-    );
+    expect(receivablesButton.className).toContain("view-switch-button");
+    expect(receivablesButton.getAttribute("aria-checked")).toBe("true");
+    expect(payablesButton.getAttribute("aria-checked")).toBe("false");
+
+    await user.click(payablesButton);
+
+    expect(receivablesButton.getAttribute("aria-checked")).toBe("false");
+    expect(payablesButton.getAttribute("aria-checked")).toBe("true");
   });
 
   it("registers supplier payable payments from cartera por pagar", async () => {
@@ -1250,7 +1259,7 @@ describe("App navigation", () => {
 
     await createPendingPurchaseFixture(user);
     await user.click(screen.getByRole("button", { name: "Cartera" }));
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
     await user.type(screen.getByLabelText("Valor abono"), "5000");
@@ -1640,7 +1649,7 @@ describe("App navigation", () => {
 
     await createPendingPurchaseFixture(user);
     await user.click(screen.getByRole("button", { name: "Cartera" }));
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
 
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));

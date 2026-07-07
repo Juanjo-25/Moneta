@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ViewSwitch } from "./ViewSwitch";
 
 describe("ViewSwitch", () => {
-  it("renders the shared view switch markup and notifies on selection", async () => {
+  it("renders a shared radio-style view switch and notifies on selection", async () => {
     const user = userEvent.setup();
     const handleSelect = vi.fn();
 
@@ -20,17 +20,21 @@ describe("ViewSwitch", () => {
       />
     );
 
-    const receivablesButton = screen.getByRole("button", {
+    const switchGroup = screen.getByRole("radiogroup", {
+      name: "Vistas de cartera"
+    });
+    const receivablesButton = screen.getByRole("radio", {
       name: "Por cobrar"
     });
-    const payablesButton = screen.getByRole("button", { name: "Por pagar" });
+    const payablesButton = screen.getByRole("radio", { name: "Por pagar" });
 
-    expect(receivablesButton.closest(".view-switch")).toBeTruthy();
-    expect(receivablesButton.closest("[role='group']")).toBeTruthy();
+    expect(switchGroup.className).toContain("view-switch");
     expect(receivablesButton.className).toContain("view-switch-button");
     expect(receivablesButton.className).toContain("active");
+    expect(receivablesButton.getAttribute("aria-checked")).toBe("true");
     expect(payablesButton.className).toContain("view-switch-button");
     expect(payablesButton.className).not.toContain("active");
+    expect(payablesButton.getAttribute("aria-checked")).toBe("false");
 
     await user.click(payablesButton);
 
