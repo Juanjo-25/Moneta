@@ -1,3 +1,23 @@
+export type SectionId =
+  | "dashboard"
+  | "products"
+  | "purchases"
+  | "sales"
+  | "customers"
+  | "suppliers"
+  | "receivables"
+  | "reports";
+
+export type SectionConfig = {
+  id: SectionId;
+  label: string;
+  title: string;
+  description: string;
+  primaryAction?: string | undefined;
+  emptyTitle: string;
+  emptyBody: string;
+};
+
 export type ProductRecord = {
   id: string;
   sku: string;
@@ -71,6 +91,35 @@ export type ReceivableRecord = {
   amountMinor: number;
   dueAt: string;
   status: "pending";
+};
+
+export type PurchasePaymentStatus = "paid" | "pending";
+
+export type PurchaseLineRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+};
+
+export type PurchaseRecord = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  invoiceNumber: string;
+  issuedAt: string;
+  dueAt: string;
+  occurredAtMs: number;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCostMinor: number;
+  totalMinor: number;
+  lines: PurchaseLineRecord[];
+  paymentStatus: PurchasePaymentStatus;
+  occurredAtLabel: string;
 };
 
 export type SupplierRecord = {

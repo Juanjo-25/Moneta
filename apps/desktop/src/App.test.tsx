@@ -281,6 +281,46 @@ describe("App navigation", () => {
     expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 
+  it("renders the dashboard with analytical hierarchy", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+
+    const analyticsSummary = screen.getByRole("region", { name: "Resumen analitico" });
+    const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
+    const secondaryAnalysis = screen.getByRole("region", { name: "Analisis secundario" });
+    const operationalAlerts = screen.getByRole("region", { name: "Alertas operativas" });
+
+    expect(
+      analyticsSummary.compareDocumentPosition(primaryAnalysis) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      primaryAnalysis.compareDocumentPosition(secondaryAnalysis) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      secondaryAnalysis.compareDocumentPosition(operationalAlerts) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
   it("registers a pending sale, decreases stock, and exposes receivable data", async () => {
     const user = userEvent.setup();
 
@@ -623,9 +663,44 @@ describe("App navigation", () => {
     const summary = screen.getByLabelText("Resumen rentabilidad general");
     const grossMarginCard = within(summary).getByText("Margen bruto").closest(".summary-card");
     expect(grossMarginCard).toBeTruthy();
+    expect((grossMarginCard as HTMLElement).className).toContain("summary-card-compact");
     expect(within(grossMarginCard as HTMLElement).getByText(/\$\s*2\.600/)).toBeTruthy();
     expect(screen.getByLabelText("Grafico cascada de utilidad")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Detalle margen por producto" })).toBeNull();
+  });
+
+  it("renders reportes overview with analytical hierarchy", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+
+    const reportNavigation = screen.getByRole("region", { name: "Navegacion de reportes" });
+    const reportSummary = screen.getByRole("region", { name: "Resumen del reporte" });
+    const primaryInsight = screen.getByRole("region", { name: "Insight principal del reporte" });
+
+    expect(
+      reportNavigation.compareDocumentPosition(reportSummary) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      reportSummary.compareDocumentPosition(primaryInsight) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it("shows report tabs and rentabilidad subviews separately", async () => {
@@ -1014,8 +1089,21 @@ describe("App navigation", () => {
 
     expect(screen.getByRole("heading", { name: "Margen por venta" })).toBeTruthy();
     expect(screen.getByText("Cliente Mixto")).toBeTruthy();
+    const reportSummary = screen.getByRole("region", { name: "Resumen del reporte" });
+    const primaryInsight = screen.getByRole("region", { name: "Insight principal del reporte" });
+    const detailContext = screen.getByRole("region", { name: "Contexto del detalle" });
+    expect(
+      reportSummary.compareDocumentPosition(primaryInsight) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      detailContext.compareDocumentPosition(
+        screen.getByRole("table", { name: "Detalle margen por producto de la venta" })
+      ) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
     const saleSummary = screen.getByText("Margen total").closest(".summary-card");
     expect(saleSummary).toBeTruthy();
+    expect((saleSummary as HTMLElement).className).toContain("summary-card-compact");
     expect(within(saleSummary as HTMLElement).getByText(/\$\s*3\.300/)).toBeTruthy();
 
     const detailTable = screen.getByRole("table", { name: "Detalle margen por producto de la venta" });
