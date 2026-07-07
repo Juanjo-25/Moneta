@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
+import { EmptyState } from "../../components/EmptyState";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
@@ -603,10 +604,11 @@ export function PurchasesSection({
           </tbody>
         </DataTable>
       ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin compras registradas</strong>
-          <span>Las compras confirmadas aumentaran el inventario.</span>
-        </div>
+        <EmptyState
+          body="Las compras confirmadas aumentaran el inventario."
+          className="section-empty"
+          title="Sin compras registradas"
+        />
       )}
     </section>
   );

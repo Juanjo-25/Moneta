@@ -7,6 +7,7 @@ import {
 } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
+import { EmptyState } from "../../components/EmptyState";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type { InvoicePdfResult } from "../../invoice-pdf";
@@ -652,10 +653,11 @@ export function SalesSection({
           {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
         </>
       ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin ventas registradas</strong>
-          <span>Registra ventas para actualizar inventario y cartera.</span>
-        </div>
+        <EmptyState
+          body="Registra ventas para actualizar inventario y cartera."
+          className="section-empty"
+          title="Sin ventas registradas"
+        />
       )}
     </section>
   );

@@ -297,6 +297,12 @@ textarea:focus-visible {
   color: #334155;
 }
 
+.empty-state h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+}
+
 .dashboard-empty-state {
   min-height: 220px;
 }
@@ -1372,18 +1378,9 @@ textarea:focus-visible {
 }
 
 .report-placeholder-panel {
-  display: grid;
   gap: 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-card);
-  background: var(--surface-elevated);
+  border-style: solid;
   padding: 24px;
-  box-shadow: var(--shadow-subtle);
-}
-
-.report-placeholder-panel h2 {
-  margin: 0;
-  font-size: 22px;
 }
 
 .report-placeholder-panel strong {

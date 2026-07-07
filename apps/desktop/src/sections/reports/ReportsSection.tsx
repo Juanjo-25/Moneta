@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { CompactSummaryGrid } from "../../components/CompactSummaryGrid";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
+import { EmptyState } from "../../components/EmptyState";
 import { ReportChartPreviewPanel } from "../../components/ReportChartPreviewPanel";
 import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsightPanel";
 import { ReportSummaryShell } from "../../components/ReportSummaryShell";
@@ -738,10 +739,11 @@ export function ReportsSection({
         </ReportSummaryShell>
 
         {dsoClientRows.length === 0 ? (
-          <div className="empty-state section-empty">
-            <strong>Sin cartera pendiente para DSO</strong>
-            <span>Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo.</span>
-          </div>
+          <EmptyState
+            body="Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo."
+            className="section-empty"
+            title="Sin cartera pendiente para DSO"
+          />
         ) : (
           <ReportPrimaryInsightPanel
             title="DSO"
@@ -800,10 +802,11 @@ export function ReportsSection({
         </ReportSummaryShell>
 
         {cashflowEntries.length === 0 ? (
-          <div className="empty-state section-empty">
-            <strong>Sin movimientos para flujo de caja</strong>
-            <span>Registra ventas, compras o cartera pendiente para activar este reporte.</span>
-          </div>
+          <EmptyState
+            body="Registra ventas, compras o cartera pendiente para activar este reporte."
+            className="section-empty"
+            title="Sin movimientos para flujo de caja"
+          />
         ) : (
           <>
             <ReportPrimaryInsightPanel
@@ -895,10 +898,11 @@ export function ReportsSection({
         </ReportSummaryShell>
 
         {utilityPeriodRows.length === 0 ? (
-          <div className="empty-state section-empty">
-            <strong>Sin utilidades para analizar</strong>
-            <span>Registra ventas para construir la utilidad por periodo.</span>
-          </div>
+          <EmptyState
+            body="Registra ventas para construir la utilidad por periodo."
+            className="section-empty"
+            title="Sin utilidades para analizar"
+          />
         ) : (
           <>
             <ReportPrimaryInsightPanel
@@ -957,11 +961,12 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        <section className="report-placeholder-panel">
-          <h2>{selectedTab.title}</h2>
-          <strong>Proximamente</strong>
-          <span>Este reporte aparecera aqui cuando terminemos su implementacion.</span>
-        </section>
+        <EmptyState
+          body="Este reporte aparecera aqui cuando terminemos su implementacion."
+          className="report-placeholder-panel"
+          heading={selectedTab.title}
+          title="Proximamente"
+        />
       </section>
     );
   }
@@ -971,10 +976,11 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
-        <div className="empty-state section-empty">
-          <strong>Sin ventas para analizar</strong>
-          <span>Registra ventas para habilitar los reportes de rentabilidad.</span>
-        </div>
+        <EmptyState
+          body="Registra ventas para habilitar los reportes de rentabilidad."
+          className="section-empty"
+          title="Sin ventas para analizar"
+        />
       </section>
     );
   }

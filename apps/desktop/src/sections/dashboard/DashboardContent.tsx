@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EmptyState } from "../../components/EmptyState";
 import { PanelHeader } from "../../components/PanelHeader";
 import type { ProductRecord, SaleRecord } from "../../types";
 
@@ -188,10 +189,10 @@ export function DashboardContent({
               ))}
             </ul>
           ) : (
-            <div className="empty-state">
-              <strong>Sin alertas</strong>
-              <span>Los productos bajo el minimo se mostraran aqui.</span>
-            </div>
+            <EmptyState
+              body="Los productos bajo el minimo se mostraran aqui."
+              title="Sin alertas"
+            />
           )}
         </div>
       </section>
@@ -438,10 +439,11 @@ function DashboardAreaChart({
 
   if (maxValue === 0) {
     return (
-      <div className="empty-state dashboard-empty-state">
-        <strong>Sin ventas registradas</strong>
-        <span>Las ventas diarias apareceran cuando registres movimientos.</span>
-      </div>
+      <EmptyState
+        body="Las ventas diarias apareceran cuando registres movimientos."
+        className="dashboard-empty-state"
+        title="Sin ventas registradas"
+      />
     );
   }
 
@@ -566,10 +568,11 @@ function DashboardBarChart({ rows }: { rows: DashboardTrendRow[] }) {
 
   if (maxValue === 0) {
     return (
-      <div className="empty-state dashboard-empty-state">
-        <strong>Sin ventas registradas</strong>
-        <span>El comparativo mensual aparecera con las primeras ventas.</span>
-      </div>
+      <EmptyState
+        body="El comparativo mensual aparecera con las primeras ventas."
+        className="dashboard-empty-state"
+        title="Sin ventas registradas"
+      />
     );
   }
 
@@ -606,10 +609,7 @@ function DashboardRankingList({
 
   if (rows.length === 0) {
     return (
-      <div className="empty-state dashboard-empty-state">
-        <strong>{emptyTitle}</strong>
-        <span>{emptyBody}</span>
-      </div>
+      <EmptyState body={emptyBody} className="dashboard-empty-state" title={emptyTitle} />
     );
   }
 
@@ -671,10 +671,11 @@ function DashboardProductPieChart({
 
   if (rows.length === 0) {
     return (
-      <div className="empty-state dashboard-empty-state">
-        <strong>Sin productos vendidos</strong>
-        <span>Los productos vendidos se mostraran aqui.</span>
-      </div>
+      <EmptyState
+        body="Los productos vendidos se mostraran aqui."
+        className="dashboard-empty-state"
+        title="Sin productos vendidos"
+      />
     );
   }
 
