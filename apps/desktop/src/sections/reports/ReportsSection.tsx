@@ -1,4 +1,8 @@
 import { useState, type ReactNode } from "react";
+import { CompactSummaryGrid } from "../../components/CompactSummaryGrid";
+import { ReportChartPreviewPanel } from "../../components/ReportChartPreviewPanel";
+import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsightPanel";
+import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { parseLocalDate } from "../../lib/dates";
 import type {
   PurchaseRecord,
@@ -118,18 +122,6 @@ type UtilitySummary = {
   bestPeriodMarginMinor: number;
   worstPeriodLabel: string;
   worstPeriodMarginMinor: number;
-};
-
-type CompactSummaryItem = {
-  label: string;
-  value: string;
-};
-
-type ProfitabilityChartPreviewRow = {
-  id: string;
-  label: string;
-  value: string;
-  widthPercent: number;
 };
 
 function formatPercent(value: number): string {
@@ -663,7 +655,7 @@ export function ReportsSection({
   }
 
   function renderProfitabilitySummary() {
-    const items: CompactSummaryItem[] = [
+    const items = [
       { label: "Ingresos totales", value: formatCurrency(summary.revenueMinor) },
       { label: "Costo de ventas", value: formatCurrency(summary.costMinor) },
       { label: "Margen bruto", value: formatCurrency(summary.marginMinor) },
@@ -671,28 +663,7 @@ export function ReportsSection({
       { label: "% margen", value: formatPercent(summary.marginPercent) }
     ];
 
-    return renderCompactSummaryGrid("Resumen rentabilidad general", items);
-  }
-
-  function renderCompactSummaryGrid(ariaLabel: string, items: CompactSummaryItem[]) {
-    return (
-      <div className="cartera-summary" aria-label={ariaLabel}>
-        {items.map((item) => (
-          <div className="summary-card summary-card-compact" key={item.label}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderReportSummaryShell(content: ReactNode) {
-    return (
-      <section className="reports-summary-shell" aria-label="Resumen del reporte">
-        {content}
-      </section>
-    );
+    return <CompactSummaryGrid ariaLabel="Resumen rentabilidad general" items={items} />;
   }
 
   function renderProfitabilityLayout(content: ReactNode, withSummary = false) {
@@ -700,81 +671,8 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
-        {withSummary ? renderReportSummaryShell(renderProfitabilitySummary()) : null}
+        {withSummary ? <ReportSummaryShell>{renderProfitabilitySummary()}</ReportSummaryShell> : null}
         {content}
-      </section>
-    );
-  }
-
-  function renderPrimaryInsightPanel(input: {
-    title: string;
-    description: ReactNode;
-    onBack?: (() => void) | undefined;
-    children: ReactNode;
-  }) {
-    return (
-      <section
-        className="report-detail-panel report-detail-panel-primary"
-        aria-label="Insight principal del reporte"
-      >
-        <div className="report-detail-header">
-          {input.onBack ? (
-            <button className="table-action" onClick={input.onBack} type="button">
-              Volver a resumen
-            </button>
-          ) : null}
-          <div>
-            <h2>{input.title}</h2>
-            <p>{input.description}</p>
-          </div>
-        </div>
-
-        {input.children}
-      </section>
-    );
-  }
-
-  function renderProfitabilityPreviewPanel(input: {
-    title: string;
-    description: string;
-    detailViewTarget: Exclude<ReportDetailView, null | "sale">;
-    actionLabel: string;
-    chartLabel: string;
-    rows: ProfitabilityChartPreviewRow[];
-  }) {
-    return renderProfitabilityLayout(
-      <section className="report-panel report-panel-single">
-        <div className="report-panel-header">
-          <div>
-            <h2>{input.title}</h2>
-            <p>{input.description}</p>
-          </div>
-          <button
-            className="table-action"
-            onClick={() => setDetailView(input.detailViewTarget)}
-            type="button"
-          >
-            Ver detalle
-          </button>
-        </div>
-        <button
-          aria-label={input.actionLabel}
-          className="report-chart-button"
-          onClick={() => setDetailView(input.detailViewTarget)}
-          type="button"
-        >
-          <div className="report-chart" aria-label={input.chartLabel}>
-            {input.rows.map((row) => (
-              <div className="report-bar-row" key={row.id}>
-                <span>{row.label}</span>
-                <div className="report-bar-track">
-                  <div className="report-bar-fill" style={{ width: `${row.widthPercent}%` }} />
-                </div>
-                <strong>{row.value}</strong>
-              </div>
-            ))}
-          </div>
-        </button>
       </section>
     );
   }
@@ -820,7 +718,7 @@ export function ReportsSection({
   }
 
   if (activeReportTab === "dso") {
-    const summaryItems: CompactSummaryItem[] = [
+    const summaryItems = [
       { label: "DSO global", value: formatDays(dsoSummary.dsoDays) },
       {
         label: "Cartera abierta",
@@ -833,7 +731,9 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderReportSummaryShell(renderCompactSummaryGrid("Resumen DSO", summaryItems))}
+        <ReportSummaryShell>
+          <CompactSummaryGrid ariaLabel="Resumen DSO" items={summaryItems} />
+        </ReportSummaryShell>
 
         {dsoClientRows.length === 0 ? (
           <div className="empty-state section-empty">
@@ -841,10 +741,10 @@ export function ReportsSection({
             <span>Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo.</span>
           </div>
         ) : (
-          renderPrimaryInsightPanel({
-            title: "DSO",
-            description: "Top clientes que mas empujan el promedio actual de cobro.",
-            children: (
+          <ReportPrimaryInsightPanel
+            title="DSO"
+            description="Top clientes que mas empujan el promedio actual de cobro."
+          >
               <table className="data-table" aria-label="Impacto DSO por cliente">
               <thead>
                 <tr>
@@ -867,15 +767,14 @@ export function ReportsSection({
                 ))}
               </tbody>
               </table>
-            )
-          })
+          </ReportPrimaryInsightPanel>
         )}
       </section>
     );
   }
 
   if (activeReportTab === "cashflow") {
-    const summaryItems: CompactSummaryItem[] = [
+    const summaryItems = [
       {
         label: "Entradas reales",
         value: formatCurrency(cashflowSummary.realInflowMinor)
@@ -894,9 +793,9 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderReportSummaryShell(
-          renderCompactSummaryGrid("Resumen flujo de caja", summaryItems)
-        )}
+        <ReportSummaryShell>
+          <CompactSummaryGrid ariaLabel="Resumen flujo de caja" items={summaryItems} />
+        </ReportSummaryShell>
 
         {cashflowEntries.length === 0 ? (
           <div className="empty-state section-empty">
@@ -905,11 +804,10 @@ export function ReportsSection({
           </div>
         ) : (
           <>
-            {renderPrimaryInsightPanel({
-              title: "Flujo de caja",
-              description:
-                "Comparativo entre movimientos reales y compromisos proyectados por fecha.",
-              children: (
+            <ReportPrimaryInsightPanel
+              title="Flujo de caja"
+              description="Comparativo entre movimientos reales y compromisos proyectados por fecha."
+            >
                 <div className="report-chart report-chart-detail" aria-label="Grafico flujo de caja comparativo">
                 {cashflowPeriodRows.map((row) => (
                   <div className="cashflow-chart-row" key={`${row.dateSortMs}-${row.dateLabel}`}>
@@ -941,8 +839,7 @@ export function ReportsSection({
                   </div>
                 ))}
                 </div>
-              )
-            })}
+            </ReportPrimaryInsightPanel>
 
             <table className="data-table" aria-label="Detalle flujo de caja">
               <thead>
@@ -977,7 +874,7 @@ export function ReportsSection({
   }
 
   if (activeReportTab === "variance") {
-    const summaryItems: CompactSummaryItem[] = [
+    const summaryItems = [
       {
         label: "Utilidad total",
         value: formatCurrency(utilitySummary.totalMarginMinor)
@@ -999,9 +896,9 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderReportSummaryShell(
-          renderCompactSummaryGrid("Resumen utilidades", summaryItems)
-        )}
+        <ReportSummaryShell>
+          <CompactSummaryGrid ariaLabel="Resumen utilidades" items={summaryItems} />
+        </ReportSummaryShell>
 
         {utilityPeriodRows.length === 0 ? (
           <div className="empty-state section-empty">
@@ -1010,10 +907,10 @@ export function ReportsSection({
           </div>
         ) : (
           <>
-            {renderPrimaryInsightPanel({
-              title: "Utilidades",
-              description: "Utilidad total por dia con ventas, costo y margen consolidado.",
-              children: (
+            <ReportPrimaryInsightPanel
+              title="Utilidades"
+              description="Utilidad total por dia con ventas, costo y margen consolidado."
+            >
                 <div className="report-chart report-chart-detail" aria-label="Grafico utilidades por periodo">
                 {utilityPeriodRows.map((row) => (
                   <div className="report-bar-row report-bar-row-detail" key={row.dateKey}>
@@ -1028,8 +925,7 @@ export function ReportsSection({
                   </div>
                 ))}
                 </div>
-              )
-            })}
+            </ReportPrimaryInsightPanel>
 
             <table className="data-table" aria-label="Detalle utilidades por periodo">
               <thead>
@@ -1091,11 +987,11 @@ export function ReportsSection({
 
   if (detailView === "product") {
     return renderProfitabilityLayout(
-      renderPrimaryInsightPanel({
-        title: "Margen por producto",
-        description: "Utilidad agregada por producto vendida en el periodo analizado.",
-        onBack: () => setDetailView(null),
-        children: (
+      <ReportPrimaryInsightPanel
+        title="Margen por producto"
+        description="Utilidad agregada por producto vendida en el periodo analizado."
+        onBack={() => setDetailView(null)}
+      >
           <>
           <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por producto">
             {productRows.map((row) => (
@@ -1139,19 +1035,18 @@ export function ReportsSection({
               </tbody>
             </table>
           </>
-        )
-      }),
+      </ReportPrimaryInsightPanel>,
       true
     );
   }
 
   if (detailView === "customer") {
     return renderProfitabilityLayout(
-      renderPrimaryInsightPanel({
-        title: "Margen por cliente",
-        description: "Utilidad consolidada por cliente para comparar variacion comercial.",
-        onBack: () => setDetailView(null),
-        children: (
+      <ReportPrimaryInsightPanel
+        title="Margen por cliente"
+        description="Utilidad consolidada por cliente para comparar variacion comercial."
+        onBack={() => setDetailView(null)}
+      >
           <>
           <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por cliente">
             {customerRows.map((row) => (
@@ -1195,20 +1090,18 @@ export function ReportsSection({
               </tbody>
             </table>
           </>
-        )
-      }),
+      </ReportPrimaryInsightPanel>,
       true
     );
   }
 
   if (detailView === "sales") {
     return renderProfitabilityLayout(
-      renderPrimaryInsightPanel({
-        title: "Margen por venta",
-        description:
-          "Rentabilidad total por venta y acceso al detalle por producto de cada factura.",
-        onBack: () => setDetailView(null),
-        children: (
+      <ReportPrimaryInsightPanel
+        title="Margen por venta"
+        description="Rentabilidad total por venta y acceso al detalle por producto de cada factura."
+        onBack={() => setDetailView(null)}
+      >
           <table className="data-table" aria-label="Detalle margen por venta">
             <thead>
               <tr>
@@ -1251,8 +1144,7 @@ export function ReportsSection({
               ))}
               </tbody>
             </table>
-        )
-      }),
+      </ReportPrimaryInsightPanel>,
       true
     );
   }
@@ -1267,14 +1159,14 @@ export function ReportsSection({
       selectedSale.totalMinor > 0 ? (selectedSaleMarginMinor / selectedSale.totalMinor) * 100 : 0;
 
     return renderProfitabilityLayout(
-      renderPrimaryInsightPanel({
-        title: "Margen por venta",
-        description: `${selectedSale.customerName} · ${selectedSale.id} · ${selectedSale.occurredAtLabel}`,
-        onBack: () => {
+      <ReportPrimaryInsightPanel
+        title="Margen por venta"
+        description={`${selectedSale.customerName} · ${selectedSale.id} · ${selectedSale.occurredAtLabel}`}
+        onBack={() => {
           setDetailView("sales");
           setSelectedSaleId(null);
-        },
-        children: (
+        }}
+      >
           <>
           <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
             <div className="report-sale-summary">
@@ -1328,71 +1220,76 @@ export function ReportsSection({
               </tbody>
             </table>
           </>
-        )
-      }),
+      </ReportPrimaryInsightPanel>,
       true
     );
   }
 
   if (activeProfitabilityTab === "customer") {
-    const rows: ProfitabilityChartPreviewRow[] = topCustomerRows.map((row) => ({
+    const rows = topCustomerRows.map((row) => ({
       id: row.customerId,
       label: row.customerName,
       value: formatCurrency(row.marginMinor),
       widthPercent: customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0
     }));
 
-    return renderProfitabilityPreviewPanel({
-      title: "Margen por cliente",
-      description: "Top clientes ordenados por utilidad real acumulada.",
-      detailViewTarget: "customer",
-      actionLabel: "Abrir detalle de margen por cliente",
-      chartLabel: "Grafico margen por cliente",
-      rows
-    });
+    return renderProfitabilityLayout(
+      <ReportChartPreviewPanel
+        actionLabel="Abrir detalle de margen por cliente"
+        chartLabel="Grafico margen por cliente"
+        description="Top clientes ordenados por utilidad real acumulada."
+        onOpenDetail={() => setDetailView("customer")}
+        rows={rows}
+        title="Margen por cliente"
+      />
+    );
   }
 
   if (activeProfitabilityTab === "product") {
-    const rows: ProfitabilityChartPreviewRow[] = topProductRows.map((row) => ({
+    const rows = topProductRows.map((row) => ({
       id: row.productId,
       label: row.productName,
       value: formatCurrency(row.marginMinor),
       widthPercent: productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0
     }));
 
-    return renderProfitabilityPreviewPanel({
-      title: "Margen por producto",
-      description: "Productos ordenados por utilidad y volumen vendido.",
-      detailViewTarget: "product",
-      actionLabel: "Abrir detalle de margen por producto",
-      chartLabel: "Grafico margen por producto",
-      rows
-    });
+    return renderProfitabilityLayout(
+      <ReportChartPreviewPanel
+        actionLabel="Abrir detalle de margen por producto"
+        chartLabel="Grafico margen por producto"
+        description="Productos ordenados por utilidad y volumen vendido."
+        onOpenDetail={() => setDetailView("product")}
+        rows={rows}
+        title="Margen por producto"
+      />
+    );
   }
 
   if (activeProfitabilityTab === "sales") {
-    const rows: ProfitabilityChartPreviewRow[] = topSaleRows.map((row) => ({
+    const rows = topSaleRows.map((row) => ({
       id: row.saleId,
       label: row.customerName,
       value: formatCurrency(row.marginMinor),
       widthPercent: saleMaxMargin > 0 ? (row.marginMinor / saleMaxMargin) * 100 : 0
     }));
 
-    return renderProfitabilityPreviewPanel({
-      title: "Margen por venta",
-      description: "Rentabilidad por venta completa, con acceso al desglose por linea.",
-      detailViewTarget: "sales",
-      actionLabel: "Abrir detalle de margen por venta",
-      chartLabel: "Grafico margen por venta",
-      rows
-    });
+    return renderProfitabilityLayout(
+      <ReportChartPreviewPanel
+        actionLabel="Abrir detalle de margen por venta"
+        chartLabel="Grafico margen por venta"
+        description="Rentabilidad por venta completa, con acceso al desglose por linea."
+        onOpenDetail={() => setDetailView("sales")}
+        rows={rows}
+        title="Margen por venta"
+      />
+    );
   }
 
   return renderProfitabilityLayout(
-    renderPrimaryInsightPanel({
-      title: "Estado de perdidas y ganancias",
-      description: "Vista macro de ingresos, costo de ventas y utilidad final del periodo analizado.",
-      children: (
+    <ReportPrimaryInsightPanel
+      title="Estado de perdidas y ganancias"
+      description="Vista macro de ingresos, costo de ventas y utilidad final del periodo analizado."
+    >
         <div className="report-waterfall" aria-label="Grafico cascada de utilidad">
           <div className="report-waterfall-step">
             <span>Ingresos</span>
@@ -1411,8 +1308,7 @@ export function ReportsSection({
             <strong>{formatCurrency(netMarginMinor)}</strong>
           </div>
         </div>
-      )
-    }),
+    </ReportPrimaryInsightPanel>,
     true
   );
 }
