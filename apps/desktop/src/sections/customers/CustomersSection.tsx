@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -238,18 +240,18 @@ export function CustomersSection({
           title="Sin resultados"
         />
       ) : (
-        <table className="data-table" aria-label="Clientes registrados">
-          <thead>
-            <tr>
-              <th>Cliente</th>
-              <th>Documento</th>
-              <th>Estado</th>
-              <th>Total vendido</th>
-              <th>Cartera</th>
-              <th>Ultima venta</th>
-              <th>Accion</th>
-            </tr>
-          </thead>
+        <DataTable ariaLabel="Clientes registrados">
+          <DataTableHeader
+            labels={[
+              "Cliente",
+              "Documento",
+              "Estado",
+              "Total vendido",
+              "Cartera",
+              "Ultima venta",
+              "Accion"
+            ]}
+          />
           <tbody>
             {filteredCustomers.map((customer) => {
               const summary = buildCustomerSummary({ customer, receivables, sales });
@@ -275,7 +277,7 @@ export function CustomersSection({
               );
             })}
           </tbody>
-        </table>
+        </DataTable>
       )}
 
       {selectedCustomer ? (

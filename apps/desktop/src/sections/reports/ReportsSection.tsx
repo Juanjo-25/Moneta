@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { CompactSummaryGrid } from "../../components/CompactSummaryGrid";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { ReportChartPreviewPanel } from "../../components/ReportChartPreviewPanel";
 import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsightPanel";
 import { ReportSummaryShell } from "../../components/ReportSummaryShell";
@@ -745,16 +747,16 @@ export function ReportsSection({
             title="DSO"
             description="Top clientes que mas empujan el promedio actual de cobro."
           >
-              <table className="data-table" aria-label="Impacto DSO por cliente">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Saldo pendiente</th>
-                  <th>Participacion</th>
-                  <th>DSO cliente</th>
-                  <th>Facturas abiertas</th>
-                </tr>
-              </thead>
+              <DataTable ariaLabel="Impacto DSO por cliente">
+              <DataTableHeader
+                labels={[
+                  "Cliente",
+                  "Saldo pendiente",
+                  "Participacion",
+                  "DSO cliente",
+                  "Facturas abiertas"
+                ]}
+              />
               <tbody>
                 {dsoClientRows.map((row) => (
                   <tr key={row.customerId}>
@@ -766,7 +768,7 @@ export function ReportsSection({
                   </tr>
                 ))}
               </tbody>
-              </table>
+              </DataTable>
           </ReportPrimaryInsightPanel>
         )}
       </section>

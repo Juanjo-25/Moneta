@@ -1,4 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { TextField } from "../../components/TextField";
 import type {
@@ -311,19 +313,19 @@ export function SuppliersSection({
       ) : null}
 
       {suppliers.length > 0 ? (
-        <table className="data-table" aria-label="Proveedores registrados">
-          <thead>
-            <tr>
-              <th>Proveedor</th>
-              <th>Documento</th>
-              <th>Telefono</th>
-              <th>Email</th>
-              <th>Departamento</th>
-              <th>Municipio</th>
-              <th>Estado</th>
-              <th>Accion</th>
-            </tr>
-          </thead>
+        <DataTable ariaLabel="Proveedores registrados">
+          <DataTableHeader
+            labels={[
+              "Proveedor",
+              "Documento",
+              "Telefono",
+              "Email",
+              "Departamento",
+              "Municipio",
+              "Estado",
+              "Accion"
+            ]}
+          />
           <tbody>
             {suppliers.map((supplier) => (
               <tr key={supplier.id}>
@@ -353,7 +355,7 @@ export function SuppliersSection({
               </tr>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       ) : (
         <EmptyState
           body="Crea proveedores para asociarlos a tus compras."
