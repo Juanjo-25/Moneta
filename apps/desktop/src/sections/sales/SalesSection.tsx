@@ -5,6 +5,10 @@ import {
   type FormEvent,
   type SetStateAction
 } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
+import { EmptyState } from "../../components/EmptyState";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type { InvoicePdfResult } from "../../invoice-pdf";
@@ -432,12 +436,11 @@ export function SalesSection({
           </label>
 
           <div className="inline-action-group">
-            <button
-              type="button"
+            <SecondaryActionButton
               onClick={() => setCustomerFormVisible((visible) => !visible)}
             >
               Nuevo cliente
-            </button>
+            </SecondaryActionButton>
           </div>
 
           <label className="field" htmlFor="producto-venta">
@@ -479,9 +482,9 @@ export function SalesSection({
             value={form.unitPrice}
           />
           <div className="inline-action-group">
-            <button type="button" onClick={addSaleLine}>
+            <SecondaryActionButton onClick={addSaleLine}>
               Agregar producto
-            </button>
+            </SecondaryActionButton>
           </div>
         </div>
 
@@ -517,9 +520,9 @@ export function SalesSection({
               onChange={(value) => updateCustomerField("email", value)}
               value={customerForm.email}
             />
-            <button type="button" onClick={submitCustomer}>
+            <SecondaryActionButton onClick={submitCustomer}>
               Guardar cliente
-            </button>
+            </SecondaryActionButton>
           </div>
         ) : null}
 
@@ -563,15 +566,10 @@ export function SalesSection({
         ) : null}
 
         {saleLines.length > 0 ? (
-          <table className="data-table purchase-lines-table" aria-label="Productos de la venta">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio unitario</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Productos de la venta" className="purchase-lines-table">
+            <DataTableHeader
+              labels={["Producto", "Cantidad", "Precio unitario", "Total"]}
+            />
             <tbody>
               {saleLines.map((line) => (
                 <tr key={line.id}>
@@ -582,7 +580,7 @@ export function SalesSection({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         ) : null}
 
         <SummaryCard compact>
@@ -602,18 +600,18 @@ export function SalesSection({
 
       {sales.length > 0 ? (
         <>
-          <table className="data-table" aria-label="Ventas registradas">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Estado</th>
-                <th>Total</th>
-                <th>Factura</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Ventas registradas">
+            <DataTableHeader
+              labels={[
+                "Fecha",
+                "Cliente",
+                "Producto",
+                "Cantidad",
+                "Estado",
+                "Total",
+                "Factura"
+              ]}
+            />
             <tbody>
               {sales.map((sale) => (
                 <tr key={sale.id}>
@@ -624,20 +622,19 @@ export function SalesSection({
                   <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                   <td>{formatCurrency(sale.totalMinor)}</td>
                   <td>
-                    <button
-                      className="table-action"
+                    <SecondaryActionButton
                       onClick={() => {
                         void generateInvoiceForSale(sale);
                       }}
-                      type="button"
+                      variant="compact"
                     >
                       Generar factura PDF
-                    </button>
+                    </SecondaryActionButton>
                   </td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
           {invoicePreview ? (
             <section className="invoice-preview" aria-label="Factura PDF generada">
               <div className="invoice-preview-header">
@@ -655,10 +652,11 @@ export function SalesSection({
           {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
         </>
       ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin ventas registradas</strong>
-          <span>Registra ventas para actualizar inventario y cartera.</span>
-        </div>
+        <EmptyState
+          body="Registra ventas para actualizar inventario y cartera."
+          className="section-empty"
+          title="Sin ventas registradas"
+        />
       )}
     </section>
   );

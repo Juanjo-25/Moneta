@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
@@ -238,18 +241,18 @@ export function CustomersSection({
           title="Sin resultados"
         />
       ) : (
-        <table className="data-table" aria-label="Clientes registrados">
-          <thead>
-            <tr>
-              <th>Cliente</th>
-              <th>Documento</th>
-              <th>Estado</th>
-              <th>Total vendido</th>
-              <th>Cartera</th>
-              <th>Ultima venta</th>
-              <th>Accion</th>
-            </tr>
-          </thead>
+        <DataTable ariaLabel="Clientes registrados">
+          <DataTableHeader
+            labels={[
+              "Cliente",
+              "Documento",
+              "Estado",
+              "Total vendido",
+              "Cartera",
+              "Ultima venta",
+              "Accion"
+            ]}
+          />
           <tbody>
             {filteredCustomers.map((customer) => {
               const summary = buildCustomerSummary({ customer, receivables, sales });
@@ -263,19 +266,18 @@ export function CustomersSection({
                   <td>{formatCurrency(summary.pendingReceivableMinor)}</td>
                   <td>{summary.lastSaleLabel}</td>
                   <td>
-                    <button
-                      className="table-action"
+                    <SecondaryActionButton
                       onClick={() => selectCustomer(customer)}
-                      type="button"
+                      variant="compact"
                     >
                       Ver cliente {customer.name}
-                    </button>
+                    </SecondaryActionButton>
                   </td>
                 </tr>
               );
             })}
           </tbody>
-        </table>
+        </DataTable>
       )}
 
       {selectedCustomer ? (
@@ -292,22 +294,20 @@ export function CustomersSection({
               </StatusBadge>
             </div>
             <div className="form-actions">
-              <button
-                className="table-action"
+              <SecondaryActionButton
                 onClick={() => startEditingCustomer(selectedCustomer)}
-                type="button"
+                variant="compact"
               >
                 Editar cliente
-              </button>
-              <button
-                className="table-action"
+              </SecondaryActionButton>
+              <SecondaryActionButton
                 onClick={() =>
                   onSetCustomerActive(selectedCustomer.id, !selectedCustomer.active)
                 }
-                type="button"
+                variant="compact"
               >
                 {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}
-              </button>
+              </SecondaryActionButton>
             </div>
           </div>
 
@@ -373,15 +373,8 @@ export function CustomersSection({
           ) : null}
 
           {selectedCustomerSales.length > 0 ? (
-            <table className="data-table" aria-label="Historial de ventas del cliente">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Producto</th>
-                  <th>Estado</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
+            <DataTable ariaLabel="Historial de ventas del cliente">
+              <DataTableHeader labels={["Fecha", "Producto", "Estado", "Total"]} />
               <tbody>
                 {selectedCustomerSales.map((sale) => (
                   <tr key={sale.id}>
@@ -392,7 +385,7 @@ export function CustomersSection({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           ) : (
             <EmptyState
               body="Las ventas apareceran cuando se registren movimientos."
@@ -402,14 +395,8 @@ export function CustomersSection({
           )}
 
           {selectedCustomerReceivables.length > 0 ? (
-            <table className="data-table" aria-label="Cartera pendiente del cliente">
-              <thead>
-                <tr>
-                  <th>Venta</th>
-                  <th>Vencimiento</th>
-                  <th>Saldo</th>
-                </tr>
-              </thead>
+            <DataTable ariaLabel="Cartera pendiente del cliente">
+              <DataTableHeader labels={["Venta", "Vencimiento", "Saldo"]} />
               <tbody>
                 {selectedCustomerReceivables.map((receivable) => (
                   <tr key={receivable.id}>
@@ -419,7 +406,7 @@ export function CustomersSection({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           ) : null}
         </section>
       ) : null}

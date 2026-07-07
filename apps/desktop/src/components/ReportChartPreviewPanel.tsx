@@ -1,4 +1,5 @@
 import { PanelHeader } from "./PanelHeader";
+import { SecondaryActionButton } from "./SecondaryActionButton";
 
 type ReportChartPreviewRow = {
   id: string;
@@ -28,9 +29,9 @@ export function ReportChartPreviewPanel({
     <section className="report-panel report-panel-single">
       <PanelHeader
         action={
-          <button className="table-action" onClick={onOpenDetail} type="button">
+          <SecondaryActionButton onClick={onOpenDetail} variant="compact">
             Ver detalle
-          </button>
+          </SecondaryActionButton>
         }
         className="report-panel-header"
       >

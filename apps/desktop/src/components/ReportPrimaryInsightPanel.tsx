@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { PanelHeader } from "./PanelHeader";
+import { SecondaryActionButton } from "./SecondaryActionButton";
 
 type ReportPrimaryInsightPanelProps = {
   children: ReactNode;
@@ -22,9 +23,9 @@ export function ReportPrimaryInsightPanel({
       <PanelHeader
         action={
           onBack ? (
-            <button className="table-action" onClick={onBack} type="button">
+            <SecondaryActionButton onClick={onBack} variant="compact">
               Volver a resumen
-            </button>
+            </SecondaryActionButton>
           ) : null
         }
         className="report-detail-header"

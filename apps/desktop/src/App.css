@@ -297,6 +297,12 @@ textarea:focus-visible {
   color: #334155;
 }
 
+.empty-state h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+}
+
 .dashboard-empty-state {
   min-height: 220px;
 }
@@ -751,19 +757,24 @@ textarea:focus-visible {
   background: var(--surface-soft);
 }
 
-.table-action {
-  min-height: 36px;
+.secondary-action {
+  min-height: 42px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   background: var(--surface-muted);
   color: var(--text-secondary);
-  padding: 8px 11px;
+  padding: 0 14px;
   font-size: 13px;
   font-weight: 700;
+}
+
+.secondary-action-compact {
+  min-height: 36px;
+  padding: 8px 11px;
   white-space: nowrap;
 }
 
-.table-action:hover {
+.secondary-action:hover {
   border-color: #cbd5e1;
   background: #e6edf5;
   color: var(--text-primary);
@@ -954,16 +965,6 @@ textarea:focus-visible {
   align-items: flex-end;
 }
 
-.inline-action-group button,
-.inline-customer-form button {
-  min-height: 42px;
-  border-radius: var(--radius-control);
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  padding: 0 14px;
-  font-weight: 700;
-}
-
 .inline-customer-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -973,7 +974,7 @@ textarea:focus-visible {
   border-top: 1px solid #e2e8f0;
 }
 
-.inline-customer-form button {
+.inline-customer-form .secondary-action {
   align-self: end;
 }
 
@@ -1156,14 +1157,8 @@ textarea:focus-visible {
   border-top: 1px solid #e2e8f0;
 }
 
-.inline-supplier-form button {
+.inline-supplier-form .secondary-action {
   align-self: end;
-  min-height: 42px;
-  border-radius: var(--radius-control);
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  padding: 0 14px;
-  font-weight: 700;
 }
 
 .inline-purchase-product-form {
@@ -1175,14 +1170,8 @@ textarea:focus-visible {
   border-top: 1px solid #e2e8f0;
 }
 
-.inline-purchase-product-form button {
+.inline-purchase-product-form .secondary-action {
   align-self: end;
-  min-height: 42px;
-  border-radius: var(--radius-control);
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  padding: 0 14px;
-  font-weight: 700;
 }
 
 .supplier-payment-form {
@@ -1372,18 +1361,9 @@ textarea:focus-visible {
 }
 
 .report-placeholder-panel {
-  display: grid;
   gap: 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-card);
-  background: var(--surface-elevated);
+  border-style: solid;
   padding: 24px;
-  box-shadow: var(--shadow-subtle);
-}
-
-.report-placeholder-panel h2 {
-  margin: 0;
-  font-size: 22px;
 }
 
 .report-placeholder-panel strong {

@@ -1,8 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { CompactSummaryGrid } from "../../components/CompactSummaryGrid";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
+import { EmptyState } from "../../components/EmptyState";
 import { ReportChartPreviewPanel } from "../../components/ReportChartPreviewPanel";
 import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsightPanel";
 import { ReportSummaryShell } from "../../components/ReportSummaryShell";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { parseLocalDate } from "../../lib/dates";
 import type {
   PurchaseRecord,
@@ -736,25 +740,26 @@ export function ReportsSection({
         </ReportSummaryShell>
 
         {dsoClientRows.length === 0 ? (
-          <div className="empty-state section-empty">
-            <strong>Sin cartera pendiente para DSO</strong>
-            <span>Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo.</span>
-          </div>
+          <EmptyState
+            body="Las ventas pendientes de cobro apareceran aqui para medir dias de recaudo."
+            className="section-empty"
+            title="Sin cartera pendiente para DSO"
+          />
         ) : (
           <ReportPrimaryInsightPanel
             title="DSO"
             description="Top clientes que mas empujan el promedio actual de cobro."
           >
-              <table className="data-table" aria-label="Impacto DSO por cliente">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Saldo pendiente</th>
-                  <th>Participacion</th>
-                  <th>DSO cliente</th>
-                  <th>Facturas abiertas</th>
-                </tr>
-              </thead>
+              <DataTable ariaLabel="Impacto DSO por cliente">
+              <DataTableHeader
+                labels={[
+                  "Cliente",
+                  "Saldo pendiente",
+                  "Participacion",
+                  "DSO cliente",
+                  "Facturas abiertas"
+                ]}
+              />
               <tbody>
                 {dsoClientRows.map((row) => (
                   <tr key={row.customerId}>
@@ -766,7 +771,7 @@ export function ReportsSection({
                   </tr>
                 ))}
               </tbody>
-              </table>
+              </DataTable>
           </ReportPrimaryInsightPanel>
         )}
       </section>
@@ -798,10 +803,11 @@ export function ReportsSection({
         </ReportSummaryShell>
 
         {cashflowEntries.length === 0 ? (
-          <div className="empty-state section-empty">
-            <strong>Sin movimientos para flujo de caja</strong>
-            <span>Registra ventas, compras o cartera pendiente para activar este reporte.</span>
-          </div>
+          <EmptyState
+            body="Registra ventas, compras o cartera pendiente para activar este reporte."
+            className="section-empty"
+            title="Sin movimientos para flujo de caja"
+          />
         ) : (
           <>
             <ReportPrimaryInsightPanel
@@ -841,18 +847,10 @@ export function ReportsSection({
                 </div>
             </ReportPrimaryInsightPanel>
 
-            <table className="data-table" aria-label="Detalle flujo de caja">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Origen</th>
-                  <th>Tercero</th>
-                  <th>Entrada</th>
-                  <th>Salida</th>
-                  <th>Neto</th>
-                </tr>
-              </thead>
+            <DataTable ariaLabel="Detalle flujo de caja">
+              <DataTableHeader
+                labels={["Fecha", "Tipo", "Origen", "Tercero", "Entrada", "Salida", "Neto"]}
+              />
               <tbody>
                 {cashflowEntries.map((entry) => (
                   <tr key={entry.id}>
@@ -866,7 +864,7 @@ export function ReportsSection({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
         )}
       </section>
@@ -901,10 +899,11 @@ export function ReportsSection({
         </ReportSummaryShell>
 
         {utilityPeriodRows.length === 0 ? (
-          <div className="empty-state section-empty">
-            <strong>Sin utilidades para analizar</strong>
-            <span>Registra ventas para construir la utilidad por periodo.</span>
-          </div>
+          <EmptyState
+            body="Registra ventas para construir la utilidad por periodo."
+            className="section-empty"
+            title="Sin utilidades para analizar"
+          />
         ) : (
           <>
             <ReportPrimaryInsightPanel
@@ -927,17 +926,17 @@ export function ReportsSection({
                 </div>
             </ReportPrimaryInsightPanel>
 
-            <table className="data-table" aria-label="Detalle utilidades por periodo">
-              <thead>
-                <tr>
-                  <th>Periodo</th>
-                  <th>Ventas</th>
-                  <th>Costo</th>
-                  <th>Utilidad</th>
-                  <th>% margen</th>
-                  <th>Numero de ventas</th>
-                </tr>
-              </thead>
+            <DataTable ariaLabel="Detalle utilidades por periodo">
+              <DataTableHeader
+                labels={[
+                  "Periodo",
+                  "Ventas",
+                  "Costo",
+                  "Utilidad",
+                  "% margen",
+                  "Numero de ventas"
+                ]}
+              />
               <tbody>
                 {utilityPeriodRows.map((row) => (
                   <tr key={row.dateKey}>
@@ -950,7 +949,7 @@ export function ReportsSection({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
         )}
       </section>
@@ -963,11 +962,12 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        <section className="report-placeholder-panel">
-          <h2>{selectedTab.title}</h2>
-          <strong>Proximamente</strong>
-          <span>Este reporte aparecera aqui cuando terminemos su implementacion.</span>
-        </section>
+        <EmptyState
+          body="Este reporte aparecera aqui cuando terminemos su implementacion."
+          className="report-placeholder-panel"
+          heading={selectedTab.title}
+          title="Proximamente"
+        />
       </section>
     );
   }
@@ -977,10 +977,11 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
-        <div className="empty-state section-empty">
-          <strong>Sin ventas para analizar</strong>
-          <span>Registra ventas para habilitar los reportes de rentabilidad.</span>
-        </div>
+        <EmptyState
+          body="Registra ventas para habilitar los reportes de rentabilidad."
+          className="section-empty"
+          title="Sin ventas para analizar"
+        />
       </section>
     );
   }
@@ -1010,17 +1011,10 @@ export function ReportsSection({
             ))}
           </div>
 
-          <table className="data-table" aria-label="Detalle margen por producto">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Unidades</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por producto">
+            <DataTableHeader
+              labels={["Producto", "Unidades", "Ventas", "Costo", "Utilidad", "% margen"]}
+            />
             <tbody>
               {productRows.map((row) => (
                 <tr key={row.productId}>
@@ -1033,7 +1027,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
       </ReportPrimaryInsightPanel>,
       true
@@ -1065,17 +1059,10 @@ export function ReportsSection({
             ))}
           </div>
 
-          <table className="data-table" aria-label="Detalle margen por cliente">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-                <th>Compras</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por cliente">
+            <DataTableHeader
+              labels={["Cliente", "Ventas", "Costo", "Utilidad", "% margen", "Compras"]}
+            />
             <tbody>
               {customerRows.map((row) => (
                 <tr key={row.customerId}>
@@ -1088,7 +1075,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
       </ReportPrimaryInsightPanel>,
       true
@@ -1102,20 +1089,20 @@ export function ReportsSection({
         description="Rentabilidad total por venta y acceso al detalle por producto de cada factura."
         onBack={() => setDetailView(null)}
       >
-          <table className="data-table" aria-label="Detalle margen por venta">
-            <thead>
-              <tr>
-                <th>Venta</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Estado</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-                <th>Accion</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por venta">
+            <DataTableHeader
+              labels={[
+                "Venta",
+                "Fecha",
+                "Cliente",
+                "Estado",
+                "Ventas",
+                "Costo",
+                "Utilidad",
+                "% margen",
+                "Accion"
+              ]}
+            />
             <tbody>
               {saleRows.map((row) => (
                 <tr key={row.saleId}>
@@ -1128,22 +1115,21 @@ export function ReportsSection({
                   <td>{formatCurrency(row.marginMinor)}</td>
                   <td>{formatPercent(row.marginPercent)}</td>
                   <td>
-                    <button
+                    <SecondaryActionButton
                       aria-label={`Ver detalle de venta ${row.saleId}`}
-                      className="table-action"
                       onClick={() => {
                         setSelectedSaleId(row.saleId);
                         setDetailView("sale");
                       }}
-                      type="button"
+                      variant="compact"
                     >
                       Ver detalle
-                    </button>
+                    </SecondaryActionButton>
                   </td>
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
       </ReportPrimaryInsightPanel>,
       true
     );
@@ -1169,42 +1155,30 @@ export function ReportsSection({
       >
           <>
           <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
-            <div className="report-sale-summary">
-              <div className="summary-card summary-card-compact">
-                <span>Cliente</span>
-                <strong>{selectedSale.customerName}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>Venta total</span>
-                <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>Costo total</span>
-                <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>Margen total</span>
-                <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>% margen</span>
-                <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
-              </div>
-            </div>
+            <CompactSummaryGrid
+              ariaLabel="Resumen detalle de venta"
+              items={[
+                { label: "Cliente", value: selectedSale.customerName },
+                { label: "Venta total", value: formatCurrency(selectedSale.totalMinor) },
+                { label: "Costo total", value: formatCurrency(selectedSaleCostMinor) },
+                { label: "Margen total", value: formatCurrency(selectedSaleMarginMinor) },
+                { label: "% margen", value: formatPercent(selectedSaleMarginPercent) }
+              ]}
+            />
           </section>
 
-          <table className="data-table" aria-label="Detalle margen por producto de la venta">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio venta</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por producto de la venta">
+            <DataTableHeader
+              labels={[
+                "Producto",
+                "Cantidad",
+                "Precio venta",
+                "Ventas",
+                "Costo",
+                "Utilidad",
+                "% margen"
+              ]}
+            />
             <tbody>
               {selectedSale.lines.map((line) => (
                 <tr key={line.id}>
@@ -1218,7 +1192,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
       </ReportPrimaryInsightPanel>,
       true

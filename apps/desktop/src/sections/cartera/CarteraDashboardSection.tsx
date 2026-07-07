@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { PayablesTable } from "../../components/PayablesTable";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -210,18 +212,10 @@ function ReceivablesTable({
   }
 
   return (
-    <table className="data-table" aria-label="Cartera por cobrar">
-      <thead>
-        <tr>
-          <th>Cliente</th>
-          <th>Venta</th>
-          <th>Vence</th>
-          <th>Saldo</th>
-          <th>Rango</th>
-          <th>Alerta</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
+    <DataTable ariaLabel="Cartera por cobrar">
+      <DataTableHeader
+        labels={["Cliente", "Venta", "Vence", "Saldo", "Rango", "Alerta", "Estado"]}
+      />
       <tbody>
         {receivables.map((receivable) => {
           const dueMetadata = getDueMetadata(receivable.dueAt);
@@ -239,6 +233,6 @@ function ReceivablesTable({
           );
         })}
       </tbody>
-    </table>
+    </DataTable>
   );
 }

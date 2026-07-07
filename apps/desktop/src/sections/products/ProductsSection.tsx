@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
@@ -193,18 +195,18 @@ function ProductTable({
   products
 }: ProductTableProps) {
   return (
-    <table className="data-table" aria-label="Productos registrados">
-      <thead>
-        <tr>
-          <th>Codigo</th>
-          <th>Producto</th>
-          <th>Costo</th>
-          <th>Precio venta</th>
-          <th>Stock</th>
-          <th>Minimo</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
+    <DataTable ariaLabel="Productos registrados">
+      <DataTableHeader
+        labels={[
+          "Codigo",
+          "Producto",
+          "Costo",
+          "Precio venta",
+          "Stock",
+          "Minimo",
+          "Estado"
+        ]}
+      />
       <tbody>
         {products.map((product) => (
           <tr key={product.id}>
@@ -222,6 +224,6 @@ function ProductTable({
           </tr>
         ))}
       </tbody>
-    </table>
+    </DataTable>
   );
 }

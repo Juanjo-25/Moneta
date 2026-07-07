@@ -1,4 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
+import { EmptyState } from "../../components/EmptyState";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
@@ -403,12 +407,11 @@ export function PurchasesSection({
           </label>
 
           <div className="inline-action-group">
-            <button
-              type="button"
+            <SecondaryActionButton
               onClick={() => setSupplierFormVisible((visible) => !visible)}
             >
               Nuevo proveedor
-            </button>
+            </SecondaryActionButton>
           </div>
 
           <TextField
@@ -452,12 +455,11 @@ export function PurchasesSection({
             {errors.productId ? <small>{errors.productId}</small> : null}
           </label>
           <div className="inline-action-group">
-            <button
-              type="button"
+            <SecondaryActionButton
               onClick={() => setProductFormVisible((visible) => !visible)}
             >
               Nuevo producto
-            </button>
+            </SecondaryActionButton>
           </div>
           <TextField
             error={errors.quantity}
@@ -474,9 +476,9 @@ export function PurchasesSection({
             value={form.unitCost}
           />
           <div className="inline-action-group">
-            <button type="button" onClick={addPurchaseLine}>
+            <SecondaryActionButton onClick={addPurchaseLine}>
               Agregar producto
-            </button>
+            </SecondaryActionButton>
           </div>
         </div>
 
@@ -491,9 +493,9 @@ export function PurchasesSection({
               }}
               value={supplierForm.name}
             />
-            <button type="button" onClick={submitSupplier}>
+            <SecondaryActionButton onClick={submitSupplier}>
               Guardar proveedor
-            </button>
+            </SecondaryActionButton>
           </div>
         ) : null}
 
@@ -512,22 +514,17 @@ export function PurchasesSection({
               onChange={(value) => updateProductField("minimumStock", value)}
               value={productForm.minimumStock}
             />
-            <button type="button" onClick={submitProduct}>
+            <SecondaryActionButton onClick={submitProduct}>
               Guardar producto compra
-            </button>
+            </SecondaryActionButton>
           </div>
         ) : null}
 
         {purchaseLines.length > 0 ? (
-          <table className="data-table purchase-lines-table" aria-label="Productos de la compra">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Costo unitario</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Productos de la compra" className="purchase-lines-table">
+            <DataTableHeader
+              labels={["Producto", "Cantidad", "Costo unitario", "Total"]}
+            />
             <tbody>
               {purchaseLines.map((line) => (
                 <tr key={line.id}>
@@ -538,7 +535,7 @@ export function PurchasesSection({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         ) : null}
 
         <div
@@ -579,18 +576,18 @@ export function PurchasesSection({
       </form>
 
       {purchases.length > 0 ? (
-        <table className="data-table" aria-label="Compras registradas">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Proveedor</th>
-              <th>Factura</th>
-              <th>Producto</th>
-              <th>Cantidad</th>
-              <th>Estado</th>
-              <th>Total</th>
-            </tr>
-          </thead>
+        <DataTable ariaLabel="Compras registradas">
+          <DataTableHeader
+            labels={[
+              "Fecha",
+              "Proveedor",
+              "Factura",
+              "Producto",
+              "Cantidad",
+              "Estado",
+              "Total"
+            ]}
+          />
           <tbody>
             {purchases.map((purchase) => (
               <tr key={purchase.id}>
@@ -604,12 +601,13 @@ export function PurchasesSection({
               </tr>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       ) : (
-        <div className="empty-state section-empty">
-          <strong>Sin compras registradas</strong>
-          <span>Las compras confirmadas aumentaran el inventario.</span>
-        </div>
+        <EmptyState
+          body="Las compras confirmadas aumentaran el inventario."
+          className="section-empty"
+          title="Sin compras registradas"
+        />
       )}
     </section>
   );
