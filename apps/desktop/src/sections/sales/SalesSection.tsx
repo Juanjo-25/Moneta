@@ -8,6 +8,7 @@ import {
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type { InvoicePdfResult } from "../../invoice-pdf";
@@ -435,12 +436,11 @@ export function SalesSection({
           </label>
 
           <div className="inline-action-group">
-            <button
-              type="button"
+            <SecondaryActionButton
               onClick={() => setCustomerFormVisible((visible) => !visible)}
             >
               Nuevo cliente
-            </button>
+            </SecondaryActionButton>
           </div>
 
           <label className="field" htmlFor="producto-venta">
@@ -482,9 +482,9 @@ export function SalesSection({
             value={form.unitPrice}
           />
           <div className="inline-action-group">
-            <button type="button" onClick={addSaleLine}>
+            <SecondaryActionButton onClick={addSaleLine}>
               Agregar producto
-            </button>
+            </SecondaryActionButton>
           </div>
         </div>
 
@@ -520,9 +520,9 @@ export function SalesSection({
               onChange={(value) => updateCustomerField("email", value)}
               value={customerForm.email}
             />
-            <button type="button" onClick={submitCustomer}>
+            <SecondaryActionButton onClick={submitCustomer}>
               Guardar cliente
-            </button>
+            </SecondaryActionButton>
           </div>
         ) : null}
 
@@ -622,15 +622,14 @@ export function SalesSection({
                   <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                   <td>{formatCurrency(sale.totalMinor)}</td>
                   <td>
-                    <button
-                      className="table-action"
+                    <SecondaryActionButton
                       onClick={() => {
                         void generateInvoiceForSale(sale);
                       }}
-                      type="button"
+                      variant="compact"
                     >
                       Generar factura PDF
-                    </button>
+                    </SecondaryActionButton>
                   </td>
                 </tr>
               ))}

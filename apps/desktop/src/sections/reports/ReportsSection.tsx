@@ -6,6 +6,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { ReportChartPreviewPanel } from "../../components/ReportChartPreviewPanel";
 import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsightPanel";
 import { ReportSummaryShell } from "../../components/ReportSummaryShell";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { parseLocalDate } from "../../lib/dates";
 import type {
   PurchaseRecord,
@@ -1114,17 +1115,16 @@ export function ReportsSection({
                   <td>{formatCurrency(row.marginMinor)}</td>
                   <td>{formatPercent(row.marginPercent)}</td>
                   <td>
-                    <button
+                    <SecondaryActionButton
                       aria-label={`Ver detalle de venta ${row.saleId}`}
-                      className="table-action"
                       onClick={() => {
                         setSelectedSaleId(row.saleId);
                         setDetailView("sale");
                       }}
-                      type="button"
+                      variant="compact"
                     >
                       Ver detalle
-                    </button>
+                    </SecondaryActionButton>
                   </td>
                 </tr>
               ))}
@@ -1155,28 +1155,16 @@ export function ReportsSection({
       >
           <>
           <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
-            <div className="report-sale-summary">
-              <div className="summary-card summary-card-compact">
-                <span>Cliente</span>
-                <strong>{selectedSale.customerName}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>Venta total</span>
-                <strong>{formatCurrency(selectedSale.totalMinor)}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>Costo total</span>
-                <strong>{formatCurrency(selectedSaleCostMinor)}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>Margen total</span>
-                <strong>{formatCurrency(selectedSaleMarginMinor)}</strong>
-              </div>
-              <div className="summary-card summary-card-compact">
-                <span>% margen</span>
-                <strong>{formatPercent(selectedSaleMarginPercent)}</strong>
-              </div>
-            </div>
+            <CompactSummaryGrid
+              ariaLabel="Resumen detalle de venta"
+              items={[
+                { label: "Cliente", value: selectedSale.customerName },
+                { label: "Venta total", value: formatCurrency(selectedSale.totalMinor) },
+                { label: "Costo total", value: formatCurrency(selectedSaleCostMinor) },
+                { label: "Margen total", value: formatCurrency(selectedSaleMarginMinor) },
+                { label: "% margen", value: formatPercent(selectedSaleMarginPercent) }
+              ]}
+            />
           </section>
 
           <DataTable ariaLabel="Detalle margen por producto de la venta">

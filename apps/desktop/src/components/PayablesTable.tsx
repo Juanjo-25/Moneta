@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { DataTable } from "./DataTable";
 import { DataTableHeader } from "./DataTableHeader";
 import { EmptyState } from "./EmptyState";
+import { SecondaryActionButton } from "./SecondaryActionButton";
 import { SummaryCard } from "./SummaryCard";
 import { TextField } from "./TextField";
 import type { DueMetadata } from "../lib/dates";
@@ -130,13 +131,12 @@ export function PayablesTable({
                 <td>{formatPayableStatus(payable.status)}</td>
                 <td>
                   {payable.balanceMinor > 0 ? (
-                    <button
-                      className="table-action"
+                    <SecondaryActionButton
                       onClick={() => openPaymentForm(payable.id)}
-                      type="button"
+                      variant="compact"
                     >
                       Registrar abono
-                    </button>
+                    </SecondaryActionButton>
                   ) : null}
                 </td>
               </tr>

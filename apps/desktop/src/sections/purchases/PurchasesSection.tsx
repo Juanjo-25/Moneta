@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
@@ -406,12 +407,11 @@ export function PurchasesSection({
           </label>
 
           <div className="inline-action-group">
-            <button
-              type="button"
+            <SecondaryActionButton
               onClick={() => setSupplierFormVisible((visible) => !visible)}
             >
               Nuevo proveedor
-            </button>
+            </SecondaryActionButton>
           </div>
 
           <TextField
@@ -455,12 +455,11 @@ export function PurchasesSection({
             {errors.productId ? <small>{errors.productId}</small> : null}
           </label>
           <div className="inline-action-group">
-            <button
-              type="button"
+            <SecondaryActionButton
               onClick={() => setProductFormVisible((visible) => !visible)}
             >
               Nuevo producto
-            </button>
+            </SecondaryActionButton>
           </div>
           <TextField
             error={errors.quantity}
@@ -477,9 +476,9 @@ export function PurchasesSection({
             value={form.unitCost}
           />
           <div className="inline-action-group">
-            <button type="button" onClick={addPurchaseLine}>
+            <SecondaryActionButton onClick={addPurchaseLine}>
               Agregar producto
-            </button>
+            </SecondaryActionButton>
           </div>
         </div>
 
@@ -494,9 +493,9 @@ export function PurchasesSection({
               }}
               value={supplierForm.name}
             />
-            <button type="button" onClick={submitSupplier}>
+            <SecondaryActionButton onClick={submitSupplier}>
               Guardar proveedor
-            </button>
+            </SecondaryActionButton>
           </div>
         ) : null}
 
@@ -515,9 +514,9 @@ export function PurchasesSection({
               onChange={(value) => updateProductField("minimumStock", value)}
               value={productForm.minimumStock}
             />
-            <button type="button" onClick={submitProduct}>
+            <SecondaryActionButton onClick={submitProduct}>
               Guardar producto compra
-            </button>
+            </SecondaryActionButton>
           </div>
         ) : null}
 

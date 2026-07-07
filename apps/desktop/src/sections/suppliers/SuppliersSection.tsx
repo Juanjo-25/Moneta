@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { TextField } from "../../components/TextField";
 import type {
   SupplierFormErrors,
@@ -337,20 +338,18 @@ export function SuppliersSection({
                 <td>{supplier.city || "Sin municipio"}</td>
                 <td>{supplier.active ? "Activo" : "Inactivo"}</td>
                 <td>
-                  <button
-                    className="table-action"
+                  <SecondaryActionButton
                     onClick={() => startEditingSupplier(supplier)}
-                    type="button"
+                    variant="compact"
                   >
                     Editar proveedor {supplier.name}
-                  </button>
-                  <button
-                    className="table-action"
+                  </SecondaryActionButton>
+                  <SecondaryActionButton
                     onClick={() => onSetSupplierActive(supplier.id, !supplier.active)}
-                    type="button"
+                    variant="compact"
                   >
                     {supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"}
-                  </button>
+                  </SecondaryActionButton>
                 </td>
               </tr>
             ))}
