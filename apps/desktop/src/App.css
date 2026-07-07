@@ -269,7 +269,7 @@ textarea:focus-visible {
   font-size: 22px;
 }
 
-.panel-header button {
+.panel-header .secondary-action {
   min-height: 36px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
