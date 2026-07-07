@@ -843,18 +843,10 @@ export function ReportsSection({
                 </div>
             </ReportPrimaryInsightPanel>
 
-            <table className="data-table" aria-label="Detalle flujo de caja">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Tipo</th>
-                  <th>Origen</th>
-                  <th>Tercero</th>
-                  <th>Entrada</th>
-                  <th>Salida</th>
-                  <th>Neto</th>
-                </tr>
-              </thead>
+            <DataTable ariaLabel="Detalle flujo de caja">
+              <DataTableHeader
+                labels={["Fecha", "Tipo", "Origen", "Tercero", "Entrada", "Salida", "Neto"]}
+              />
               <tbody>
                 {cashflowEntries.map((entry) => (
                   <tr key={entry.id}>
@@ -868,7 +860,7 @@ export function ReportsSection({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
         )}
       </section>
@@ -929,17 +921,17 @@ export function ReportsSection({
                 </div>
             </ReportPrimaryInsightPanel>
 
-            <table className="data-table" aria-label="Detalle utilidades por periodo">
-              <thead>
-                <tr>
-                  <th>Periodo</th>
-                  <th>Ventas</th>
-                  <th>Costo</th>
-                  <th>Utilidad</th>
-                  <th>% margen</th>
-                  <th>Numero de ventas</th>
-                </tr>
-              </thead>
+            <DataTable ariaLabel="Detalle utilidades por periodo">
+              <DataTableHeader
+                labels={[
+                  "Periodo",
+                  "Ventas",
+                  "Costo",
+                  "Utilidad",
+                  "% margen",
+                  "Numero de ventas"
+                ]}
+              />
               <tbody>
                 {utilityPeriodRows.map((row) => (
                   <tr key={row.dateKey}>
@@ -952,7 +944,7 @@ export function ReportsSection({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
         )}
       </section>
@@ -1012,17 +1004,10 @@ export function ReportsSection({
             ))}
           </div>
 
-          <table className="data-table" aria-label="Detalle margen por producto">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Unidades</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por producto">
+            <DataTableHeader
+              labels={["Producto", "Unidades", "Ventas", "Costo", "Utilidad", "% margen"]}
+            />
             <tbody>
               {productRows.map((row) => (
                 <tr key={row.productId}>
@@ -1035,7 +1020,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
       </ReportPrimaryInsightPanel>,
       true
@@ -1067,17 +1052,10 @@ export function ReportsSection({
             ))}
           </div>
 
-          <table className="data-table" aria-label="Detalle margen por cliente">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-                <th>Compras</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por cliente">
+            <DataTableHeader
+              labels={["Cliente", "Ventas", "Costo", "Utilidad", "% margen", "Compras"]}
+            />
             <tbody>
               {customerRows.map((row) => (
                 <tr key={row.customerId}>
@@ -1090,7 +1068,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
       </ReportPrimaryInsightPanel>,
       true
@@ -1104,20 +1082,20 @@ export function ReportsSection({
         description="Rentabilidad total por venta y acceso al detalle por producto de cada factura."
         onBack={() => setDetailView(null)}
       >
-          <table className="data-table" aria-label="Detalle margen por venta">
-            <thead>
-              <tr>
-                <th>Venta</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Estado</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-                <th>Accion</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por venta">
+            <DataTableHeader
+              labels={[
+                "Venta",
+                "Fecha",
+                "Cliente",
+                "Estado",
+                "Ventas",
+                "Costo",
+                "Utilidad",
+                "% margen",
+                "Accion"
+              ]}
+            />
             <tbody>
               {saleRows.map((row) => (
                 <tr key={row.saleId}>
@@ -1145,7 +1123,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
       </ReportPrimaryInsightPanel>,
       true
     );
@@ -1195,18 +1173,18 @@ export function ReportsSection({
             </div>
           </section>
 
-          <table className="data-table" aria-label="Detalle margen por producto de la venta">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio venta</th>
-                <th>Ventas</th>
-                <th>Costo</th>
-                <th>Utilidad</th>
-                <th>% margen</th>
-              </tr>
-            </thead>
+          <DataTable ariaLabel="Detalle margen por producto de la venta">
+            <DataTableHeader
+              labels={[
+                "Producto",
+                "Cantidad",
+                "Precio venta",
+                "Ventas",
+                "Costo",
+                "Utilidad",
+                "% margen"
+              ]}
+            />
             <tbody>
               {selectedSale.lines.map((line) => (
                 <tr key={line.id}>
@@ -1220,7 +1198,7 @@ export function ReportsSection({
                 </tr>
               ))}
               </tbody>
-            </table>
+            </DataTable>
           </>
       </ReportPrimaryInsightPanel>,
       true
