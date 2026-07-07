@@ -386,6 +386,17 @@ describe("App navigation", () => {
     expect(screen.queryByRole("table", { name: "Ventas registradas" })).toBeNull();
   });
 
+  it("uses a compact summary card in the sales form", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+
+    expect(screen.getByText("Productos agregados 0").closest(".summary-card-compact")).toBeTruthy();
+  });
+
   it("stores the due date for a pending sale receivable", async () => {
     const user = userEvent.setup();
 
@@ -1398,6 +1409,16 @@ describe("App navigation", () => {
     expect(screen.queryByLabelText("Fecha vencimiento")).toBeNull();
   });
 
+  it("uses a compact summary card in the purchases form", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+
+    expect(screen.getByText("Productos agregados 0").closest(".summary-card-compact")).toBeTruthy();
+  });
+
   it("uses calendar date inputs for purchase issue and due dates", async () => {
     const user = userEvent.setup();
 
@@ -1595,6 +1616,22 @@ describe("App navigation", () => {
     const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
     expect(within(payablesTable).getByText("Pendiente")).toBeTruthy();
     expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
+  });
+
+  it("uses a compact summary card in the supplier payment form", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+
+    const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
+    const paymentForm = screen.getByLabelText("Valor abono").closest("form");
+    expect(paymentForm).toBeTruthy();
+    expect(within(paymentForm as HTMLFormElement).getByText("Proveedor Central").closest(".summary-card-compact")).toBeTruthy();
   });
 
   it("validates missing customer, product, quantity, and empty inline customer name", async () => {

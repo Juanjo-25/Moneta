@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PanelHeader } from "../../components/PanelHeader";
 import type { ProductRecord, SaleRecord } from "../../types";
 
 type DashboardTrendRow = {
@@ -89,13 +90,12 @@ export function DashboardContent({
         aria-label="Analisis principal"
       >
         <div className="panel dashboard-chart-panel dashboard-hero-panel">
-          <div className="panel-header">
+          <PanelHeader action={<button onClick={onOpenReports}>Ver todo</button>}>
             <div className="dashboard-hero-copy">
               <span>Tendencia principal</span>
               <h2>Ventas diarias</h2>
             </div>
-            <button onClick={onOpenReports}>Ver todo</button>
-          </div>
+          </PanelHeader>
           <div className="dashboard-period-controls">
             <label className="field" htmlFor="dashboard-period-one">
               <span>Periodo 1</span>
@@ -142,16 +142,16 @@ export function DashboardContent({
         aria-label="Analisis secundario"
       >
         <div className="panel dashboard-chart-panel">
-          <div className="panel-header">
+          <PanelHeader>
             <h2>Ventas por mes</h2>
-          </div>
+          </PanelHeader>
           <DashboardBarChart rows={monthlySalesRows} />
         </div>
 
         <div className="panel dashboard-chart-panel">
-          <div className="panel-header">
+          <PanelHeader>
             <h2>Productos mas vendidos</h2>
-          </div>
+          </PanelHeader>
           <DashboardProductPieChart
             formatCurrency={formatCurrency}
             rows={productRows}
@@ -159,9 +159,9 @@ export function DashboardContent({
         </div>
 
         <div className="panel dashboard-chart-panel">
-          <div className="panel-header">
+          <PanelHeader>
             <h2>Top clientes</h2>
-          </div>
+          </PanelHeader>
           <DashboardRankingList
             emptyBody="Los clientes con ventas se mostraran aqui."
             emptyTitle="Sin ventas por cliente"
@@ -173,10 +173,9 @@ export function DashboardContent({
 
       <section className="dashboard-operational-grid" aria-label="Alertas operativas">
         <div className="panel dashboard-operational-panel">
-          <div className="panel-header">
+          <PanelHeader action={<button onClick={onOpenProducts}>Revisar</button>}>
             <h2>Inventario bajo</h2>
-            <button onClick={onOpenProducts}>Revisar</button>
-          </div>
+          </PanelHeader>
           {lowStockProducts.length > 0 ? (
             <ul className="alert-list" aria-label="Productos con bajo stock">
               {lowStockProducts.map((product) => (

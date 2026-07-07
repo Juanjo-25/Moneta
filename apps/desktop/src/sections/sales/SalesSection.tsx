@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type SetStateAction
 } from "react";
+import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type { InvoicePdfResult } from "../../invoice-pdf";
 import type {
@@ -584,13 +585,13 @@ export function SalesSection({
           </table>
         ) : null}
 
-        <div className="summary-card">
+        <SummaryCard compact>
           <span>
             Precio unitario {unitPriceMinor > 0 ? formatCurrency(unitPriceMinor) : formatCurrency(0)}
           </span>
           <span>Productos agregados {saleLines.length}</span>
           <strong>Total {formatCurrency(totalMinor)}</strong>
-        </div>
+        </SummaryCard>
 
         {errors.submit ? <p className="form-error">{errors.submit}</p> : null}
 

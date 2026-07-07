@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
   ProductRecord,
@@ -567,10 +568,10 @@ export function PurchasesSection({
           </label>
         </div>
 
-        <div className="summary-card">
+        <SummaryCard compact>
           <span>Productos agregados {purchaseLines.length}</span>
           <strong>Total factura {formatCurrency(totalMinor)}</strong>
-        </div>
+        </SummaryCard>
 
         <div className="form-actions">
           <button type="submit">Registrar compra</button>

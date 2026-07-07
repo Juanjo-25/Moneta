@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { EmptyState } from "./EmptyState";
+import { SummaryCard } from "./SummaryCard";
 import { TextField } from "./TextField";
 import type { DueMetadata } from "../lib/dates";
 import type { SupplierPayableRecord, SupplierPayableStatus } from "../types";
@@ -144,10 +145,10 @@ export function PayablesTable({
 
       {selectedPayable ? (
         <form className="supplier-payment-form" onSubmit={submitPayment}>
-          <div className="summary-card">
+          <SummaryCard compact>
             <span>{selectedPayable.supplierName}</span>
             <strong>Saldo {formatCurrency(selectedPayable.balanceMinor)}</strong>
-          </div>
+          </SummaryCard>
           <TextField
             error={errors.amount}
             inputMode="numeric"
