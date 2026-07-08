@@ -390,7 +390,7 @@ export function PurchasesSection({
 
   return (
     <section className="purchases-layout">
-      <form className="purchase-form" onSubmit={submitPurchase}>
+      <form className="purchase-form section-form-shell" onSubmit={submitPurchase}>
         <div className="purchase-grid">
           <label className="field" htmlFor="proveedor-compra">
             <span>Proveedor</span>

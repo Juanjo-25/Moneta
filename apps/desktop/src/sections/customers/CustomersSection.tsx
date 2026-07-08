@@ -189,7 +189,7 @@ export function CustomersSection({
       </div>
 
       {formVisible ? (
-        <form className="customer-form" onSubmit={submitCustomer}>
+        <form className="customer-form section-form-shell" onSubmit={submitCustomer}>
           <div className="form-grid">
             <TextField
               error={errors.name}
@@ -281,7 +281,7 @@ export function CustomersSection({
       )}
 
       {selectedCustomer ? (
-        <section className="customer-file" aria-label="Ficha de cliente">
+        <section className="customer-file section-surface" aria-label="Ficha de cliente">
           <div className="section-heading">
             <div>
               <h2>{selectedCustomer.name}</h2>
@@ -312,7 +312,7 @@ export function CustomersSection({
           </div>
 
           {editingCustomer ? (
-            <form className="customer-form" onSubmit={submitCustomerEdit}>
+            <form className="customer-form section-form-shell" onSubmit={submitCustomerEdit}>
               <div className="form-grid">
                 <TextField
                   error={editErrors.name}

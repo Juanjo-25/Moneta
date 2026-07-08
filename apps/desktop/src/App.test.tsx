@@ -1790,6 +1790,31 @@ describe("App navigation", () => {
     expect(within(customersTable).getByText("Activo")).toBeTruthy();
   });
 
+  it("uses a shared form shell across products, compras, clientes, and proveedores", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    expect(screen.getByLabelText("Codigo").closest("form")?.className).toContain("section-form-shell");
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    expect(screen.getByLabelText("Proveedor").closest("form")?.className).toContain("section-form-shell");
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    expect(screen.getByLabelText("Nombre o razon social").closest("form")?.className).toContain(
+      "section-form-shell"
+    );
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    expect(screen.getByLabelText("Nombre proveedor").closest("form")?.className).toContain(
+      "section-form-shell"
+    );
+  });
+
   it("searches customers by name and document", async () => {
     const user = userEvent.setup();
 

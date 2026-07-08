@@ -244,7 +244,7 @@ export function SuppliersSection({
   return (
     <section className="suppliers-layout">
       {formVisible || editingSupplier ? (
-        <form className="customer-form" onSubmit={submitSupplier}>
+        <form className="customer-form section-form-shell" onSubmit={submitSupplier}>
           <div className="form-grid">
             <TextField
               error={errors.name}
