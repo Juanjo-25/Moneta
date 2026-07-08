@@ -15,9 +15,11 @@ export function EmptyState({
 
   return (
     <div className={classNames}>
-      {heading ? <h2>{heading}</h2> : null}
-      <strong>{title}</strong>
-      <span>{body}</span>
+      <div className="empty-state-copy">
+        {heading ? <h2>{heading}</h2> : null}
+        <strong>{title}</strong>
+        <span>{body}</span>
+      </div>
     </div>
   );
 }

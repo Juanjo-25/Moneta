@@ -18,6 +18,8 @@ describe("EmptyState", () => {
     expect(
       screen.getByText("Este reporte aparecera aqui cuando terminemos su implementacion.")
     ).toBeTruthy();
-    expect(screen.getByText("Proximamente").closest(".report-placeholder-panel")).toBeTruthy();
+    const panel = screen.getByText("Proximamente").closest(".report-placeholder-panel");
+    expect(panel).toBeTruthy();
+    expect((panel as HTMLElement).querySelector(".empty-state-copy")).toBeTruthy();
   });
 });

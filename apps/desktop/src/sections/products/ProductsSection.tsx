@@ -119,7 +119,7 @@ export function ProductsSection({
   return (
     <section className="products-layout">
       {formVisible ? (
-        <form className="product-form" onSubmit={submitProduct}>
+        <form className="product-form section-form-shell" onSubmit={submitProduct}>
           <div className="form-grid">
             <TextField
               error={errors.sku}

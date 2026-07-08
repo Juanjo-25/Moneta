@@ -83,6 +83,22 @@ describe("App navigation", () => {
 
     render(<App />);
 
+    const sidebar = document.querySelector(".sidebar");
+    const brand = screen.getByRole("button", { name: "Moneta Inventario y cartera" });
+    const navigation = screen.getByRole("navigation", { name: "Principal" });
+    const topbar = document.querySelector(".topbar");
+    const topbarContext = document.querySelector(".topbar-context");
+    const topbarAction = document.querySelector(".topbar-action");
+
+    expect(sidebar?.querySelector(".sidebar-brand")).toBeTruthy();
+    expect(sidebar?.querySelector(".sidebar-nav")).toBeTruthy();
+    expect(brand.closest(".sidebar-brand")).toBeTruthy();
+    expect(navigation.closest(".sidebar-nav")).toBeTruthy();
+    expect(topbarContext).toBeTruthy();
+    expect(topbarAction).toBeTruthy();
+    expect(topbar?.firstElementChild).toBe(topbarContext);
+    expect(topbar?.lastElementChild).toBe(topbarAction);
+
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
@@ -306,6 +322,10 @@ describe("App navigation", () => {
     const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
     const secondaryAnalysis = screen.getByRole("region", { name: "Analisis secundario" });
     const operationalAlerts = screen.getByRole("region", { name: "Alertas operativas" });
+    const primaryControls = within(primaryAnalysis).getByRole("region", {
+      name: "Controles del analisis principal"
+    });
+    const dailySalesChart = within(primaryAnalysis).getByLabelText("Grafico ventas diarias");
 
     expect(
       analyticsSummary.compareDocumentPosition(primaryAnalysis) &
@@ -317,6 +337,10 @@ describe("App navigation", () => {
     ).toBeTruthy();
     expect(
       secondaryAnalysis.compareDocumentPosition(operationalAlerts) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      primaryControls.compareDocumentPosition(dailySalesChart) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
@@ -1103,8 +1127,15 @@ describe("App navigation", () => {
     const reportSummary = screen.getByRole("region", { name: "Resumen del reporte" });
     const primaryInsight = screen.getByRole("region", { name: "Insight principal del reporte" });
     const detailContext = screen.getByRole("region", { name: "Contexto del detalle" });
+    const supportingContent = screen.getByRole("region", {
+      name: "Contenido secundario del reporte"
+    });
     expect(
       reportSummary.compareDocumentPosition(primaryInsight) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      primaryInsight.compareDocumentPosition(supportingContent) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
@@ -1212,6 +1243,11 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
+    const summary = screen.getByRole("region", { name: "Resumen de cartera" });
+    const alerts = screen.getByRole("region", { name: "Alertas de cartera" });
+    const views = screen.getByRole("region", { name: "Selector de cartera" });
+    const receivablesContent = screen.getByRole("region", { name: "Contenido por cobrar" });
+
     expect(screen.getByText("Total por cobrar")).toBeTruthy();
     expect(screen.getByText("Total por pagar")).toBeTruthy();
     expect(screen.getByText("Facturas vencidas")).toBeTruthy();
@@ -1219,10 +1255,24 @@ describe("App navigation", () => {
     expect(screen.getByRole("radio", { name: "Por cobrar" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Por pagar" })).toBeTruthy();
     expect(screen.getByRole("table", { name: "Cartera por cobrar" })).toBeTruthy();
+    expect(
+      summary.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      alerts.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      views.compareDocumentPosition(receivablesContent) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(receivablesContent.className).toContain("cartera-content");
+    expect(receivablesContent.className).toContain("cartera-content-receivables");
 
     await user.click(screen.getByRole("radio", { name: "Por pagar" }));
 
+    const payablesContent = screen.getByRole("region", { name: "Contenido por pagar" });
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    expect(payablesContent.className).toContain("cartera-content");
+    expect(payablesContent.className).toContain("cartera-content-payables");
     expect(within(payablesTable).getByText("Proveedor Central")).toBeTruthy();
     expect(within(payablesTable).getByText("001")).toBeTruthy();
     expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
@@ -1738,6 +1788,31 @@ describe("App navigation", () => {
     expect(within(customersTable).getByText("Comercial Andes")).toBeTruthy();
     expect(within(customersTable).getByText("900123456")).toBeTruthy();
     expect(within(customersTable).getByText("Activo")).toBeTruthy();
+  });
+
+  it("uses a shared form shell across products, compras, clientes, and proveedores", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    expect(screen.getByLabelText("Codigo").closest("form")?.className).toContain("section-form-shell");
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    expect(screen.getByLabelText("Proveedor").closest("form")?.className).toContain("section-form-shell");
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    expect(screen.getByLabelText("Nombre o razon social").closest("form")?.className).toContain(
+      "section-form-shell"
+    );
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
+    expect(screen.getByLabelText("Nombre proveedor").closest("form")?.className).toContain(
+      "section-form-shell"
+    );
   });
 
   it("searches customers by name and document", async () => {
