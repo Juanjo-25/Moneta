@@ -7,6 +7,7 @@ import { ReportChartPreviewPanel } from "../../components/ReportChartPreviewPane
 import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsightPanel";
 import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
+import { SubmenuSwitch } from "../../components/SubmenuSwitch";
 import { parseLocalDate } from "../../lib/dates";
 import type {
   PurchaseRecord,
@@ -684,19 +685,12 @@ export function ReportsSection({
   function renderReportTabs() {
     return (
       <section className="reports-nav-group" aria-label="Navegacion de reportes">
-        <div className="reports-submenu" aria-label="Tipos de reportes">
-          {reportTabs.map((tab) => (
-            <button
-              aria-selected={activeReportTab === tab.id}
-              className={activeReportTab === tab.id ? "active" : ""}
-              key={tab.id}
-              onClick={() => selectReportTab(tab.id)}
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SubmenuSwitch
+          ariaLabel="Tipos de reportes"
+          items={reportTabs.map((tab) => ({ label: tab.label, value: tab.id }))}
+          onSelect={selectReportTab}
+          selectedValue={activeReportTab}
+        />
       </section>
     );
   }
@@ -704,19 +698,12 @@ export function ReportsSection({
   function renderProfitabilityTabs() {
     return (
       <section className="reports-nav-group reports-nav-group-secondary" aria-label="Subnavegacion de reportes">
-        <div className="reports-submenu" aria-label="Tipos de rentabilidad">
-          {profitabilityTabs.map((tab) => (
-            <button
-              aria-selected={activeProfitabilityTab === tab.id}
-              className={activeProfitabilityTab === tab.id ? "active" : ""}
-              key={tab.id}
-              onClick={() => selectProfitabilityTab(tab.id)}
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SubmenuSwitch
+          ariaLabel="Tipos de rentabilidad"
+          items={profitabilityTabs.map((tab) => ({ label: tab.label, value: tab.id }))}
+          onSelect={selectProfitabilityTab}
+          selectedValue={activeProfitabilityTab}
+        />
       </section>
     );
   }

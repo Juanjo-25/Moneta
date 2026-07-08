@@ -734,28 +734,28 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
 
-    const submenu = screen.getByLabelText("Tipos de reportes");
+    const submenu = screen.getByRole("tablist", { name: "Tipos de reportes" });
     expect(
-      within(submenu).getByRole("button", { name: "Rentabilidad" }).getAttribute("aria-selected")
+      within(submenu).getByRole("tab", { name: "Rentabilidad" }).getAttribute("aria-selected")
     ).toBe("true");
-    expect(within(submenu).getByRole("button", { name: "DSO" })).toBeTruthy();
-    expect(within(submenu).getByRole("button", { name: "Flujo de caja" })).toBeTruthy();
+    expect(within(submenu).getByRole("tab", { name: "DSO" })).toBeTruthy();
+    expect(within(submenu).getByRole("tab", { name: "Flujo de caja" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cascada" })).toBeNull();
 
-    const profitabilityMenu = screen.getByLabelText("Tipos de rentabilidad");
+    const profitabilityMenu = screen.getByRole("tablist", { name: "Tipos de rentabilidad" });
     expect(
       within(profitabilityMenu)
-        .getByRole("button", { name: "Dashboard general" })
+        .getByRole("tab", { name: "Dashboard general" })
         .getAttribute("aria-selected")
     ).toBe("true");
-    expect(within(profitabilityMenu).getByRole("button", { name: "Clientes" })).toBeTruthy();
-    expect(within(profitabilityMenu).getByRole("button", { name: "Producto" })).toBeTruthy();
-    expect(within(profitabilityMenu).getByRole("button", { name: "Ventas" })).toBeTruthy();
+    expect(within(profitabilityMenu).getByRole("tab", { name: "Clientes" })).toBeTruthy();
+    expect(within(profitabilityMenu).getByRole("tab", { name: "Producto" })).toBeTruthy();
+    expect(within(profitabilityMenu).getByRole("tab", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(within(profitabilityMenu).getByRole("button", { name: "Clientes" }));
+    await user.click(within(profitabilityMenu).getByRole("tab", { name: "Clientes" }));
 
     expect(
-      within(profitabilityMenu).getByRole("button", { name: "Clientes" }).getAttribute("aria-selected")
+      within(profitabilityMenu).getByRole("tab", { name: "Clientes" }).getAttribute("aria-selected")
     ).toBe("true");
     expect(screen.getByLabelText("Grafico margen por cliente")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Margen por venta" })).toBeNull();
@@ -804,7 +804,7 @@ describe("App navigation", () => {
 
       await user.click(screen.getByRole("button", { name: "Reportes" }));
       await user.click(
-        within(screen.getByLabelText("Tipos de reportes")).getByRole("button", { name: "DSO" })
+        within(screen.getByRole("tablist", { name: "Tipos de reportes" })).getByRole("tab", { name: "DSO" })
       );
 
       expect(screen.getByRole("heading", { name: "DSO" })).toBeTruthy();
@@ -887,7 +887,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar compra" }));
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
     await user.type(screen.getByLabelText("Valor abono"), "4000");
@@ -895,7 +895,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
     await user.click(
-      within(screen.getByLabelText("Tipos de reportes")).getByRole("button", { name: "Flujo de caja" })
+      within(screen.getByRole("tablist", { name: "Tipos de reportes" })).getByRole("tab", { name: "Flujo de caja" })
     );
 
     const summary = screen.getByLabelText("Resumen flujo de caja");
@@ -956,7 +956,7 @@ describe("App navigation", () => {
 
       await user.click(screen.getByRole("button", { name: "Reportes" }));
       await user.click(
-        within(screen.getByLabelText("Tipos de reportes")).getByRole("button", { name: "Utilidades" })
+        within(screen.getByRole("tablist", { name: "Tipos de reportes" })).getByRole("tab", { name: "Utilidades" })
       );
 
       const summary = screen.getByLabelText("Resumen utilidades");
@@ -1014,14 +1014,14 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
     await user.click(
-      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Clientes" })
+      within(screen.getByRole("tablist", { name: "Tipos de rentabilidad" })).getByRole("tab", { name: "Clientes" })
     );
 
     expect(screen.getByRole("button", { name: "Abrir detalle de margen por cliente" })).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Detalle margen por cliente" })).toBeNull();
 
     await user.click(
-      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Ventas" })
+      within(screen.getByRole("tablist", { name: "Tipos de rentabilidad" })).getByRole("tab", { name: "Ventas" })
     );
     expect(screen.getByLabelText("Grafico margen por venta")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Margen por venta" })).toBeNull();
@@ -1047,7 +1047,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
     await user.click(
-      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Producto" })
+      within(screen.getByRole("tablist", { name: "Tipos de rentabilidad" })).getByRole("tab", { name: "Producto" })
     );
     await user.click(screen.getByRole("button", { name: "Abrir detalle de margen por producto" }));
 
@@ -1093,7 +1093,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Reportes" }));
     await user.click(
-      within(screen.getByLabelText("Tipos de rentabilidad")).getByRole("button", { name: "Ventas" })
+      within(screen.getByRole("tablist", { name: "Tipos de rentabilidad" })).getByRole("tab", { name: "Ventas" })
     );
     await user.click(screen.getByRole("button", { name: "Abrir detalle de margen por venta" }));
     await user.click(screen.getByRole("button", { name: /Ver detalle de venta sale-/ }));
@@ -1216,16 +1216,40 @@ describe("App navigation", () => {
     expect(screen.getByText("Total por pagar")).toBeTruthy();
     expect(screen.getByText("Facturas vencidas")).toBeTruthy();
     expect(screen.getByText("Proximas a vencer")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Por cobrar" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Por pagar" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Por cobrar" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Por pagar" })).toBeTruthy();
     expect(screen.getByRole("table", { name: "Cartera por cobrar" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
 
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     expect(within(payablesTable).getByText("Proveedor Central")).toBeTruthy();
     expect(within(payablesTable).getByText("001")).toBeTruthy();
     expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);
+  });
+
+  it("renders the shared view switch wrapper in cartera", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    const switchGroup = screen.getByRole("radiogroup", {
+      name: "Vistas de cartera"
+    });
+    const receivablesButton = screen.getByRole("radio", { name: "Por cobrar" });
+    const payablesButton = screen.getByRole("radio", { name: "Por pagar" });
+
+    expect(switchGroup.className).toContain("view-switch");
+    expect(receivablesButton.className).toContain("view-switch-button");
+    expect(receivablesButton.getAttribute("aria-checked")).toBe("true");
+    expect(payablesButton.getAttribute("aria-checked")).toBe("false");
+
+    await user.click(payablesButton);
+
+    expect(receivablesButton.getAttribute("aria-checked")).toBe("false");
+    expect(payablesButton.getAttribute("aria-checked")).toBe("true");
   });
 
   it("registers supplier payable payments from cartera por pagar", async () => {
@@ -1235,7 +1259,7 @@ describe("App navigation", () => {
 
     await createPendingPurchaseFixture(user);
     await user.click(screen.getByRole("button", { name: "Cartera" }));
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
     await user.type(screen.getByLabelText("Valor abono"), "5000");
@@ -1625,7 +1649,7 @@ describe("App navigation", () => {
 
     await createPendingPurchaseFixture(user);
     await user.click(screen.getByRole("button", { name: "Cartera" }));
-    await user.click(screen.getByRole("button", { name: "Por pagar" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
 
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
     await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));

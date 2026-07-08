@@ -1,4 +1,5 @@
 import { PanelHeader } from "./PanelHeader";
+import { ReportChartButton } from "./ReportChartButton";
 import { SecondaryActionButton } from "./SecondaryActionButton";
 
 type ReportChartPreviewRow = {
@@ -40,11 +41,9 @@ export function ReportChartPreviewPanel({
           <p>{description}</p>
         </div>
       </PanelHeader>
-      <button
-        aria-label={actionLabel}
-        className="report-chart-button"
+      <ReportChartButton
+        ariaLabel={actionLabel}
         onClick={onOpenDetail}
-        type="button"
       >
         <div className="report-chart" aria-label={chartLabel}>
           {rows.map((row) => (
@@ -57,7 +56,7 @@ export function ReportChartPreviewPanel({
             </div>
           ))}
         </div>
-      </button>
+      </ReportChartButton>
     </section>
   );
 }
