@@ -1208,7 +1208,7 @@ textarea:focus-visible {
   padding: 4px;
 }
 
-.reports-submenu button {
+.submenu-switch-button {
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -1217,7 +1217,7 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
-.reports-submenu button.active {
+.submenu-switch-button.active {
   border-color: var(--accent);
   background: var(--accent);
   color: #ffffff;
