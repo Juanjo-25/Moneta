@@ -15,12 +15,12 @@ export function SectionHeader({
 }: SectionHeaderProps) {
   return (
     <header className="topbar">
-      <div>
+      <div className="topbar-context">
         <p>{eyebrow}</p>
         <h1>{title}</h1>
         <span>{description}</span>
       </div>
-      {action}
+      {action ? <div className="topbar-action">{action}</div> : null}
     </header>
   );
 }

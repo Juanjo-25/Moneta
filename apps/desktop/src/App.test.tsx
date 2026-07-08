@@ -83,6 +83,22 @@ describe("App navigation", () => {
 
     render(<App />);
 
+    const sidebar = document.querySelector(".sidebar");
+    const brand = screen.getByRole("button", { name: "Moneta Inventario y cartera" });
+    const navigation = screen.getByRole("navigation", { name: "Principal" });
+    const topbar = document.querySelector(".topbar");
+    const topbarContext = document.querySelector(".topbar-context");
+    const topbarAction = document.querySelector(".topbar-action");
+
+    expect(sidebar?.querySelector(".sidebar-brand")).toBeTruthy();
+    expect(sidebar?.querySelector(".sidebar-nav")).toBeTruthy();
+    expect(brand.closest(".sidebar-brand")).toBeTruthy();
+    expect(navigation.closest(".sidebar-nav")).toBeTruthy();
+    expect(topbarContext).toBeTruthy();
+    expect(topbarAction).toBeTruthy();
+    expect(topbar?.firstElementChild).toBe(topbarContext);
+    expect(topbar?.lastElementChild).toBe(topbarAction);
+
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));

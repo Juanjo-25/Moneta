@@ -65,9 +65,17 @@ button,
 }
 
 .sidebar {
+  display: grid;
+  align-content: start;
+  gap: 18px;
   background: #111827;
   color: #f9fafb;
   padding: 24px 18px;
+}
+
+.sidebar-brand {
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgb(148 163 184 / 14%);
 }
 
 .brand {
@@ -75,11 +83,10 @@ button,
   align-items: center;
   gap: 12px;
   width: 100%;
-  margin-bottom: 32px;
   border-radius: 8px;
   background: transparent;
   color: inherit;
-  padding: 0;
+  padding: 4px 2px;
   text-align: left;
 }
 
@@ -104,14 +111,24 @@ button,
   margin-top: 3px;
 }
 
+.brand:hover .brand-mark,
+.brand[aria-current="page"] .brand-mark {
+  box-shadow: 0 0 0 4px rgb(45 212 191 / 14%);
+}
+
 .brand:hover,
 .brand[aria-current="page"] {
   color: #ffffff;
 }
 
+.sidebar-nav {
+  display: grid;
+  gap: 10px;
+}
+
 .navigation {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .navigation button {
@@ -123,10 +140,16 @@ button,
   text-align: left;
 }
 
-.navigation button.active,
 .navigation button:hover {
-  background: #233041;
+  background: #1e293b;
   color: #ffffff;
+}
+
+.navigation button.active,
+.navigation button[aria-current="page"] {
+  background: linear-gradient(180deg, #233041 0%, #1f2c3b 100%);
+  color: #ffffff;
+  box-shadow: inset 2px 0 0 #2dd4bf;
 }
 
 .workspace {
@@ -135,22 +158,39 @@ button,
 
 .topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 24px;
+  gap: 20px;
+}
+
+.topbar-context {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.topbar-action {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
 }
 
 .topbar p {
   margin: 0 0 4px;
-  color: var(--text-tertiary);
-  font-size: 14px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .topbar span {
   display: block;
-  margin-top: 6px;
+  margin-top: 2px;
   color: var(--text-tertiary);
   font-size: 14px;
+  line-height: 1.45;
 }
 
 .topbar h1 {

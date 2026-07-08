@@ -670,32 +670,36 @@ export function App() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <button
-          aria-label="Moneta Inventario y cartera"
-          aria-current={activeSectionId === "dashboard" ? "page" : undefined}
-          className="brand"
-          onClick={() => openSection("dashboard")}
-          type="button"
-        >
-          <span className="brand-mark">M</span>
-          <div>
-            <strong>Moneta</strong>
-            <small>Inventario y cartera</small>
-          </div>
-        </button>
+        <div className="sidebar-brand">
+          <button
+            aria-label="Moneta Inventario y cartera"
+            aria-current={activeSectionId === "dashboard" ? "page" : undefined}
+            className="brand"
+            onClick={() => openSection("dashboard")}
+            type="button"
+          >
+            <span className="brand-mark">M</span>
+            <div>
+              <strong>Moneta</strong>
+              <small>Inventario y cartera</small>
+            </div>
+          </button>
+        </div>
 
-        <nav className="navigation" aria-label="Principal">
-          {sidebarNavigationItems.map((item) => (
-            <button
-              aria-current={item.id === activeSectionId ? "page" : undefined}
-              className={item.id === activeSectionId ? "active" : ""}
-              key={item.id}
-              onClick={() => openSection(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <div className="sidebar-nav">
+          <nav className="navigation" aria-label="Principal">
+            {sidebarNavigationItems.map((item) => (
+              <button
+                aria-current={item.id === activeSectionId ? "page" : undefined}
+                className={item.id === activeSectionId ? "active" : ""}
+                key={item.id}
+                onClick={() => openSection(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
       </aside>
 
       <section className="workspace">
