@@ -46,6 +46,18 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+button,
+.data-table tbody tr td,
+.empty-state,
+.report-chart-button {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 264px 1fr;
@@ -149,12 +161,22 @@ textarea:focus-visible {
 
 .primary-action {
   min-height: 42px;
+  border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: var(--accent);
   color: white;
   padding: 10px 16px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.primary-action:hover {
+  background: #0b665f;
+  box-shadow: 0 6px 14px rgb(15 118 110 / 16%);
+}
+
+.primary-action:focus-visible {
+  box-shadow: 0 0 0 4px rgb(15 118 110 / 14%);
 }
 
 .metric-grid {
@@ -312,22 +334,36 @@ textarea:focus-visible {
 .empty-state {
   display: grid;
   place-items: center;
-  gap: 6px;
   min-height: 190px;
   border: 1px dashed #cbd5e1;
-  border-radius: 8px;
+  border-radius: var(--radius-card);
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%);
   color: #64748b;
+  padding: 20px;
   text-align: center;
+}
+
+.empty-state-copy {
+  display: grid;
+  gap: 6px;
+  max-width: 420px;
 }
 
 .empty-state strong {
   color: #334155;
+  font-size: 16px;
 }
 
 .empty-state h2 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: 20px;
+}
+
+.empty-state span {
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .dashboard-empty-state {
@@ -782,6 +818,10 @@ textarea:focus-visible {
   background: var(--surface-soft);
 }
 
+.data-table tbody tr:focus-within td {
+  background: #f0fdf4;
+}
+
 .secondary-action {
   min-height: 42px;
   border: 1px solid var(--border-soft);
@@ -803,6 +843,11 @@ textarea:focus-visible {
   border-color: #cbd5e1;
   background: #e6edf5;
   color: var(--text-primary);
+}
+
+.secondary-action:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgb(15 118 110 / 12%);
 }
 
 .invoice-preview {
@@ -1194,6 +1239,15 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.view-switch-button:hover {
+  background: rgb(255 255 255 / 72%);
+  color: var(--text-primary);
+}
+
+.view-switch-button:focus-visible {
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 12%);
+}
+
 .view-switch-button.active {
   background: var(--surface-elevated);
   color: var(--text-primary);
@@ -1300,6 +1354,15 @@ textarea:focus-visible {
   color: var(--text-secondary);
   padding: 9px 14px;
   font-weight: 700;
+}
+
+.submenu-switch-button:hover {
+  background: rgb(255 255 255 / 70%);
+  color: var(--text-primary);
+}
+
+.submenu-switch-button:focus-visible {
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 12%);
 }
 
 .submenu-switch-button.active {
