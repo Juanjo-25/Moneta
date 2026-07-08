@@ -3,7 +3,7 @@ import { PanelHeader } from "./PanelHeader";
 import { SecondaryActionButton } from "./SecondaryActionButton";
 
 type ReportPrimaryInsightPanelProps = {
-  children: ReactNode;
+  children?: ReactNode;
   description: ReactNode;
   onBack?: (() => void) | undefined;
   title: string;

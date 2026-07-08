@@ -306,6 +306,10 @@ describe("App navigation", () => {
     const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
     const secondaryAnalysis = screen.getByRole("region", { name: "Analisis secundario" });
     const operationalAlerts = screen.getByRole("region", { name: "Alertas operativas" });
+    const primaryControls = within(primaryAnalysis).getByRole("region", {
+      name: "Controles del analisis principal"
+    });
+    const dailySalesChart = within(primaryAnalysis).getByLabelText("Grafico ventas diarias");
 
     expect(
       analyticsSummary.compareDocumentPosition(primaryAnalysis) &
@@ -317,6 +321,10 @@ describe("App navigation", () => {
     ).toBeTruthy();
     expect(
       secondaryAnalysis.compareDocumentPosition(operationalAlerts) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      primaryControls.compareDocumentPosition(dailySalesChart) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
@@ -1103,8 +1111,15 @@ describe("App navigation", () => {
     const reportSummary = screen.getByRole("region", { name: "Resumen del reporte" });
     const primaryInsight = screen.getByRole("region", { name: "Insight principal del reporte" });
     const detailContext = screen.getByRole("region", { name: "Contexto del detalle" });
+    const supportingContent = screen.getByRole("region", {
+      name: "Contenido secundario del reporte"
+    });
     expect(
       reportSummary.compareDocumentPosition(primaryInsight) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      primaryInsight.compareDocumentPosition(supportingContent) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(

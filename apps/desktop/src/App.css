@@ -213,6 +213,8 @@ textarea:focus-visible {
 }
 
 .dashboard-secondary-analysis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   margin-bottom: 22px;
 }
 
@@ -236,6 +238,9 @@ textarea:focus-visible {
   min-height: 360px;
   padding: 22px;
   gap: 18px;
+  background:
+    linear-gradient(180deg, rgba(15, 118, 110, 0.04), rgba(15, 118, 110, 0)),
+    var(--surface-elevated);
 }
 
 .panel-header {
@@ -267,6 +272,26 @@ textarea:focus-visible {
 
 .dashboard-hero-copy h2 {
   font-size: 22px;
+}
+
+.dashboard-hero-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.dashboard-hero-controls {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.dashboard-hero-chart {
+  min-width: 0;
 }
 
 .panel-header .secondary-action {
@@ -317,10 +342,9 @@ textarea:focus-visible {
 
 .dashboard-period-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 240px));
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: end;
-  margin-bottom: 4px;
 }
 
 .dashboard-series-legend {
@@ -437,6 +461,12 @@ textarea:focus-visible {
   font-size: 13px;
 }
 
+.dashboard-chart-panel-secondary {
+  min-height: 0;
+  padding: 16px;
+  gap: 10px;
+}
+
 .dashboard-bar-chart {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -529,9 +559,9 @@ textarea:focus-visible {
 
 .dashboard-product-pie {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
-  gap: 18px;
-  align-items: center;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .dashboard-pie-visual {
@@ -573,7 +603,7 @@ textarea:focus-visible {
   display: grid;
   gap: 5px;
   min-width: 0;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid #e2e8f0;
 }
 
@@ -600,7 +630,7 @@ textarea:focus-visible {
 .dashboard-pie-legend {
   display: grid;
   grid-column: 1 / -1;
-  gap: 8px;
+  gap: 6px;
 }
 
 .dashboard-pie-legend button {
@@ -1197,6 +1227,10 @@ textarea:focus-visible {
   margin-top: -6px;
 }
 
+.reports-summary-shell {
+  margin-top: 2px;
+}
+
 .reports-submenu {
   display: flex;
   flex-wrap: wrap;
@@ -1231,11 +1265,11 @@ textarea:focus-visible {
 
 .report-panel {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   background: var(--surface-elevated);
-  padding: 20px;
+  padding: 18px;
   box-shadow: var(--shadow-subtle);
 }
 
@@ -1253,6 +1287,12 @@ textarea:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.report-panel-header > div,
+.report-detail-header > div {
+  display: grid;
+  gap: 4px;
 }
 
 .report-panel h2 {
@@ -1335,7 +1375,7 @@ textarea:focus-visible {
 
 .report-detail-panel {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   background: var(--surface-elevated);
@@ -1344,12 +1384,20 @@ textarea:focus-visible {
 }
 
 .report-detail-panel-primary {
-  padding: 24px;
-  gap: 20px;
+  padding: 22px;
+  gap: 14px;
+  background:
+    linear-gradient(180deg, rgba(15, 118, 110, 0.035), rgba(15, 118, 110, 0)),
+    var(--surface-elevated);
 }
 
 .report-detail-panel-primary .report-detail-header h2 {
   font-size: 24px;
+}
+
+.report-supporting-content {
+  display: grid;
+  gap: 14px;
 }
 
 .report-placeholder-panel {
@@ -1377,7 +1425,7 @@ textarea:focus-visible {
 }
 
 .report-chart-detail {
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   background: var(--surface-soft);
@@ -1426,15 +1474,15 @@ textarea:focus-visible {
 .report-waterfall {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .report-waterfall-step {
   display: grid;
-  gap: 10px;
-  min-height: 132px;
+  gap: 8px;
+  min-height: 120px;
   align-content: end;
-  padding: 16px;
+  padding: 14px;
   border-radius: var(--radius-card);
   background: var(--accent-soft);
   border: 1px solid #a7f3d0;

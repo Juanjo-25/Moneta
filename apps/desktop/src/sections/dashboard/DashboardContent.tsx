@@ -104,44 +104,53 @@ export function DashboardContent({
               <h2>Ventas diarias</h2>
             </div>
           </PanelHeader>
-          <div className="dashboard-period-controls">
-            <label className="field" htmlFor="dashboard-period-one">
-              <span>Periodo 1</span>
-              <select
-                aria-label="Periodo 1 ventas diarias"
-                id="dashboard-period-one"
-                onChange={(event) => setPeriodOne(event.target.value)}
-                value={periodOne}
-              >
-                {dailyPeriodOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field" htmlFor="dashboard-period-two">
-              <span>Periodo 2</span>
-              <select
-                aria-label="Periodo 2 ventas diarias"
-                id="dashboard-period-two"
-                onChange={(event) => setPeriodTwo(event.target.value)}
-                value={periodTwo}
-              >
-                {dailyPeriodOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="dashboard-hero-body">
+            <section
+              className="dashboard-hero-controls"
+              aria-label="Controles del analisis principal"
+            >
+              <div className="dashboard-period-controls">
+                <label className="field" htmlFor="dashboard-period-one">
+                  <span>Periodo 1</span>
+                  <select
+                    aria-label="Periodo 1 ventas diarias"
+                    id="dashboard-period-one"
+                    onChange={(event) => setPeriodOne(event.target.value)}
+                    value={periodOne}
+                  >
+                    {dailyPeriodOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field" htmlFor="dashboard-period-two">
+                  <span>Periodo 2</span>
+                  <select
+                    aria-label="Periodo 2 ventas diarias"
+                    id="dashboard-period-two"
+                    onChange={(event) => setPeriodTwo(event.target.value)}
+                    value={periodTwo}
+                  >
+                    {dailyPeriodOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+            <div className="dashboard-hero-chart">
+              <DashboardAreaChart
+                formatCurrency={formatCurrency}
+                periodOneLabel={periodOneLabel}
+                periodTwoLabel={periodTwoLabel}
+                series={dailySalesSeries}
+              />
+            </div>
           </div>
-          <DashboardAreaChart
-            formatCurrency={formatCurrency}
-            periodOneLabel={periodOneLabel}
-            periodTwoLabel={periodTwoLabel}
-            series={dailySalesSeries}
-          />
         </div>
       </section>
 
@@ -149,14 +158,14 @@ export function DashboardContent({
         className="dashboard-chart-grid dashboard-secondary-analysis"
         aria-label="Analisis secundario"
       >
-        <div className="panel dashboard-chart-panel">
+        <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary">
           <PanelHeader>
             <h2>Ventas por mes</h2>
           </PanelHeader>
           <DashboardBarChart rows={monthlySalesRows} />
         </div>
 
-        <div className="panel dashboard-chart-panel">
+        <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary">
           <PanelHeader>
             <h2>Productos mas vendidos</h2>
           </PanelHeader>
@@ -166,7 +175,7 @@ export function DashboardContent({
           />
         </div>
 
-        <div className="panel dashboard-chart-panel">
+        <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary">
           <PanelHeader>
             <h2>Top clientes</h2>
           </PanelHeader>

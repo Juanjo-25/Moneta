@@ -682,6 +682,14 @@ export function ReportsSection({
     );
   }
 
+  function renderReportSupportingContent(content: ReactNode) {
+    return (
+      <section className="report-supporting-content" aria-label="Contenido secundario del reporte">
+        {content}
+      </section>
+    );
+  }
+
   function renderReportTabs() {
     return (
       <section className="reports-nav-group" aria-label="Navegacion de reportes">
@@ -834,24 +842,26 @@ export function ReportsSection({
                 </div>
             </ReportPrimaryInsightPanel>
 
-            <DataTable ariaLabel="Detalle flujo de caja">
-              <DataTableHeader
-                labels={["Fecha", "Tipo", "Origen", "Tercero", "Entrada", "Salida", "Neto"]}
-              />
-              <tbody>
-                {cashflowEntries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{entry.dateLabel}</td>
-                    <td>{entry.typeLabel}</td>
-                    <td>{entry.originLabel}</td>
-                    <td>{entry.partyName}</td>
-                    <td>{formatCurrency(entry.inflowMinor)}</td>
-                    <td>{formatCurrency(entry.outflowMinor)}</td>
-                    <td>{formatCurrency(entry.netMinor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </DataTable>
+            {renderReportSupportingContent(
+              <DataTable ariaLabel="Detalle flujo de caja">
+                <DataTableHeader
+                  labels={["Fecha", "Tipo", "Origen", "Tercero", "Entrada", "Salida", "Neto"]}
+                />
+                <tbody>
+                  {cashflowEntries.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{entry.dateLabel}</td>
+                      <td>{entry.typeLabel}</td>
+                      <td>{entry.originLabel}</td>
+                      <td>{entry.partyName}</td>
+                      <td>{formatCurrency(entry.inflowMinor)}</td>
+                      <td>{formatCurrency(entry.outflowMinor)}</td>
+                      <td>{formatCurrency(entry.netMinor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            )}
           </>
         )}
       </section>
@@ -913,30 +923,32 @@ export function ReportsSection({
                 </div>
             </ReportPrimaryInsightPanel>
 
-            <DataTable ariaLabel="Detalle utilidades por periodo">
-              <DataTableHeader
-                labels={[
-                  "Periodo",
-                  "Ventas",
-                  "Costo",
-                  "Utilidad",
-                  "% margen",
-                  "Numero de ventas"
-                ]}
-              />
-              <tbody>
-                {utilityPeriodRows.map((row) => (
-                  <tr key={row.dateKey}>
-                    <td>{row.dateLabel}</td>
-                    <td>{formatCurrency(row.revenueMinor)}</td>
-                    <td>{formatCurrency(row.costMinor)}</td>
-                    <td>{formatCurrency(row.marginMinor)}</td>
-                    <td>{formatPercent(row.marginPercent)}</td>
-                    <td>{row.salesCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </DataTable>
+            {renderReportSupportingContent(
+              <DataTable ariaLabel="Detalle utilidades por periodo">
+                <DataTableHeader
+                  labels={[
+                    "Periodo",
+                    "Ventas",
+                    "Costo",
+                    "Utilidad",
+                    "% margen",
+                    "Numero de ventas"
+                  ]}
+                />
+                <tbody>
+                  {utilityPeriodRows.map((row) => (
+                    <tr key={row.dateKey}>
+                      <td>{row.dateLabel}</td>
+                      <td>{formatCurrency(row.revenueMinor)}</td>
+                      <td>{formatCurrency(row.costMinor)}</td>
+                      <td>{formatCurrency(row.marginMinor)}</td>
+                      <td>{formatPercent(row.marginPercent)}</td>
+                      <td>{row.salesCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            )}
           </>
         )}
       </section>
@@ -975,12 +987,12 @@ export function ReportsSection({
 
   if (detailView === "product") {
     return renderProfitabilityLayout(
-      <ReportPrimaryInsightPanel
-        title="Margen por producto"
-        description="Utilidad agregada por producto vendida en el periodo analizado."
-        onBack={() => setDetailView(null)}
-      >
-          <>
+      <>
+        <ReportPrimaryInsightPanel
+          title="Margen por producto"
+          description="Utilidad agregada por producto vendida en el periodo analizado."
+          onBack={() => setDetailView(null)}
+        >
           <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por producto">
             {productRows.map((row) => (
               <div className="report-bar-row report-bar-row-detail" key={row.productId}>
@@ -997,7 +1009,8 @@ export function ReportsSection({
               </div>
             ))}
           </div>
-
+        </ReportPrimaryInsightPanel>
+        {renderReportSupportingContent(
           <DataTable ariaLabel="Detalle margen por producto">
             <DataTableHeader
               labels={["Producto", "Unidades", "Ventas", "Costo", "Utilidad", "% margen"]}
@@ -1013,22 +1026,22 @@ export function ReportsSection({
                   <td>{formatPercent(row.marginPercent)}</td>
                 </tr>
               ))}
-              </tbody>
-            </DataTable>
-          </>
-      </ReportPrimaryInsightPanel>,
+            </tbody>
+          </DataTable>
+        )}
+      </>,
       true
     );
   }
 
   if (detailView === "customer") {
     return renderProfitabilityLayout(
-      <ReportPrimaryInsightPanel
-        title="Margen por cliente"
-        description="Utilidad consolidada por cliente para comparar variacion comercial."
-        onBack={() => setDetailView(null)}
-      >
-          <>
+      <>
+        <ReportPrimaryInsightPanel
+          title="Margen por cliente"
+          description="Utilidad consolidada por cliente para comparar variacion comercial."
+          onBack={() => setDetailView(null)}
+        >
           <div className="report-chart report-chart-detail" aria-label="Grafico detalle margen por cliente">
             {customerRows.map((row) => (
               <div className="report-bar-row report-bar-row-detail" key={row.customerId}>
@@ -1045,7 +1058,8 @@ export function ReportsSection({
               </div>
             ))}
           </div>
-
+        </ReportPrimaryInsightPanel>
+        {renderReportSupportingContent(
           <DataTable ariaLabel="Detalle margen por cliente">
             <DataTableHeader
               labels={["Cliente", "Ventas", "Costo", "Utilidad", "% margen", "Compras"]}
@@ -1061,21 +1075,23 @@ export function ReportsSection({
                   <td>{row.purchaseCount}</td>
                 </tr>
               ))}
-              </tbody>
-            </DataTable>
-          </>
-      </ReportPrimaryInsightPanel>,
+            </tbody>
+          </DataTable>
+        )}
+      </>,
       true
     );
   }
 
   if (detailView === "sales") {
     return renderProfitabilityLayout(
-      <ReportPrimaryInsightPanel
-        title="Margen por venta"
-        description="Rentabilidad total por venta y acceso al detalle por producto de cada factura."
-        onBack={() => setDetailView(null)}
-      >
+      <>
+        <ReportPrimaryInsightPanel
+          title="Margen por venta"
+          description="Rentabilidad total por venta y acceso al detalle por producto de cada factura."
+          onBack={() => setDetailView(null)}
+        />
+        {renderReportSupportingContent(
           <DataTable ariaLabel="Detalle margen por venta">
             <DataTableHeader
               labels={[
@@ -1115,9 +1131,10 @@ export function ReportsSection({
                   </td>
                 </tr>
               ))}
-              </tbody>
-            </DataTable>
-      </ReportPrimaryInsightPanel>,
+            </tbody>
+          </DataTable>
+        )}
+      </>,
       true
     );
   }
@@ -1132,56 +1149,59 @@ export function ReportsSection({
       selectedSale.totalMinor > 0 ? (selectedSaleMarginMinor / selectedSale.totalMinor) * 100 : 0;
 
     return renderProfitabilityLayout(
-      <ReportPrimaryInsightPanel
-        title="Margen por venta"
-        description={`${selectedSale.customerName} · ${selectedSale.id} · ${selectedSale.occurredAtLabel}`}
-        onBack={() => {
-          setDetailView("sales");
-          setSelectedSaleId(null);
-        }}
-      >
+      <>
+        <ReportPrimaryInsightPanel
+          title="Margen por venta"
+          description={`${selectedSale.customerName} · ${selectedSale.id} · ${selectedSale.occurredAtLabel}`}
+          onBack={() => {
+            setDetailView("sales");
+            setSelectedSaleId(null);
+          }}
+        />
+        {renderReportSupportingContent(
           <>
-          <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
-            <CompactSummaryGrid
-              ariaLabel="Resumen detalle de venta"
-              items={[
-                { label: "Cliente", value: selectedSale.customerName },
-                { label: "Venta total", value: formatCurrency(selectedSale.totalMinor) },
-                { label: "Costo total", value: formatCurrency(selectedSaleCostMinor) },
-                { label: "Margen total", value: formatCurrency(selectedSaleMarginMinor) },
-                { label: "% margen", value: formatPercent(selectedSaleMarginPercent) }
-              ]}
-            />
-          </section>
+            <section className="report-sale-summary-shell" aria-label="Contexto del detalle">
+              <CompactSummaryGrid
+                ariaLabel="Resumen detalle de venta"
+                items={[
+                  { label: "Cliente", value: selectedSale.customerName },
+                  { label: "Venta total", value: formatCurrency(selectedSale.totalMinor) },
+                  { label: "Costo total", value: formatCurrency(selectedSaleCostMinor) },
+                  { label: "Margen total", value: formatCurrency(selectedSaleMarginMinor) },
+                  { label: "% margen", value: formatPercent(selectedSaleMarginPercent) }
+                ]}
+              />
+            </section>
 
-          <DataTable ariaLabel="Detalle margen por producto de la venta">
-            <DataTableHeader
-              labels={[
-                "Producto",
-                "Cantidad",
-                "Precio venta",
-                "Ventas",
-                "Costo",
-                "Utilidad",
-                "% margen"
-              ]}
-            />
-            <tbody>
-              {selectedSale.lines.map((line) => (
-                <tr key={line.id}>
-                  <td>{line.productName}</td>
-                  <td>{line.quantity}</td>
-                  <td>{formatCurrency(line.unitPriceMinor)}</td>
-                  <td>{formatCurrency(line.totalMinor)}</td>
-                  <td>{formatCurrency(line.costMinor)}</td>
-                  <td>{formatCurrency(line.marginMinor)}</td>
-                  <td>{formatPercent(line.marginPercent)}</td>
-                </tr>
-              ))}
+            <DataTable ariaLabel="Detalle margen por producto de la venta">
+              <DataTableHeader
+                labels={[
+                  "Producto",
+                  "Cantidad",
+                  "Precio venta",
+                  "Ventas",
+                  "Costo",
+                  "Utilidad",
+                  "% margen"
+                ]}
+              />
+              <tbody>
+                {selectedSale.lines.map((line) => (
+                  <tr key={line.id}>
+                    <td>{line.productName}</td>
+                    <td>{line.quantity}</td>
+                    <td>{formatCurrency(line.unitPriceMinor)}</td>
+                    <td>{formatCurrency(line.totalMinor)}</td>
+                    <td>{formatCurrency(line.costMinor)}</td>
+                    <td>{formatCurrency(line.marginMinor)}</td>
+                    <td>{formatPercent(line.marginPercent)}</td>
+                  </tr>
+                ))}
               </tbody>
             </DataTable>
           </>
-      </ReportPrimaryInsightPanel>,
+        )}
+      </>,
       true
     );
   }
