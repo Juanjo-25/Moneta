@@ -1227,6 +1227,11 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
+    const summary = screen.getByRole("region", { name: "Resumen de cartera" });
+    const alerts = screen.getByRole("region", { name: "Alertas de cartera" });
+    const views = screen.getByRole("region", { name: "Selector de cartera" });
+    const receivablesContent = screen.getByRole("region", { name: "Contenido por cobrar" });
+
     expect(screen.getByText("Total por cobrar")).toBeTruthy();
     expect(screen.getByText("Total por pagar")).toBeTruthy();
     expect(screen.getByText("Facturas vencidas")).toBeTruthy();
@@ -1234,10 +1239,24 @@ describe("App navigation", () => {
     expect(screen.getByRole("radio", { name: "Por cobrar" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Por pagar" })).toBeTruthy();
     expect(screen.getByRole("table", { name: "Cartera por cobrar" })).toBeTruthy();
+    expect(
+      summary.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      alerts.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      views.compareDocumentPosition(receivablesContent) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(receivablesContent.className).toContain("cartera-content");
+    expect(receivablesContent.className).toContain("cartera-content-receivables");
 
     await user.click(screen.getByRole("radio", { name: "Por pagar" }));
 
+    const payablesContent = screen.getByRole("region", { name: "Contenido por pagar" });
     const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    expect(payablesContent.className).toContain("cartera-content");
+    expect(payablesContent.className).toContain("cartera-content-payables");
     expect(within(payablesTable).getByText("Proveedor Central")).toBeTruthy();
     expect(within(payablesTable).getByText("001")).toBeTruthy();
     expect(within(payablesTable).getAllByText(/\$\s*15\.000/).length).toBeGreaterThan(0);

@@ -104,44 +104,58 @@ export function CarteraDashboardSection({
 
   return (
     <section className="section-panel cartera-dashboard">
-      <div className="cartera-summary" aria-label="Resumen de cartera">
-        <SummaryCard
-          label="Total por cobrar"
-          value={formatCurrency(receivablesTotal)}
-        />
-        <SummaryCard label="Total por pagar" value={formatCurrency(payablesTotal)} />
-        <SummaryCard label="Facturas vencidas" value={String(overdueCount)} />
-        <SummaryCard label="Proximas a vencer" value={String(upcomingCount)} />
-      </div>
+      <section className="cartera-summary-shell" aria-label="Resumen de cartera">
+        <div className="cartera-summary">
+          <SummaryCard
+            label="Total por cobrar"
+            value={formatCurrency(receivablesTotal)}
+          />
+          <SummaryCard label="Total por pagar" value={formatCurrency(payablesTotal)} />
+          <SummaryCard label="Facturas vencidas" value={String(overdueCount)} />
+          <SummaryCard label="Proximas a vencer" value={String(upcomingCount)} />
+        </div>
+      </section>
 
       <CarteraAlerts formatCurrency={formatCurrency} items={alertItems} />
 
-      <ViewSwitch
-        ariaLabel="Vistas de cartera"
-        onSelect={setActiveView}
-        options={[
-          { label: "Por cobrar", value: "receivables" },
-          { label: "Por pagar", value: "payables" }
-        ]}
-        selectedValue={activeView}
-      />
+      <section className="cartera-view-switch-shell" aria-label="Selector de cartera">
+        <ViewSwitch
+          ariaLabel="Vistas de cartera"
+          onSelect={setActiveView}
+          options={[
+            { label: "Por cobrar", value: "receivables" },
+            { label: "Por pagar", value: "payables" }
+          ]}
+          selectedValue={activeView}
+        />
+      </section>
 
       {activeView === "receivables" ? (
-        <ReceivablesTable
-          formatCurrency={formatCurrency}
-          getDueMetadata={getDueMetadata}
-          receivables={sortedReceivables}
-        />
+        <section
+          className="cartera-content cartera-content-receivables"
+          aria-label="Contenido por cobrar"
+        >
+          <ReceivablesTable
+            formatCurrency={formatCurrency}
+            getDueMetadata={getDueMetadata}
+            receivables={sortedReceivables}
+          />
+        </section>
       ) : (
-        <PayablesTable
-          formatCurrency={formatCurrency}
-          formatIntegerInput={formatIntegerInput}
-          formatPayableStatus={formatPayableStatus}
-          getDueMetadata={getDueMetadata}
-          onRegisterSupplierPayment={onRegisterSupplierPayment}
-          parseNonNegativeInteger={parseNonNegativeInteger}
-          supplierPayables={sortedPayables}
-        />
+        <section
+          className="cartera-content cartera-content-payables"
+          aria-label="Contenido por pagar"
+        >
+          <PayablesTable
+            formatCurrency={formatCurrency}
+            formatIntegerInput={formatIntegerInput}
+            formatPayableStatus={formatPayableStatus}
+            getDueMetadata={getDueMetadata}
+            onRegisterSupplierPayment={onRegisterSupplierPayment}
+            parseNonNegativeInteger={parseNonNegativeInteger}
+            supplierPayables={sortedPayables}
+          />
+        </section>
       )}
     </section>
   );
@@ -156,15 +170,15 @@ function CarteraAlerts({
 }) {
   if (items.length === 0) {
     return (
-      <div className="cartera-alerts" aria-label="Alertas de cartera">
+      <section className="cartera-alerts" aria-label="Alertas de cartera">
         <strong>Sin alertas de cartera</strong>
         <span>No hay facturas vencidas ni proximas a vencer.</span>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="cartera-alerts" aria-label="Alertas de cartera">
+    <section className="cartera-alerts" aria-label="Alertas de cartera">
       <strong>Alertas automaticas</strong>
       <ul>
         {items.map((item) => (
@@ -178,7 +192,7 @@ function CarteraAlerts({
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 

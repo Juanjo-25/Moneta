@@ -1067,6 +1067,12 @@ textarea:focus-visible {
   gap: 18px;
 }
 
+.cartera-summary-shell,
+.cartera-view-switch-shell,
+.cartera-content {
+  display: grid;
+}
+
 .cartera-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1077,18 +1083,36 @@ textarea:focus-visible {
   margin-top: 0;
 }
 
+.cartera-summary .summary-card:nth-child(1) {
+  background: linear-gradient(180deg, #f0fdf4 0%, #ecfdf5 100%);
+  border-color: #bbf7d0;
+}
+
+.cartera-summary .summary-card:nth-child(2) {
+  background: linear-gradient(180deg, #fff7ed 0%, #fffbeb 100%);
+  border-color: #fed7aa;
+}
+
+.cartera-summary .summary-card:nth-child(3),
+.cartera-summary .summary-card:nth-child(4) {
+  background: var(--surface-soft);
+}
+
 .cartera-alerts {
   display: grid;
   gap: 12px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
-  background: var(--surface-elevated);
-  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.015), rgba(15, 23, 42, 0)),
+    var(--surface-elevated);
+  padding: 18px;
   box-shadow: var(--shadow-subtle);
 }
 
 .cartera-alerts strong {
   color: var(--text-primary);
+  font-size: 16px;
 }
 
 .cartera-alerts > span {
@@ -1106,13 +1130,13 @@ textarea:focus-visible {
 
 .cartera-alerts li {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 96px minmax(140px, 1.2fr) 96px minmax(120px, 1fr) 120px auto;
+  gap: 12px;
   align-items: center;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   background: var(--surface-soft);
-  padding: 12px 14px;
+  padding: 11px 14px;
 }
 
 .cartera-alerts li span,
@@ -1122,6 +1146,33 @@ textarea:focus-visible {
 
 .cartera-alerts li span:first-child {
   font-weight: 700;
+}
+
+.cartera-view-switch-shell {
+  margin-top: -2px;
+}
+
+.cartera-content {
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-subtle);
+}
+
+.cartera-content-receivables {
+  border-top: 3px solid #16a34a;
+}
+
+.cartera-content-payables {
+  border-top: 3px solid #ea580c;
+}
+
+.cartera-content .data-table,
+.cartera-content .empty-state,
+.cartera-content .payables-table-layout {
+  margin-top: 0;
 }
 
 .view-switch {
