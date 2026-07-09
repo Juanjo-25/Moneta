@@ -145,10 +145,6 @@ const navigationItems: SectionConfig[] = [
   }
 ];
 
-const sidebarNavigationItems = navigationItems.filter(
-  (item) => item.id !== "dashboard"
-);
-
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",
@@ -671,24 +667,18 @@ export function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <button
-            aria-label="Moneta Inventario y cartera"
-            aria-current={activeSectionId === "dashboard" ? "page" : undefined}
-            className="brand"
-            onClick={() => openSection("dashboard")}
-            type="button"
-          >
+          <div className="brand">
             <span className="brand-mark">M</span>
             <div>
               <strong>Moneta</strong>
               <small>Inventario y cartera</small>
             </div>
-          </button>
+          </div>
         </div>
 
         <div className="sidebar-nav">
           <nav className="navigation" aria-label="Principal">
-            {sidebarNavigationItems.map((item) => (
+            {navigationItems.map((item) => (
               <button
                 aria-current={item.id === activeSectionId ? "page" : undefined}
                 className={item.id === activeSectionId ? "active" : ""}

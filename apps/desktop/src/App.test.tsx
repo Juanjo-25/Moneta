@@ -84,7 +84,6 @@ describe("App navigation", () => {
     render(<App />);
 
     const sidebar = document.querySelector(".sidebar");
-    const brand = screen.getByRole("button", { name: "Moneta Inventario y cartera" });
     const navigation = screen.getByRole("navigation", { name: "Principal" });
     const topbar = document.querySelector(".topbar");
     const topbarContext = document.querySelector(".topbar-context");
@@ -92,7 +91,7 @@ describe("App navigation", () => {
 
     expect(sidebar?.querySelector(".sidebar-brand")).toBeTruthy();
     expect(sidebar?.querySelector(".sidebar-nav")).toBeTruthy();
-    expect(brand.closest(".sidebar-brand")).toBeTruthy();
+    expect(sidebar?.querySelector(".brand")).toBeTruthy();
     expect(navigation.closest(".sidebar-nav")).toBeTruthy();
     expect(topbarContext).toBeTruthy();
     expect(topbarAction).toBeTruthy();
@@ -100,6 +99,7 @@ describe("App navigation", () => {
     expect(topbar?.lastElementChild).toBe(topbarAction);
 
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dashboard" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
@@ -112,21 +112,19 @@ describe("App navigation", () => {
 
     render(<App />);
 
-    expect(screen.queryByRole("button", { name: "Dashboard" })).toBeNull();
-
     await user.click(screen.getByRole("button", { name: "Nueva venta" }));
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
     await user.click(screen.getByRole("button", { name: "Ver todo" }));
     expect(screen.getByRole("heading", { name: "Reportes" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
     await user.click(screen.getByRole("button", { name: "Revisar" }));
     expect(screen.getByRole("heading", { name: "Productos" })).toBeTruthy();
   });
 
-  it("returns to the dashboard when the Moneta brand is clicked", async () => {
+  it("returns to the dashboard when the dashboard item is clicked", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -134,7 +132,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
 
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
   });
@@ -162,7 +160,7 @@ describe("App navigation", () => {
     expect(screen.getByRole("cell", { name: "4" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Bajo stock" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
 
     expect(screen.getByText("Productos activos")).toBeTruthy();
     expect(screen.getByText("Alertas de inventario")).toBeTruthy();
@@ -270,7 +268,7 @@ describe("App navigation", () => {
     await user.click(screen.getByLabelText("Pagada"));
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
-    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
 
     expect(screen.getByRole("heading", { name: "Ventas diarias" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ventas por mes" })).toBeTruthy();
@@ -316,7 +314,7 @@ describe("App navigation", () => {
     await user.click(screen.getByLabelText("Pagada"));
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
-    await user.click(screen.getByRole("button", { name: "Moneta Inventario y cartera" }));
+    await user.click(screen.getByRole("button", { name: "Dashboard" }));
 
     const analyticsSummary = screen.getByRole("region", { name: "Resumen analitico" });
     const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
