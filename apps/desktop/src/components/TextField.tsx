@@ -2,6 +2,7 @@ import type { HTMLAttributes, HTMLInputTypeAttribute } from "react";
 
 type TextFieldProps = {
   error?: string | undefined;
+  hint?: string | undefined;
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   label: string;
   onChange: (value: string) => void;
@@ -12,6 +13,7 @@ type TextFieldProps = {
 
 export function TextField({
   error,
+  hint,
   inputMode,
   label,
   onChange,
@@ -20,11 +22,17 @@ export function TextField({
   value
 }: TextFieldProps) {
   const id = label.toLowerCase().replace(/\s+/g, "-");
+  const hintId = hint ? `${id}-hint` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <label className="field" htmlFor={id}>
-      <span>{label}</span>
+    <div className="field">
+      <label htmlFor={id}>
+        <span>{label}</span>
+      </label>
       <input
+        aria-describedby={describedBy}
         aria-invalid={Boolean(error)}
         id={id}
         inputMode={inputMode}
@@ -33,7 +41,16 @@ export function TextField({
         type={type}
         value={value}
       />
-      {error ? <small>{error}</small> : null}
-    </label>
+      {hint ? (
+        <small className="field-hint" id={hintId}>
+          {hint}
+        </small>
+      ) : null}
+      {error ? (
+        <small className="field-error" id={errorId}>
+          {error}
+        </small>
+      ) : null}
+    </div>
   );
 }

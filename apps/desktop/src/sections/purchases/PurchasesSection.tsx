@@ -427,6 +427,7 @@ export function PurchasesSection({
           />
           <TextField
             error={errors.issuedAt}
+            hint="Usa la fecha real de la factura del proveedor."
             label="Fecha emision"
             onChange={(value) => updateField("issuedAt", value)}
             type="date"
@@ -435,6 +436,7 @@ export function PurchasesSection({
           {form.paymentStatus === "pending" ? (
             <TextField
               error={errors.dueAt}
+              hint="Solo se exige para compras pendientes."
               label="Fecha vencimiento"
               onChange={(value) => updateField("dueAt", value)}
               type="date"

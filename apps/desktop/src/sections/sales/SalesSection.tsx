@@ -560,6 +560,7 @@ export function SalesSection({
         {form.paymentStatus === "pending" ? (
           <TextField
             error={errors.dueAt}
+            hint="Solo se exige para ventas pendientes."
             label="Fecha vencimiento venta"
             onChange={(value) => {
               updateField("dueAt", value);

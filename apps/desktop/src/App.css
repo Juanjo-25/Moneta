@@ -811,8 +811,15 @@ button,
 }
 
 .field small {
-  color: var(--danger);
   font-size: 12px;
+}
+
+.field-hint {
+  color: var(--text-secondary);
+}
+
+.field-error {
+  color: var(--danger);
 }
 
 .form-actions {

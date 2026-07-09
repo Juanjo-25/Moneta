@@ -408,6 +408,20 @@ describe("App navigation", () => {
     expect(screen.queryByRole("table", { name: "Ventas registradas" })).toBeNull();
   });
 
+  it("shows neutral due-date guidance before validating pending sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByLabelText("Pendiente"));
+
+    const dueAtInput = screen.getByLabelText("Fecha vencimiento venta");
+    expect(screen.getByText("Solo se exige para ventas pendientes.")).toBeTruthy();
+    expect(dueAtInput.getAttribute("aria-invalid")).toBe("false");
+  });
+
   it("uses a compact summary card in the sales form", async () => {
     const user = userEvent.setup();
 
@@ -1502,6 +1516,24 @@ describe("App navigation", () => {
     await user.click(screen.getByLabelText("Pendiente"));
     expect(screen.getByLabelText("Fecha vencimiento").getAttribute("type")).toBe(
       "date"
+    );
+  });
+
+  it("shows neutral date guidance before validating purchase dates", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+
+    expect(screen.getByText("Usa la fecha real de la factura del proveedor.")).toBeTruthy();
+    expect(screen.getByLabelText("Fecha emision").getAttribute("aria-invalid")).toBe("false");
+
+    await user.click(screen.getByLabelText("Pendiente"));
+
+    expect(screen.getByText("Solo se exige para compras pendientes.")).toBeTruthy();
+    expect(screen.getByLabelText("Fecha vencimiento").getAttribute("aria-invalid")).toBe(
+      "false"
     );
   });
 
