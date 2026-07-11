@@ -58,9 +58,15 @@ export type SaleLineRecord = {
   id: string;
   productId: string;
   productName: string;
+  unit: string;
   quantity: number;
   unitCostMinorAtSale: number;
   unitPriceMinor: number;
+  discountPercent: number;
+  discountMinor: number;
+  taxPercent: number;
+  taxMinor: number;
+  subtotalMinor: number;
   costMinor: number;
   marginMinor: number;
   marginPercent: number;
@@ -72,6 +78,13 @@ export type SaleRecord = {
   customer: CustomerRecord;
   customerId: string;
   customerName: string;
+  branch: string;
+  prefix: string;
+  invoiceNumber: string;
+  seller: string;
+  currency: "COP";
+  concept: string;
+  issuedAt: string;
   productId: string;
   productName: string;
   quantity: number;
@@ -99,8 +112,14 @@ export type PurchaseLineRecord = {
   id: string;
   productId: string;
   productName: string;
+  unit: string;
   quantity: number;
   unitCostMinor: number;
+  discountPercent: number;
+  discountMinor: number;
+  taxPercent: number;
+  taxMinor: number;
+  subtotalMinor: number;
   totalMinor: number;
 };
 
@@ -108,6 +127,11 @@ export type PurchaseRecord = {
   id: string;
   supplierId: string;
   supplierName: string;
+  branch: string;
+  prefix: string;
+  seller: string;
+  currency: "COP";
+  concept: string;
   invoiceNumber: string;
   issuedAt: string;
   dueAt: string;

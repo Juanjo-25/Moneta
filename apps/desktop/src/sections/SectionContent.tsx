@@ -56,23 +56,45 @@ type SectionContentProps = {
   onSetSupplierActive: (supplierId: string, active: boolean) => void;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
+    branch: string;
+    prefix: string;
+    seller: string;
+    concept: string;
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
   }) => void;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -81,18 +103,32 @@ type SectionContentProps = {
   }) => string | null;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
       totalMinor: number;
     }>;
   }) => string | null;
+  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
+  onDeleteSale: (saleId: string) => void;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
@@ -137,6 +173,8 @@ export function SectionContent({
   onRegisterPurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
+  onUpdateSale,
+  onDeleteSale,
   onRegisterSupplierPayment,
   onValidateCustomer,
   onUpdateCustomer,
@@ -197,9 +235,12 @@ export function SectionContent({
         onCreateCustomer={onCreateCustomer}
         onRegisterPaidSale={onRegisterPaidSale}
         onRegisterPendingSale={onRegisterPendingSale}
+        onUpdateSale={onUpdateSale}
+        onDeleteSale={onDeleteSale}
         onValidateCustomer={onValidateCustomer}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
+        receivables={receivables}
         sales={sales}
         salesDraft={salesDraft}
         onSalesDraftChange={onSalesDraftChange}

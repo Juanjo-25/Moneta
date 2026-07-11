@@ -193,7 +193,7 @@ export function CustomersSection({
           <div className="form-grid">
             <TextField
               error={errors.name}
-              label="Nombre o razon social"
+              label="Razón social"
               onChange={(value) => updateField("name", value)}
               value={form.name}
             />
@@ -316,7 +316,7 @@ export function CustomersSection({
               <div className="form-grid">
                 <TextField
                   error={editErrors.name}
-                  label="Nombre o razon social"
+                  label="Razón social"
                   onChange={(value) => updateEditField("name", value)}
                   value={editForm.name}
                 />

@@ -1041,15 +1041,73 @@ button,
 
 .sales-grid {
   display: grid;
-  grid-template-columns:
-    minmax(0, 1.2fr)
-    auto
-    minmax(0, 1.1fr)
-    minmax(0, 0.7fr)
-    minmax(0, 0.8fr)
-    auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
+}
+
+.document-header,
+.document-lines {
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+}
+
+.document-header-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.document-header > .inline-action-group {
+  margin-top: 10px;
+}
+
+.document-lines {
+  margin-top: 18px;
+  background: var(--surface-elevated);
+}
+
+.document-lines-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.document-lines-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.document-lines-heading span {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.sale-edit-panel {
+  padding: 18px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-subtle);
+}
+
+.sale-edit-lines {
+  margin-top: 18px;
+}
+
+.sale-edit-lines input,
+.sale-edit-lines select {
+  width: 100%;
+  min-width: 78px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-elevated);
+  padding: 8px;
+  color: var(--text-primary);
+  font: inherit;
 }
 
 .field select {
@@ -1308,7 +1366,7 @@ button,
 
 .purchase-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
 }
