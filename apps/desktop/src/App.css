@@ -1086,6 +1086,30 @@ button,
   font-size: 13px;
 }
 
+.sale-edit-panel {
+  padding: 18px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-subtle);
+}
+
+.sale-edit-lines {
+  margin-top: 18px;
+}
+
+.sale-edit-lines input,
+.sale-edit-lines select {
+  width: 100%;
+  min-width: 78px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-elevated);
+  padding: 8px;
+  color: var(--text-primary);
+  font: inherit;
+}
+
 .field select {
   min-width: 0;
   border: 1px solid var(--border-soft);

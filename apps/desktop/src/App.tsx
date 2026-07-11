@@ -745,6 +745,104 @@ export function App() {
     });
   }
 
+  function updateSaleInSession(input: {
+    sale: SaleRecord;
+    dueAt: string;
+  }): string | null {
+    const previousSale = sales.find((sale) => sale.id === input.sale.id);
+
+    if (!previousSale) {
+      return "La venta que intentas modificar ya no existe.";
+    }
+
+    const previousQuantityByProduct = previousSale.lines.reduce((total, line) => {
+      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
+      return total;
+    }, new Map<string, number>());
+    const nextQuantityByProduct = input.sale.lines.reduce((total, line) => {
+      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
+      return total;
+    }, new Map<string, number>());
+    const invalidProduct = input.sale.lines.some(
+      (line) => !products.some((product) => product.id === line.productId)
+    );
+    const insufficientProduct = products.find(
+      (product) =>
+        (nextQuantityByProduct.get(product.id) ?? 0) >
+        product.stock + (previousQuantityByProduct.get(product.id) ?? 0)
+    );
+
+    if (invalidProduct) {
+      return "Uno de los productos de la venta ya no esta disponible.";
+    }
+    if (insufficientProduct) {
+      return "No hay inventario suficiente para guardar los cambios.";
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) =>
+        nextQuantityByProduct.has(product.id) || previousQuantityByProduct.has(product.id)
+          ? {
+              ...product,
+              stock:
+                product.stock +
+                (previousQuantityByProduct.get(product.id) ?? 0) -
+                (nextQuantityByProduct.get(product.id) ?? 0)
+            }
+          : product
+      )
+    );
+    setSales((currentSales) =>
+      currentSales.map((sale) => (sale.id === input.sale.id ? input.sale : sale))
+    );
+    setReceivables((currentReceivables) => {
+      const remaining = currentReceivables.filter(
+        (receivable) => receivable.saleId !== input.sale.id
+      );
+
+      return input.sale.paymentStatus === "pending"
+        ? [
+            {
+              amountMinor: input.sale.totalMinor,
+              customerId: input.sale.customerId,
+              customerName: input.sale.customerName,
+              dueAt: input.dueAt,
+              id: `receivable-${input.sale.id}`,
+              saleId: input.sale.id,
+              status: "pending"
+            },
+            ...remaining
+          ]
+        : remaining;
+    });
+
+    return null;
+  }
+
+  function deleteSaleInSession(saleId: string) {
+    const sale = sales.find((currentSale) => currentSale.id === saleId);
+
+    if (!sale) {
+      return;
+    }
+
+    const soldQuantityByProduct = sale.lines.reduce((total, line) => {
+      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
+      return total;
+    }, new Map<string, number>());
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) => ({
+        ...product,
+        stock: product.stock + (soldQuantityByProduct.get(product.id) ?? 0)
+      }))
+    );
+    setSales((currentSales) => currentSales.filter((currentSale) => currentSale.id !== saleId));
+    setReceivables((currentReceivables) =>
+      currentReceivables.filter((receivable) => receivable.saleId !== saleId)
+    );
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -813,6 +911,8 @@ export function App() {
             onRegisterPurchase={registerPurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
+            onUpdateSale={updateSaleInSession}
+            onDeleteSale={deleteSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}
             onValidateCustomer={validateCustomer}
             onUpdateCustomer={updateCustomer}
