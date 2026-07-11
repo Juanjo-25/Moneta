@@ -15,10 +15,12 @@ const setDrawColorMock = vi.fn();
 const setTextColorMock = vi.fn();
 const rectMock = vi.fn();
 const lineMock = vi.fn();
+const addImageMock = vi.fn();
 const outputMock = vi.fn(() => "data:application/pdf;base64,invoice-pdf");
 
 vi.mock("jspdf", () => ({
   jsPDF: vi.fn().mockImplementation(() => ({
+    addImage: addImageMock,
     line: lineMock,
     output: outputMock,
     rect: rectMock,
@@ -109,5 +111,47 @@ describe("invoice PDF", () => {
     expect(renderedText).toContain("Direccion: No registrado");
     expect(renderedText).toContain("Ciudad: No registrado");
     expect(renderedText).toContain("Email: No registrado");
+  });
+
+  it("renders configured company and invoice design text", () => {
+    generateInvoicePdf({
+      ...invoiceInput,
+      settings: {
+        company: {
+          address: "Carrera 80 # 10-20",
+          city: "Medellin",
+          document: "901222333-4",
+          email: "facturas@la80.com",
+          logoDataUri: "data:image/png;base64,logo",
+          name: "Comercial La 80",
+          phone: "3001234567"
+        },
+        invoice: {
+          accentColor: "#2563eb",
+          legalNote: "Nota legal propia",
+          observations: "Observacion propia",
+          title: "CUENTA DE COBRO"
+        }
+      }
+    });
+
+    const renderedText = textMock.mock.calls
+      .map((call) => String(call[0]))
+      .join(" ");
+
+    expect(renderedText).toContain("Comercial La 80");
+    expect(renderedText).toContain("901222333-4");
+    expect(renderedText).toContain("CUENTA DE COBRO");
+    expect(renderedText).toContain("Nota legal propia");
+    expect(renderedText).toContain("Observacion propia");
+    expect(setFillColorMock).toHaveBeenCalledWith(37, 99, 235);
+    expect(addImageMock).toHaveBeenCalledWith(
+      "data:image/png;base64,logo",
+      "PNG",
+      14,
+      4,
+      12,
+      12
+    );
   });
 });

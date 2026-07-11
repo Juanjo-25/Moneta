@@ -17,6 +17,28 @@ export type InvoiceItem = {
   totalMinor: number;
 };
 
+export type InvoiceCompanySettings = {
+  name: string;
+  document: string;
+  address: string;
+  city: string;
+  email: string;
+  phone: string;
+  logoDataUri: string;
+};
+
+export type InvoiceDesignSettings = {
+  accentColor: string;
+  title: string;
+  legalNote: string;
+  observations: string;
+};
+
+export type InvoiceSettings = {
+  company: InvoiceCompanySettings;
+  invoice: InvoiceDesignSettings;
+};
+
 export type InvoicePdfInput = {
   customer: InvoiceCustomer;
   invoiceNumber: string;
@@ -24,6 +46,7 @@ export type InvoicePdfInput = {
   item?: InvoiceItem;
   items?: InvoiceItem[];
   paymentStatus: InvoicePaymentStatus;
+  settings?: InvoiceSettings | undefined;
 };
 
 export type InvoicePdfResult = {
@@ -41,6 +64,63 @@ function formatCurrency(minor: number): string {
 
 function fieldValue(value: string): string {
   return value.trim() === "" ? "No registrado" : value.trim();
+}
+
+function parseHexColor(hex: string): [number, number, number] {
+  const normalized = /^#[0-9a-f]{6}$/i.test(hex) ? hex.slice(1) : "0f766e";
+
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16)
+  ];
+}
+
+function getInvoiceSettings(settings?: InvoiceSettings): InvoiceSettings {
+  return {
+    company: {
+      address: settings?.company.address ?? "Calle 00 # 00-00",
+      city: settings?.company.city ?? "Colombia",
+      document: settings?.company.document ?? "900.123.456-7",
+      email: settings?.company.email ?? "contacto@empresa.com",
+      logoDataUri: settings?.company.logoDataUri ?? "",
+      name: settings?.company.name ?? "NOMBRE DE LA EMPRESA S.A.S.",
+      phone: settings?.company.phone ?? ""
+    },
+    invoice: {
+      accentColor: settings?.invoice.accentColor ?? "#0f766e",
+      legalNote:
+        settings?.invoice.legalNote ??
+        "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real.",
+      observations:
+        settings?.invoice.observations ??
+        "Observaciones: factura generada desde Moneta para impresion.",
+      title: settings?.invoice.title ?? "FACTURA DE VENTA"
+    }
+  };
+}
+
+function getLogoImageFormat(dataUri: string): "PNG" | "JPEG" | "WEBP" {
+  if (dataUri.startsWith("data:image/jpeg") || dataUri.startsWith("data:image/jpg")) {
+    return "JPEG";
+  }
+
+  if (dataUri.startsWith("data:image/webp")) {
+    return "WEBP";
+  }
+
+  return "PNG";
+}
+
+function buildCompanyHeaderLine(company: InvoiceCompanySettings): string {
+  return [
+    `NIT: ${fieldValue(company.document)}`,
+    fieldValue(company.address),
+    fieldValue(company.email),
+    company.phone.trim() === "" ? "" : `Tel: ${company.phone.trim()}`
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }
 
 export function buildInvoiceFileName(invoiceNumber: string): string {
@@ -63,29 +143,49 @@ function writeText(
 
 export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   const doc = new jsPDF({ format: "letter", unit: "mm" });
+  const settings = getInvoiceSettings(input.settings);
+  const [accentRed, accentGreen, accentBlue] = parseHexColor(
+    settings.invoice.accentColor
+  );
   const paymentLabel = buildInvoicePaymentLabel(input.paymentStatus);
   const items = input.items ?? (input.item ? [input.item] : []);
   const totalMinor = items.reduce((total, item) => total + item.totalMinor, 0);
   const subtotal = formatCurrency(totalMinor);
   const total = formatCurrency(totalMinor);
+  const hasLogo = settings.company.logoDataUri.trim() !== "";
 
-  doc.setFillColor(15, 118, 110);
+  doc.setFillColor(accentRed, accentGreen, accentBlue);
   doc.rect(0, 0, 216, 20, "F");
+  if (hasLogo) {
+    try {
+      doc.addImage(
+        settings.company.logoDataUri,
+        getLogoImageFormat(settings.company.logoDataUri),
+        14,
+        4,
+        12,
+        12
+      );
+    } catch {
+      doc.setFillColor(255, 255, 255);
+      doc.rect(14, 4, 12, 12, "F");
+    }
+  }
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  writeText(doc, "NOMBRE DE LA EMPRESA S.A.S.", 14, 12);
+  writeText(doc, fieldValue(settings.company.name), hasLogo ? 30 : 14, 12);
   doc.setFontSize(9);
   writeText(
     doc,
-    "NIT: 900.123.456-7 | Calle 00 # 00-00 | contacto@empresa.com",
-    14,
+    buildCompanyHeaderLine(settings.company),
+    hasLogo ? 30 : 14,
     17
   );
 
   doc.setTextColor(17, 24, 39);
   doc.setFontSize(18);
-  writeText(doc, "FACTURA DE VENTA", 142, 33);
+  writeText(doc, fieldValue(settings.invoice.title), 142, 33);
   doc.setFontSize(11);
   writeText(doc, `No. ${input.invoiceNumber}`, 142, 40);
 
@@ -150,14 +250,14 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   doc.setFontSize(8);
   writeText(
     doc,
-    "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real.",
+    fieldValue(settings.invoice.legalNote),
     14,
     162,
     { maxWidth: 100 }
   );
   writeText(
     doc,
-    "Observaciones: factura generada desde Moneta para impresion.",
+    fieldValue(settings.invoice.observations),
     14,
     178,
     { maxWidth: 100 }
@@ -171,7 +271,7 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   doc.setFontSize(8);
   writeText(
     doc,
-    "NOMBRE DE LA EMPRESA S.A.S. - NIT 900.123.456-7 - Colombia",
+    `${fieldValue(settings.company.name)} - NIT ${fieldValue(settings.company.document)} - ${fieldValue(settings.company.city)}`,
     108,
     254,
     { align: "center" }

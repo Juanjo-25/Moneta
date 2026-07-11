@@ -59,15 +59,19 @@ button,
 }
 
 .app-shell {
-  display: grid;
-  grid-template-columns: 264px 1fr;
+  display: block;
   min-height: 100vh;
 }
 
 .sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
   display: grid;
-  align-content: start;
+  grid-template-rows: auto 1fr auto;
   gap: 18px;
+  width: 264px;
+  height: 100vh;
+  overflow-y: auto;
   background: #111827;
   color: #f9fafb;
   padding: 24px 18px;
@@ -123,20 +127,27 @@ button,
 
 .sidebar-nav {
   display: grid;
+  align-self: start;
   gap: 10px;
 }
 
 .navigation {
   display: grid;
+  align-content: start;
   gap: 8px;
 }
 
 .navigation button {
+  display: flex;
+  align-items: center;
   width: 100%;
+  min-height: 44px;
   border-radius: 8px;
   background: transparent;
   color: #cbd5e1;
-  padding: 11px 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
   text-align: left;
 }
 
@@ -152,7 +163,52 @@ button,
   box-shadow: inset 2px 0 0 #2dd4bf;
 }
 
+.sidebar-footer {
+  padding-top: 16px;
+  border-top: 1px solid rgb(148 163 184 / 14%);
+}
+
+.settings-nav-button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.settings-nav-button span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgb(203 213 225 / 24%);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.settings-nav-button strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-nav-button:hover,
+.settings-nav-button.active,
+.settings-nav-button[aria-current="page"] {
+  background: #1e293b;
+  color: #ffffff;
+}
+
 .workspace {
+  min-height: 100vh;
+  margin-left: 264px;
   padding: 28px;
 }
 
@@ -213,6 +269,12 @@ button,
 .primary-action:hover {
   background: #0b665f;
   box-shadow: 0 6px 14px rgb(15 118 110 / 16%);
+}
+
+.primary-action:disabled {
+  cursor: not-allowed;
+  background: #94a3b8;
+  box-shadow: none;
 }
 
 .primary-action:focus-visible {
@@ -793,7 +855,8 @@ button,
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   min-width: 0;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
@@ -802,12 +865,102 @@ button,
   font: inherit;
 }
 
-.field select {
+.field select,
+.field textarea {
   background: var(--surface-elevated);
+}
+
+.field textarea {
+  min-height: 92px;
+  resize: vertical;
 }
 
 .field input[aria-invalid="true"] {
   border-color: #dc2626;
+}
+
+.field-wide {
+  grid-column: span 2;
+}
+
+.settings-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.settings-form,
+.settings-preview {
+  padding: 18px;
+}
+
+.settings-logo-field {
+  grid-column: span 2;
+}
+
+.settings-save-message {
+  align-self: center;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-invoice-preview {
+  overflow: hidden;
+  max-width: 760px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+}
+
+.settings-invoice-preview-header {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 76px;
+  color: #ffffff;
+  padding: 14px 18px;
+}
+
+.settings-invoice-preview-header img,
+.settings-invoice-preview-header > span {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text-primary);
+  font-weight: 800;
+  object-fit: contain;
+}
+
+.settings-invoice-preview-header strong,
+.settings-invoice-preview-header small {
+  display: block;
+}
+
+.settings-invoice-preview-header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-invoice-preview-body {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.settings-invoice-preview-body strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.settings-invoice-preview-body span,
+.settings-invoice-preview-body p {
+  margin: 0;
+  color: var(--text-secondary);
 }
 
 .field small {
