@@ -35,7 +35,6 @@ type PurchaseDraftLine = {
 type PurchaseFormState = {
   branch: string;
   prefix: string;
-  seller: string;
   concept: string;
   supplierId: string;
   invoiceNumber: string;
@@ -89,7 +88,6 @@ type PurchasesSectionProps = {
     supplier: SupplierRecord;
     branch: string;
     prefix: string;
-    seller: string;
     concept: string;
     invoiceNumber: string;
     issuedAt: string;
@@ -126,7 +124,6 @@ const emptySupplierForm: SupplierFormState = {
 const emptyPurchaseForm: PurchaseFormState = {
   branch: "Principal",
   prefix: "",
-  seller: "",
   concept: "Factura de compra",
   dueAt: "",
   invoiceNumber: "",
@@ -490,7 +487,6 @@ export function PurchasesSection({
       })),
       paymentStatus: form.paymentStatus,
       prefix: form.prefix.trim(),
-      seller: form.seller.trim() || "Sin asignar",
       supplier: selectedSupplier
     });
     setErrors({});
@@ -510,7 +506,6 @@ export function PurchasesSection({
             <TextField label="Direccion del proveedor" onChange={() => undefined} placeholder="Se completa al elegir el proveedor" readOnly value={selectedSupplier?.address ?? ""} />
             <TextField error={errors.issuedAt} label="Fecha emision" onChange={(value) => updateField("issuedAt", value)} type="date" value={form.issuedAt} />
             {form.paymentStatus === "pending" ? <TextField error={errors.dueAt} label="Fecha vencimiento" onChange={(value) => updateField("dueAt", value)} type="date" value={form.dueAt} /> : null}
-            <TextField label="Vendedor" onChange={(value) => updateField("seller", value)} placeholder="Sin asignar" value={form.seller} />
             <div className="field"><span>Forma de pago</span><div aria-label="Estado de factura compra" className="payment-status-group" role="radiogroup"><label htmlFor="compra-pagada"><input checked={form.paymentStatus === "paid"} id="compra-pagada" name="purchase-payment-status" onChange={() => updateField("paymentStatus", "paid")} type="radio" />Pagada</label><label htmlFor="compra-pendiente"><input checked={form.paymentStatus === "pending"} id="compra-pendiente" name="purchase-payment-status" onChange={() => updateField("paymentStatus", "pending")} type="radio" />Pendiente</label></div></div>
             <TextField label="Moneda" onChange={() => undefined} readOnly value="Peso colombiano (COP)" />
             <TextField label="Concepto" onChange={(value) => updateField("concept", value)} value={form.concept} />
@@ -646,7 +641,6 @@ export function PurchasesSection({
               "Fecha",
               "Proveedor",
               "Factura",
-              "Vendedor",
               "Producto",
               "Cantidad",
               "Estado",
@@ -659,7 +653,6 @@ export function PurchasesSection({
                 <td>{purchase.occurredAtLabel}</td>
                 <td>{purchase.supplierName}</td>
                 <td>{purchase.invoiceNumber}</td>
-                <td>{purchase.seller}</td>
                 <td>{purchase.productName}</td>
                 <td>{purchase.quantity}</td>
                 <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>

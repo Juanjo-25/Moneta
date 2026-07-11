@@ -60,7 +60,6 @@ type SectionContentProps = {
     supplier: SupplierRecord;
     branch: string;
     prefix: string;
-    seller: string;
     concept: string;
     invoiceNumber: string;
     issuedAt: string;

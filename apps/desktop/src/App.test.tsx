@@ -1484,6 +1484,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Compras" }));
 
+    expect(screen.queryByLabelText("Vendedor")).toBeNull();
     expect(screen.queryByLabelText("Fecha vencimiento")).toBeNull();
 
     await user.click(screen.getByLabelText("Pendiente"));
@@ -1618,6 +1619,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar compra" }));
 
     const purchasesTable = screen.getByRole("table", { name: "Compras registradas" });
+    expect(within(purchasesTable).queryByText("Vendedor")).toBeNull();
     expect(within(purchasesTable).getByText("Proveedor Mixto")).toBeTruthy();
     expect(within(purchasesTable).getByText("2 productos")).toBeTruthy();
     expect(within(purchasesTable).getByText(/\$\s*19\.000/)).toBeTruthy();
