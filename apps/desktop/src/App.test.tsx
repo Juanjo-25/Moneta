@@ -37,7 +37,7 @@ async function createSecondProductFixture(user: UserEvent) {
 async function createSupplierFixture(user: UserEvent, name = "Distribuidora Norte") {
   await user.click(screen.getByRole("button", { name: "Compras" }));
   await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
-  await user.type(screen.getByLabelText("Nombre proveedor"), name);
+  await user.type(screen.getByLabelText("Razón social"), name);
   await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
 }
 
@@ -226,7 +226,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -257,7 +257,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -303,7 +303,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -351,7 +351,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -391,7 +391,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -427,7 +427,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -455,7 +455,7 @@ describe("App navigation", () => {
     await createSecondProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -503,7 +503,7 @@ describe("App navigation", () => {
     await createSecondProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -551,7 +551,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -606,7 +606,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Precio");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Precio");
     await user.type(screen.getByLabelText("NIT o C.C."), "111");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -643,7 +643,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Uno");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Uno");
     await user.type(screen.getByLabelText("NIT o C.C."), "111");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -654,7 +654,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Dos");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Dos");
     await user.type(screen.getByLabelText("NIT o C.C."), "222");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -679,7 +679,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -710,7 +710,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -744,7 +744,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -795,7 +795,7 @@ describe("App navigation", () => {
       await user.click(screen.getByRole("button", { name: "Ventas" }));
 
       await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente A");
+      await user.type(screen.getByLabelText("Razón social"), "Cliente A");
       await user.type(screen.getByLabelText("NIT o C.C."), "100");
       await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
       await user.selectOptions(
@@ -810,7 +810,7 @@ describe("App navigation", () => {
       nowSpy.mockReturnValue(new Date("2026-07-12T10:00:00.000Z").getTime());
 
       await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente B");
+      await user.type(screen.getByLabelText("Razón social"), "Cliente B");
       await user.type(screen.getByLabelText("NIT o C.C."), "200");
       await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
       await user.selectOptions(
@@ -856,7 +856,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Caja");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Caja");
     await user.type(screen.getByLabelText("NIT o C.C."), "300");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -867,7 +867,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Proyectado");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Proyectado");
     await user.type(screen.getByLabelText("NIT o C.C."), "301");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -954,7 +954,7 @@ describe("App navigation", () => {
 
       nowSpy.mockReturnValue(new Date("2026-07-01T10:00:00.000Z").getTime());
       await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Utilidad 1");
+      await user.type(screen.getByLabelText("Razón social"), "Cliente Utilidad 1");
       await user.type(screen.getByLabelText("NIT o C.C."), "401");
       await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
       await user.selectOptions(
@@ -966,7 +966,7 @@ describe("App navigation", () => {
 
       nowSpy.mockReturnValue(new Date("2026-07-02T10:00:00.000Z").getTime());
       await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-      await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Utilidad 2");
+      await user.type(screen.getByLabelText("Razón social"), "Cliente Utilidad 2");
       await user.type(screen.getByLabelText("NIT o C.C."), "402");
       await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
       await user.selectOptions(
@@ -1011,7 +1011,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Uno");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Uno");
     await user.type(screen.getByLabelText("NIT o C.C."), "111");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1022,7 +1022,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Dos");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Dos");
     await user.type(screen.getByLabelText("NIT o C.C."), "222");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1057,7 +1057,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1095,7 +1095,7 @@ describe("App navigation", () => {
     await createSecondProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Mixto");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Mixto");
     await user.type(screen.getByLabelText("NIT o C.C."), "333");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
@@ -1167,7 +1167,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Tarde");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Tarde");
     await user.type(screen.getByLabelText("NIT o C.C."), "123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1180,7 +1180,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Cliente Vencido");
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Vencido");
     await user.type(screen.getByLabelText("NIT o C.C."), "456");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1211,7 +1211,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1225,7 +1225,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Compras" }));
     await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
-    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Central");
+    await user.type(screen.getByLabelText("Razón social"), "Proveedor Central");
     await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
     await user.type(screen.getByLabelText("Fecha emision"), "2026-06-30");
     await user.click(screen.getByLabelText("Pendiente"));
@@ -1325,7 +1325,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Proveedores" }));
     await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
-    await user.type(screen.getByLabelText("Nombre proveedor"), "Distribuidora Oriente");
+    await user.type(screen.getByLabelText("Razón social"), "Distribuidora Oriente");
     await user.type(screen.getByLabelText("NIT o C.C. proveedor"), "900123456");
     await user.type(screen.getByLabelText("Telefono proveedor"), "6044440000");
     await user.type(screen.getByLabelText("Email proveedor"), "compras@oriente.test");
@@ -1354,7 +1354,7 @@ describe("App navigation", () => {
     const departmentInput = screen.getByLabelText("Departamento") as HTMLInputElement;
     expect(departmentInput.value).toBe("Antioquia");
 
-    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Externo");
+    await user.type(screen.getByLabelText("Razón social"), "Proveedor Externo");
     await user.clear(departmentInput);
     await user.type(departmentInput, "Choco");
     await user.type(screen.getByLabelText("Municipio"), "Quibdo");
@@ -1373,7 +1373,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Proveedores" }));
     await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
-    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Inicial");
+    await user.type(screen.getByLabelText("Razón social"), "Proveedor Inicial");
     await user.selectOptions(
       screen.getByLabelText("Municipio"),
       screen.getByRole("option", { name: "Medellin" })
@@ -1381,8 +1381,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Guardar proveedor" }));
 
     await user.click(screen.getByRole("button", { name: "Editar proveedor Proveedor Inicial" }));
-    await user.clear(screen.getByLabelText("Nombre proveedor"));
-    await user.type(screen.getByLabelText("Nombre proveedor"), "Proveedor Actualizado");
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Proveedor Actualizado");
     await user.type(screen.getByLabelText("Telefono proveedor"), "3005550101");
     await user.selectOptions(
       screen.getByLabelText("Municipio"),
@@ -1734,7 +1734,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Luisa Mora");
+    await user.type(screen.getByLabelText("Razón social"), "Luisa Mora");
     await user.type(screen.getByLabelText("NIT o C.C."), "456789123");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1758,7 +1758,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.type(screen.getByLabelText("Direccion"), "Calle 10 # 20-30");
     await user.type(screen.getByLabelText("Ciudad"), "Medellin");
@@ -1775,7 +1775,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Comercial Andes");
+    await user.type(screen.getByLabelText("Razón social"), "Comercial Andes");
     await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
     await user.type(screen.getByLabelText("Direccion"), "Carrera 45 # 10-20");
     await user.type(screen.getByLabelText("Ciudad"), "Medellin");
@@ -1802,13 +1802,13 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    expect(screen.getByLabelText("Nombre o razon social").closest("form")?.className).toContain(
+    expect(screen.getByLabelText("Razón social").closest("form")?.className).toContain(
       "section-form-shell"
     );
 
     await user.click(screen.getByRole("button", { name: "Proveedores" }));
     await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
-    expect(screen.getByLabelText("Nombre proveedor").closest("form")?.className).toContain(
+    expect(screen.getByLabelText("Razón social").closest("form")?.className).toContain(
       "section-form-shell"
     );
   });
@@ -1820,11 +1820,11 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Comercial Andes");
+    await user.type(screen.getByLabelText("Razón social"), "Comercial Andes");
     await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Tienda Sur");
+    await user.type(screen.getByLabelText("Razón social"), "Tienda Sur");
     await user.type(screen.getByLabelText("NIT o C.C."), "111222333");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
@@ -1850,13 +1850,13 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
     await user.click(screen.getByRole("button", { name: "Editar cliente" }));
-    await user.clear(screen.getByLabelText("Nombre o razon social"));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez SAS");
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez SAS");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     const customersTable = screen.getByRole("table", { name: "Clientes registrados" });
@@ -1871,7 +1871,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
@@ -1890,7 +1890,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
@@ -1909,7 +1909,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
@@ -1942,7 +1942,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -1971,7 +1971,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.type(screen.getByLabelText("Direccion"), "Calle 1");
     await user.type(screen.getByLabelText("Ciudad"), "Medellin");
@@ -1982,8 +1982,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Clientes" }));
     await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
     await user.click(screen.getByRole("button", { name: "Editar cliente" }));
-    await user.clear(screen.getByLabelText("Nombre o razon social"));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez SAS");
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez SAS");
     await user.clear(screen.getByLabelText("Direccion"));
     await user.type(screen.getByLabelText("Direccion"), "Calle 99");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
@@ -2010,11 +2010,11 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez Sucursal");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez Sucursal");
     await user.type(screen.getByLabelText("NIT o C.C."), " 123456789 ");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
 
@@ -2043,7 +2043,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.type(screen.getByLabelText("Direccion"), "Calle 10 # 20-30");
     await user.type(screen.getByLabelText("Ciudad"), "Medellin");
@@ -2096,7 +2096,7 @@ describe("App navigation", () => {
     await createSecondProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -2144,7 +2144,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
     await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -2182,7 +2182,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.type(screen.getByLabelText("Prefijo"), "FV");
@@ -2212,7 +2212,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(
@@ -2242,7 +2242,7 @@ describe("App navigation", () => {
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
-    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
     await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
     await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
     await user.selectOptions(

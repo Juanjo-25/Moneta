@@ -248,7 +248,7 @@ export function SuppliersSection({
           <div className="form-grid">
             <TextField
               error={errors.name}
-              label="Nombre proveedor"
+              label="Razón social"
               onChange={(value) => updateField("name", value)}
               value={form.name}
             />

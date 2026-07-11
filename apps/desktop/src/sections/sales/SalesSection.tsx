@@ -856,7 +856,7 @@ export function SalesSection({
           <InlineFormSection className="inline-customer-form">
             <TextField
               error={customerErrors.name}
-              label="Nombre o razon social"
+              label="Razón social"
               onChange={(value) => updateCustomerField("name", value)}
               value={customerForm.name}
             />

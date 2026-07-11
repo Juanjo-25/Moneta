@@ -574,7 +574,7 @@ export function PurchasesSection({
           <InlineFormSection className="inline-supplier-form">
             <TextField
               error={supplierErrors.name}
-              label="Nombre proveedor"
+              label="Razón social"
               onChange={(value) => {
                 setSupplierForm((currentForm) => ({ ...currentForm, name: value }));
                 setSupplierErrors({});
