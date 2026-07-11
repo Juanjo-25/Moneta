@@ -166,11 +166,11 @@ const defaultSettings: AppSettings = {
     phone: ""
   },
   invoice: {
-    accentColor: "#0f766e",
+    accentColor: "#475569",
     legalNote:
       "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real.",
     observations: "Observaciones: factura generada desde Moneta para impresion.",
-    title: "FACTURA DE VENTA"
+    title: "REMISION"
   }
 };
 

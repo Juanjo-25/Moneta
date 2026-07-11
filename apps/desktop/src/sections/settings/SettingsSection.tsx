@@ -16,6 +16,7 @@ type SettingsSectionProps = {
 };
 
 const accentOptions = [
+  { label: "Pizarra", value: "#475569" },
   { label: "Verde", value: "#0f766e" },
   { label: "Azul", value: "#2563eb" },
   { label: "Grafito", value: "#334155" },
@@ -219,7 +220,7 @@ export function SettingsSection({
             </div>
           </div>
           <div className="settings-invoice-preview-body">
-            <strong>{draftSettings.invoice.title || "FACTURA DE VENTA"}</strong>
+            <strong>{draftSettings.invoice.title || "REMISION"}</strong>
             <span>Cliente, detalle de productos, totales y firma autorizada.</span>
             <p>{draftSettings.invoice.observations}</p>
           </div>
