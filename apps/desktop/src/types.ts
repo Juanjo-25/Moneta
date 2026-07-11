@@ -130,7 +130,6 @@ export type PurchaseRecord = {
   supplierName: string;
   branch: string;
   prefix: string;
-  seller: string;
   currency: "COP";
   concept: string;
   invoiceNumber: string;

@@ -431,7 +431,6 @@ export function App() {
     supplier: SupplierRecord;
     branch: string;
     prefix: string;
-    seller: string;
     concept: string;
     invoiceNumber: string;
     issuedAt: string;
@@ -509,7 +508,6 @@ export function App() {
         quantity: totalQuantity,
         supplierId: input.supplier.id,
         supplierName: input.supplier.name,
-        seller: input.seller,
         totalMinor,
         unitCostMinor: firstLine.unitCostMinor
       },
