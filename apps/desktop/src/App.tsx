@@ -75,7 +75,7 @@ function validateCustomerForm(
 const navigationItems: SectionConfig[] = [
   {
     id: "dashboard",
-    label: "Dashboard",
+    label: "Inicio",
     title: "Resumen operativo",
     description: "Vista general del negocio",
     primaryAction: "Nueva venta",

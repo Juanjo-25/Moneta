@@ -99,7 +99,7 @@ describe("App navigation", () => {
     expect(topbar?.lastElementChild).toBe(topbarAction);
 
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Dashboard" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Inicio" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
@@ -115,11 +115,11 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Nueva venta" }));
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
     await user.click(screen.getByRole("button", { name: "Ver todo" }));
     expect(screen.getByRole("heading", { name: "Reportes" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
     await user.click(screen.getByRole("button", { name: "Revisar" }));
     expect(screen.getByRole("heading", { name: "Productos" })).toBeTruthy();
   });
@@ -132,7 +132,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Ventas" }));
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
 
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
   });
@@ -160,7 +160,7 @@ describe("App navigation", () => {
     expect(screen.getByRole("cell", { name: "4" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Bajo stock" })).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
 
     expect(screen.getByText("Productos activos")).toBeTruthy();
     expect(screen.getByText("Alertas de inventario")).toBeTruthy();
@@ -268,7 +268,7 @@ describe("App navigation", () => {
     await user.click(screen.getByLabelText("Pagada"));
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
 
     expect(screen.getByRole("heading", { name: "Ventas diarias" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ventas por mes" })).toBeTruthy();
@@ -314,7 +314,7 @@ describe("App navigation", () => {
     await user.click(screen.getByLabelText("Pagada"));
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
-    await user.click(screen.getByRole("button", { name: "Dashboard" }));
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
 
     const analyticsSummary = screen.getByRole("region", { name: "Resumen analitico" });
     const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
