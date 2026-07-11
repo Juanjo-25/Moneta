@@ -25,6 +25,7 @@ import type {
   CustomerFormErrors,
   CustomerFormState,
   CustomerRecord,
+  AppSettings,
   CustomerValidationOptions,
   ProductRecord,
   PurchasePaymentStatus,
@@ -145,6 +146,34 @@ const navigationItems: SectionConfig[] = [
   }
 ];
 
+const settingsSection: SectionConfig = {
+  id: "settings",
+  label: "Configuracion",
+  title: "Configuracion",
+  description: "Empresa, logo y plantilla de factura",
+  emptyTitle: "Sin configuracion",
+  emptyBody: "Configura los datos del negocio y el formato de factura."
+};
+
+const defaultSettings: AppSettings = {
+  company: {
+    address: "Calle 00 # 00-00",
+    city: "Colombia",
+    document: "900.123.456-7",
+    email: "contacto@empresa.com",
+    logoDataUri: "",
+    name: "NOMBRE DE LA EMPRESA S.A.S.",
+    phone: ""
+  },
+  invoice: {
+    accentColor: "#475569",
+    legalNote:
+      "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real.",
+    observations: "Observaciones: factura generada desde Moneta para impresion.",
+    title: "REMISION"
+  }
+};
+
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",
@@ -230,12 +259,13 @@ export function App() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [supplierPayables, setSupplierPayables] = useState<SupplierPayableRecord[]>([]);
   const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [productFormVisible, setProductFormVisible] = useState(false);
   const [supplierFormVisible, setSupplierFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
     () =>
-      navigationItems.find((item) => item.id === activeSectionId) ??
+      [...navigationItems, settingsSection].find((item) => item.id === activeSectionId) ??
       navigationItems[0]!,
     [activeSectionId]
   );
@@ -870,6 +900,21 @@ export function App() {
             ))}
           </nav>
         </div>
+
+        <div className="sidebar-footer">
+          <button
+            aria-current={activeSectionId === "settings" ? "page" : undefined}
+            aria-label="Configuracion"
+            className={`settings-nav-button ${
+              activeSectionId === "settings" ? "active" : ""
+            }`}
+            onClick={() => openSection("settings")}
+            title="Configuracion"
+          >
+            <span aria-hidden="true">&#9881;</span>
+            <strong>Configuracion</strong>
+          </button>
+        </div>
       </aside>
 
       <section className="workspace">
@@ -929,9 +974,11 @@ export function App() {
             salesDraft={salesDraft}
             section={activeSection}
             onSalesDraftChange={setSalesDraft}
+            onSettingsChange={setSettings}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}
             suppliers={suppliers}
+            settings={settings}
           />
         )}
       </section>

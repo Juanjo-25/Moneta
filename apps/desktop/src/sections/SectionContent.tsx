@@ -11,8 +11,10 @@ import {
   SalesSection,
   type SalesDraftState
 } from "./sales/SalesSection";
+import { SettingsSection } from "./settings/SettingsSection";
 import { SuppliersSection } from "./suppliers/SuppliersSection";
 import type {
+  AppSettings,
   CustomerFormErrors,
   CustomerFormState,
   CustomerRecord,
@@ -142,6 +144,7 @@ type SectionContentProps = {
   onCloseProductForm: () => void;
   onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
+  onSettingsChange: Dispatch<SetStateAction<AppSettings>>;
   parseNonNegativeInteger: (value: string) => number | null;
   productFormVisible: boolean;
   supplierFormVisible: boolean;
@@ -154,6 +157,7 @@ type SectionContentProps = {
   supplierPayables: SupplierPayableRecord[];
   supplierPayments: SupplierPaymentRecord[];
   suppliers: SupplierRecord[];
+  settings: AppSettings;
 };
 
 export function SectionContent({
@@ -182,6 +186,7 @@ export function SectionContent({
   onCloseProductForm,
   onCloseSupplierForm,
   onSalesDraftChange,
+  onSettingsChange,
   parseNonNegativeInteger,
   productFormVisible,
   supplierFormVisible,
@@ -193,7 +198,8 @@ export function SectionContent({
   section,
   supplierPayables,
   supplierPayments,
-  suppliers
+  suppliers,
+  settings
 }: SectionContentProps) {
   if (section.id === "products") {
     return (
@@ -244,6 +250,7 @@ export function SectionContent({
         sales={sales}
         salesDraft={salesDraft}
         onSalesDraftChange={onSalesDraftChange}
+        settings={settings}
       />
     );
   }
@@ -315,6 +322,15 @@ export function SectionContent({
         sales={sales}
         supplierPayables={supplierPayables}
         supplierPayments={supplierPayments}
+      />
+    );
+  }
+
+  if (section.id === "settings") {
+    return (
+      <SettingsSection
+        onSettingsChange={onSettingsChange}
+        settings={settings}
       />
     );
   }

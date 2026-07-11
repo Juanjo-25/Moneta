@@ -137,6 +137,20 @@ describe("App navigation", () => {
     expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
   });
 
+  it("opens configuration from the lower-left sidebar control", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+
+    expect(screen.getByRole("heading", { name: "Configuracion" })).toBeTruthy();
+    expect(screen.getByLabelText("Nombre empresa")).toBeTruthy();
+    expect(screen.getByLabelText("Logo empresa")).toBeTruthy();
+    expect(screen.getByLabelText("Titulo factura")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
+  });
+
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
     const user = userEvent.setup();
 
@@ -2084,6 +2098,54 @@ describe("App navigation", () => {
     );
     expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
       "data:application/pdf;base64,invoice-pdf"
+    );
+  });
+
+  it("uses configured company and invoice data when generating a sales PDF", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.clear(screen.getByLabelText("Nombre empresa"));
+    await user.type(screen.getByLabelText("Nombre empresa"), "Comercial La 80");
+    await user.clear(screen.getByLabelText("NIT empresa"));
+    await user.type(screen.getByLabelText("NIT empresa"), "901222333-4");
+    await user.clear(screen.getByLabelText("Titulo factura"));
+    await user.type(screen.getByLabelText("Titulo factura"), "CUENTA DE COBRO");
+    await user.selectOptions(screen.getByLabelText("Color principal"), "#2563eb");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(screen.getByText("Cambios guardados")).toBeTruthy();
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+
+    await waitFor(() =>
+      expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            company: expect.objectContaining({
+              document: "901222333-4",
+              name: "Comercial La 80"
+            }),
+            invoice: expect.objectContaining({
+              accentColor: "#2563eb",
+              title: "CUENTA DE COBRO"
+            })
+          })
+        })
+      )
     );
   });
 

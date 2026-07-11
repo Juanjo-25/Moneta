@@ -6,7 +6,8 @@ export type SectionId =
   | "customers"
   | "suppliers"
   | "receivables"
-  | "reports";
+  | "reports"
+  | "settings";
 
 export type SectionConfig = {
   id: SectionId;
@@ -194,4 +195,26 @@ export type SupplierPaymentRecord = {
   amountMinor: number;
   paidAtMs: number;
   paidAtLabel: string;
+};
+
+export type CompanySettings = {
+  name: string;
+  document: string;
+  address: string;
+  city: string;
+  email: string;
+  phone: string;
+  logoDataUri: string;
+};
+
+export type InvoiceDesignSettings = {
+  accentColor: string;
+  title: string;
+  legalNote: string;
+  observations: string;
+};
+
+export type AppSettings = {
+  company: CompanySettings;
+  invoice: InvoiceDesignSettings;
 };

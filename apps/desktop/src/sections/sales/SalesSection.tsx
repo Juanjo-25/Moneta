@@ -20,6 +20,7 @@ import type {
   CustomerFormErrors,
   CustomerFormState,
   CustomerRecord,
+  AppSettings,
   ProductRecord,
   ReceivableRecord,
   SaleLineRecord,
@@ -187,6 +188,7 @@ type SalesSectionProps = {
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
   salesDraft: SalesDraftState;
+  settings: AppSettings;
 };
 
 export function SalesSection({
@@ -204,7 +206,8 @@ export function SalesSection({
   products,
   receivables,
   sales,
-  salesDraft
+  salesDraft,
+  settings
 }: SalesSectionProps) {
   const { form, saleLines } = salesDraft;
   const [errors, setErrors] = useState<SalesFormErrors>({});
@@ -542,6 +545,7 @@ export function SalesSection({
           totalMinor: line.totalMinor,
           unitPriceMinor: line.unitPriceMinor
         })),
+        settings,
         paymentStatus: sale.paymentStatus
       });
       setInvoicePreview(invoice);
