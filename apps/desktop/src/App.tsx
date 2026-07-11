@@ -399,24 +399,40 @@ export function App() {
 
   function registerPurchaseInSession(input: {
     supplier: SupplierRecord;
+    branch: string;
+    prefix: string;
+    seller: string;
+    concept: string;
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
   }) {
     const occurredAt = new Date();
     const purchaseId = `purchase-${Date.now()}`;
     const lines = input.lines.map((line, index) => ({
+      discountMinor: line.discountMinor,
+      discountPercent: line.discountPercent,
       id: `${purchaseId}-line-${index}`,
       productId: line.product.id,
       productName: line.product.name,
       quantity: line.quantity,
-      totalMinor: line.quantity * line.unitCostMinor,
+      subtotalMinor: line.subtotalMinor,
+      taxMinor: line.taxMinor,
+      taxPercent: line.taxPercent,
+      totalMinor: line.subtotalMinor - line.discountMinor + line.taxMinor,
+      unit: line.unit,
       unitCostMinor: line.unitCostMinor
     }));
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
@@ -446,6 +462,9 @@ export function App() {
     setPurchases((currentPurchases) => [
       {
         dueAt: input.dueAt,
+        branch: input.branch,
+        concept: input.concept,
+        currency: "COP",
         id: purchaseId,
         invoiceNumber: input.invoiceNumber,
         issuedAt: input.issuedAt,
@@ -453,12 +472,14 @@ export function App() {
         occurredAtMs: occurredAt.getTime(),
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         paymentStatus: input.paymentStatus,
+        prefix: input.prefix,
         productId: firstLine.productId,
         productName:
           lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
         quantity: totalQuantity,
         supplierId: input.supplier.id,
         supplierName: input.supplier.name,
+        seller: input.seller,
         totalMinor,
         unitCostMinor: firstLine.unitCostMinor
       },
@@ -530,12 +551,24 @@ export function App() {
 
   function registerSaleInSession(input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     dueAt?: string | undefined;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -563,13 +596,19 @@ export function App() {
     const saleId = `sale-${Date.now()}`;
     const lines = input.lines.map((line, index) => ({
       costMinor: line.costMinor,
+      discountMinor: line.discountMinor,
+      discountPercent: line.discountPercent,
       id: `${saleId}-line-${index}`,
       marginMinor: line.marginMinor,
       marginPercent: line.marginPercent,
       productId: line.product.id,
       productName: line.product.name,
       quantity: line.quantity,
+      subtotalMinor: line.subtotalMinor,
+      taxMinor: line.taxMinor,
+      taxPercent: line.taxPercent,
       totalMinor: line.totalMinor,
+      unit: line.unit,
       unitCostMinorAtSale: line.unitCostMinorAtSale,
       unitPriceMinor: line.unitPriceMinor
     }));
@@ -585,18 +624,25 @@ export function App() {
     );
     setSales((currentSales) => [
       {
+        branch: input.branch,
+        concept: input.concept,
+        currency: "COP",
         customer: input.customer,
         customerId: input.customer.id,
         customerName: input.customer.name,
         id: saleId,
+        invoiceNumber: input.invoiceNumber,
+        issuedAt: input.issuedAt,
         lines,
         occurredAtMs,
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         paymentStatus: input.paymentStatus,
+        prefix: input.prefix,
         productId: firstLine.productId,
         productName:
           lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
         quantity: totalQuantity,
+        seller: input.seller,
         totalMinor,
         unitPriceMinor: firstLine.unitPriceMinor,
       },
@@ -623,11 +669,23 @@ export function App() {
 
   function registerPaidSaleInSession(input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -635,20 +693,38 @@ export function App() {
     }>;
   }): string | null {
     return registerSaleInSession({
+      branch: input.branch,
+      concept: input.concept,
       customer: input.customer,
+      invoiceNumber: input.invoiceNumber,
+      issuedAt: input.issuedAt,
       lines: input.lines,
-      paymentStatus: "paid"
+      paymentStatus: "paid",
+      prefix: input.prefix,
+      seller: input.seller
     });
   }
 
   function registerPendingSaleInSession(input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -656,10 +732,16 @@ export function App() {
     }>;
   }): string | null {
     return registerSaleInSession({
+      branch: input.branch,
+      concept: input.concept,
       customer: input.customer,
       dueAt: input.dueAt,
+      invoiceNumber: input.invoiceNumber,
+      issuedAt: input.issuedAt,
       lines: input.lines,
-      paymentStatus: "pending"
+      paymentStatus: "pending",
+      prefix: input.prefix,
+      seller: input.seller
     });
   }
 

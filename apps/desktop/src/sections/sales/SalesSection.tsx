@@ -27,9 +27,15 @@ import type {
 type SaleDraftLine = {
   id: string;
   product: ProductRecord;
+  unit: string;
   quantity: number;
   unitCostMinorAtSale: number;
   unitPriceMinor: number;
+  discountPercent: number;
+  discountMinor: number;
+  taxPercent: number;
+  taxMinor: number;
+  subtotalMinor: number;
   costMinor: number;
   marginMinor: number;
   marginPercent: number;
@@ -37,20 +43,31 @@ type SaleDraftLine = {
 };
 
 type SalesFormState = {
+  branch: string;
+  prefix: string;
+  issuedAt: string;
+  seller: string;
+  concept: string;
   customerId: string;
   dueAt: string;
   productId: string;
+  unit: string;
   quantity: string;
   unitPrice: string;
+  discountPercent: string;
+  taxPercent: string;
   paymentStatus: "paid" | "pending";
 };
 
 type SalesFormErrors = {
   customerId?: string | undefined;
   dueAt?: string | undefined;
+  issuedAt?: string | undefined;
   productId?: string | undefined;
   quantity?: string | undefined;
   unitPrice?: string | undefined;
+  discountPercent?: string | undefined;
+  taxPercent?: string | undefined;
   submit?: string | undefined;
 };
 
@@ -60,11 +77,19 @@ export type SalesDraftState = {
 };
 
 const emptySalesForm: SalesFormState = {
+  branch: "Principal",
+  prefix: "",
+  issuedAt: getTodayInputValue(),
+  seller: "",
+  concept: "Factura de venta",
   customerId: "",
   dueAt: "",
   productId: "",
+  unit: "Unidad",
   quantity: "",
   unitPrice: "",
+  discountPercent: "0",
+  taxPercent: "0",
   paymentStatus: "paid"
 };
 
@@ -88,11 +113,23 @@ type SalesSectionProps = {
   onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -101,12 +138,24 @@ type SalesSectionProps = {
   }) => string | null;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -154,12 +203,21 @@ export function SalesSection({
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
   const unitPriceMinor = parseNonNegativeInteger(form.unitPrice) ?? 0;
-  const draftLineTotalMinor = unitPriceMinor * quantity;
+  const discountPercent = parsePercentage(form.discountPercent);
+  const taxPercent = parsePercentage(form.taxPercent);
+  const draftLineTotalMinor = calculateDocumentLine({
+    quantity,
+    unitAmountMinor: unitPriceMinor,
+    discountPercent,
+    taxPercent
+  }).totalMinor;
   const saleLinesTotalMinor = saleLines.reduce(
     (total, line) => total + line.totalMinor,
     0
   );
   const totalMinor = saleLinesTotalMinor + draftLineTotalMinor;
+  const nextInvoiceNumber = String(sales.length + 1).padStart(3, "0");
+  const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -206,14 +264,25 @@ export function SalesSection({
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
+  function updatePercentageField(
+    field: "discountPercent" | "taxPercent",
+    value: string
+  ) {
+    updateField(field, value.replace(/[^0-9]/g, ""));
+  }
+
   function validateDraftLine(): {
     errors: SalesFormErrors;
     parsedQuantity: number | null;
     parsedUnitPrice: number | null;
+    parsedDiscountPercent: number | null;
+    parsedTaxPercent: number | null;
   } {
     const nextErrors: SalesFormErrors = {};
     const parsedQuantity = parseNonNegativeInteger(form.quantity);
     const parsedUnitPrice = parseNonNegativeInteger(form.unitPrice);
+    const parsedDiscountPercent = parsePercentage(form.discountPercent);
+    const parsedTaxPercent = parsePercentage(form.taxPercent);
 
     if (!selectedProduct) {
       nextErrors.productId = "Debes seleccionar un producto.";
@@ -225,7 +294,20 @@ export function SalesSection({
       nextErrors.unitPrice = "El precio de venta debe ser un entero mayor a cero.";
     }
 
-    return { errors: nextErrors, parsedQuantity, parsedUnitPrice };
+    if (parsedDiscountPercent === null || parsedDiscountPercent > 100) {
+      nextErrors.discountPercent = "El descuento debe estar entre 0 y 100.";
+    }
+    if (parsedTaxPercent === null || parsedTaxPercent > 100) {
+      nextErrors.taxPercent = "El impuesto debe estar entre 0 y 100.";
+    }
+
+    return {
+      errors: nextErrors,
+      parsedQuantity,
+      parsedUnitPrice,
+      parsedDiscountPercent,
+      parsedTaxPercent
+    };
   }
 
   function addSaleLine() {
@@ -244,33 +326,45 @@ export function SalesSection({
       validation.parsedQuantity === null ||
       validation.parsedQuantity <= 0 ||
       validation.parsedUnitPrice === null ||
-      validation.parsedUnitPrice <= 0
+      validation.parsedUnitPrice <= 0 ||
+      validation.parsedDiscountPercent === null ||
+      validation.parsedTaxPercent === null
     ) {
       return;
     }
 
     const parsedQuantity = validation.parsedQuantity;
     const parsedUnitPrice = validation.parsedUnitPrice;
+    const parsedDiscountPercent = validation.parsedDiscountPercent!;
+    const parsedTaxPercent = validation.parsedTaxPercent!;
 
     setSaleLines((currentLines) => [
       ...currentLines,
       buildSaleLineSnapshot({
         product: selectedProduct,
         quantity: parsedQuantity,
-        unitPriceMinor: parsedUnitPrice
+        unit: form.unit,
+        unitPriceMinor: parsedUnitPrice,
+        discountPercent: parsedDiscountPercent,
+        taxPercent: parsedTaxPercent
       })
     ]);
     setForm((currentForm) => ({
       ...currentForm,
       productId: "",
+      unit: "Unidad",
       quantity: "",
-      unitPrice: ""
+      unitPrice: "",
+      discountPercent: "0",
+      taxPercent: "0"
     }));
     setErrors((currentErrors) => ({
       ...currentErrors,
       productId: undefined,
       quantity: undefined,
-      unitPrice: undefined
+      unitPrice: undefined,
+      discountPercent: undefined,
+      taxPercent: undefined
     }));
   }
 
@@ -289,12 +383,17 @@ export function SalesSection({
             lineValidation.parsedQuantity > 0 &&
             lineValidation.parsedUnitPrice !== null &&
             lineValidation.parsedUnitPrice > 0 &&
+            lineValidation.parsedDiscountPercent !== null &&
+            lineValidation.parsedTaxPercent !== null &&
             selectedProduct
               ? [
                   buildSaleLineSnapshot({
                     product: selectedProduct,
                     quantity: lineValidation.parsedQuantity,
-                    unitPriceMinor: lineValidation.parsedUnitPrice
+                    unit: form.unit,
+                    unitPriceMinor: lineValidation.parsedUnitPrice,
+                    discountPercent: lineValidation.parsedDiscountPercent,
+                    taxPercent: lineValidation.parsedTaxPercent
                   })
                 ]
               : [])
@@ -305,6 +404,9 @@ export function SalesSection({
     } else if (!selectedCustomer.active) {
       nextErrors.customerId =
         "El cliente seleccionado esta inactivo. Reactivalo para registrar nuevas ventas.";
+    }
+    if (form.issuedAt.trim() === "") {
+      nextErrors.issuedAt = "La fecha de elaboracion es obligatoria.";
     }
     if (form.paymentStatus === "pending" && form.dueAt.trim() === "") {
       nextErrors.dueAt =
@@ -325,14 +427,26 @@ export function SalesSection({
     }
 
     const registerInput = {
+      branch: form.branch.trim() || "Principal",
+      concept: form.concept.trim() || "Factura de venta",
       customer: selectedCustomer,
+      invoiceNumber: documentNumber,
+      issuedAt: form.issuedAt.trim(),
+      prefix: form.prefix.trim(),
+      seller: form.seller.trim() || "Sin asignar",
       lines: linesToRegister.map((line) => ({
         costMinor: line.costMinor,
+        discountMinor: line.discountMinor,
+        discountPercent: line.discountPercent,
         marginMinor: line.marginMinor,
         marginPercent: line.marginPercent,
         product: line.product,
         quantity: line.quantity,
+        subtotalMinor: line.subtotalMinor,
+        taxMinor: line.taxMinor,
+        taxPercent: line.taxPercent,
         totalMinor: line.totalMinor,
+        unit: line.unit,
         unitCostMinorAtSale: line.unitCostMinorAtSale,
         unitPriceMinor: line.unitPriceMinor
       }))
@@ -391,8 +505,8 @@ export function SalesSection({
           email: sale.customer.email,
           name: sale.customer.name
         },
-        invoiceNumber: `FE-${sale.id}`,
-        issueDate: sale.occurredAtLabel,
+        invoiceNumber: sale.invoiceNumber,
+        issueDate: sale.issuedAt,
         item: {
           description: sale.lines[0]?.productName ?? sale.productName,
           quantity: sale.lines[0]?.quantity ?? sale.quantity,
@@ -418,35 +532,94 @@ export function SalesSection({
   return (
     <section className="sales-layout">
       <form className="sales-form" onSubmit={submitSale}>
-        <div className="sales-grid">
-          <label className="field" htmlFor="cliente">
-            <span>Cliente</span>
-            <select
-              aria-invalid={Boolean(errors.customerId)}
-              id="cliente"
-              onChange={(event) => {
-                updateField("customerId", event.target.value);
-              }}
-              value={form.customerId}
-            >
-              <option value="">Selecciona un cliente</option>
-              {activeCustomers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} - {customer.document}
-                </option>
-              ))}
-            </select>
-            {errors.customerId ? <small>{errors.customerId}</small> : null}
-          </label>
+        <section className="document-header" aria-label="Encabezado de la venta">
+          <div className="document-header-grid">
+            <TextField
+              label="Sucursal"
+              onChange={(value) => updateField("branch", value)}
+              value={form.branch}
+            />
+            <TextField
+              label="Prefijo"
+              onChange={(value) => updateField("prefix", value)}
+              placeholder="Sin prefijo"
+              value={form.prefix}
+            />
+            <TextField label="Numero" onChange={() => undefined} readOnly value={documentNumber} />
 
+            <label className="field" htmlFor="cliente">
+              <span>Cliente</span>
+              <select
+                aria-invalid={Boolean(errors.customerId)}
+                id="cliente"
+                onChange={(event) => updateField("customerId", event.target.value)}
+                value={form.customerId}
+              >
+                <option value="">Selecciona un cliente</option>
+                {activeCustomers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} - {customer.document}
+                  </option>
+                ))}
+              </select>
+              {errors.customerId ? <small>{errors.customerId}</small> : null}
+            </label>
+            <TextField
+              label="Direccion del cliente"
+              onChange={() => undefined}
+              placeholder="Se completa al elegir el cliente"
+              readOnly
+              value={selectedCustomer?.address ?? ""}
+            />
+            <TextField
+              error={errors.issuedAt}
+              label="Fecha de elaboracion"
+              onChange={(value) => updateField("issuedAt", value)}
+              type="date"
+              value={form.issuedAt}
+            />
+            {form.paymentStatus === "pending" ? (
+              <TextField
+                error={errors.dueAt}
+                label="Fecha vencimiento venta"
+                onChange={(value) => updateField("dueAt", value)}
+                type="date"
+                value={form.dueAt}
+              />
+            ) : null}
+            <TextField
+              label="Vendedor"
+              onChange={(value) => updateField("seller", value)}
+              placeholder="Sin asignar"
+              value={form.seller}
+            />
+            <div className="field">
+              <span>Forma de pago</span>
+              <div aria-label="Estado de pago" className="payment-status-group" role="radiogroup">
+                <label htmlFor="estado-pagada"><input checked={form.paymentStatus === "paid"} id="estado-pagada" name="payment-status" onChange={() => updateField("paymentStatus", "paid")} type="radio" />Pagada</label>
+                <label htmlFor="estado-pendiente"><input checked={form.paymentStatus === "pending"} id="estado-pendiente" name="payment-status" onChange={() => updateField("paymentStatus", "pending")} type="radio" />Pendiente</label>
+              </div>
+            </div>
+            <TextField label="Moneda" onChange={() => undefined} readOnly value="Peso colombiano (COP)" />
+            <TextField
+              label="Concepto"
+              onChange={(value) => updateField("concept", value)}
+              value={form.concept}
+            />
+          </div>
           <InlineActionGroup>
-            <SecondaryActionButton
-              onClick={() => setCustomerFormVisible((visible) => !visible)}
-            >
+            <SecondaryActionButton onClick={() => setCustomerFormVisible((visible) => !visible)}>
               Nuevo cliente
             </SecondaryActionButton>
           </InlineActionGroup>
+        </section>
 
+        <section className="document-lines" aria-label="Detalle de facturacion">
+          <div className="document-lines-heading">
+            <h2>Detalle de facturacion</h2>
+            <span>Agrega los productos y sus valores antes de registrar la venta.</span>
+          </div>
+          <div className="sales-grid">
           <label className="field" htmlFor="producto-venta">
             <span>Producto</span>
             <select
@@ -467,6 +640,13 @@ export function SalesSection({
             {errors.productId ? <small>{errors.productId}</small> : null}
           </label>
 
+          <label className="field" htmlFor="unidad-venta">
+            <span>Unidad</span>
+            <select id="unidad-venta" onChange={(event) => updateField("unit", event.target.value)} value={form.unit}>
+              <option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option>
+            </select>
+          </label>
+
           <TextField
             error={errors.quantity}
             inputMode="numeric"
@@ -485,12 +665,16 @@ export function SalesSection({
             }}
             value={form.unitPrice}
           />
+          <TextField error={errors.discountPercent} inputMode="numeric" label="Descuento %" onChange={(value) => updatePercentageField("discountPercent", value)} value={form.discountPercent} />
+          <label className="field" htmlFor="impuesto-venta"><span>Impuesto</span><select aria-invalid={Boolean(errors.taxPercent)} id="impuesto-venta" onChange={(event) => updateField("taxPercent", event.target.value)} value={form.taxPercent}><option value="0">Sin IVA</option><option value="5">IVA 5%</option><option value="19">IVA 19%</option></select>{errors.taxPercent ? <small>{errors.taxPercent}</small> : null}</label>
+          <TextField label="Total linea" onChange={() => undefined} readOnly value={formatCurrency(draftLineTotalMinor)} />
           <InlineActionGroup>
             <SecondaryActionButton onClick={addSaleLine}>
               Agregar producto
             </SecondaryActionButton>
           </InlineActionGroup>
         </div>
+        </section>
 
         {customerFormVisible ? (
           <InlineFormSection className="inline-customer-form">
@@ -530,56 +714,20 @@ export function SalesSection({
           </InlineFormSection>
         ) : null}
 
-        <div
-          aria-label="Estado de pago"
-          className="payment-status-group"
-          role="radiogroup"
-        >
-          <label htmlFor="estado-pagada">
-            <input
-              checked={form.paymentStatus === "paid"}
-              id="estado-pagada"
-              name="payment-status"
-              onChange={() => updateField("paymentStatus", "paid")}
-              type="radio"
-            />
-            Pagada
-          </label>
-          <label htmlFor="estado-pendiente">
-            <input
-              checked={form.paymentStatus === "pending"}
-              id="estado-pendiente"
-              name="payment-status"
-              onChange={() => updateField("paymentStatus", "pending")}
-              type="radio"
-            />
-            Pendiente
-          </label>
-        </div>
-
-        {form.paymentStatus === "pending" ? (
-          <TextField
-            error={errors.dueAt}
-            label="Fecha vencimiento venta"
-            onChange={(value) => {
-              updateField("dueAt", value);
-            }}
-            type="date"
-            value={form.dueAt}
-          />
-        ) : null}
-
         {saleLines.length > 0 ? (
           <DataTable ariaLabel="Productos de la venta" className="purchase-lines-table">
             <DataTableHeader
-              labels={["Producto", "Cantidad", "Precio unitario", "Total"]}
+              labels={["Producto", "Unidad", "Cantidad", "Precio unitario", "Descuento", "Impuesto", "Total"]}
             />
             <tbody>
               {saleLines.map((line) => (
                 <tr key={line.id}>
                   <td>{line.product.name}</td>
+                  <td>{line.unit}</td>
                   <td>{line.quantity}</td>
                   <td>{formatCurrency(line.unitPriceMinor)}</td>
+                  <td>{line.discountPercent}%</td>
+                  <td>{line.taxPercent}%</td>
                   <td>{formatCurrency(line.totalMinor)}</td>
                 </tr>
               ))}
@@ -608,7 +756,9 @@ export function SalesSection({
             <DataTableHeader
               labels={[
                 "Fecha",
+                "Numero",
                 "Cliente",
+                "Vendedor",
                 "Producto",
                 "Cantidad",
                 "Estado",
@@ -620,7 +770,9 @@ export function SalesSection({
               {sales.map((sale) => (
                 <tr key={sale.id}>
                   <td>{sale.occurredAtLabel}</td>
+                  <td>{sale.invoiceNumber}</td>
                   <td>{sale.customerName}</td>
+                  <td>{sale.seller}</td>
                   <td>{sale.productName}</td>
                   <td>{sale.quantity}</td>
                   <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
@@ -669,22 +821,82 @@ export function SalesSection({
 function buildSaleLineSnapshot(input: {
   product: ProductRecord;
   quantity: number;
+  unit: string;
   unitPriceMinor: number;
+  discountPercent: number;
+  taxPercent: number;
 }): SaleDraftLine {
-  const totalMinor = input.quantity * input.unitPriceMinor;
+  const calculation = calculateDocumentLine({
+    quantity: input.quantity,
+    unitAmountMinor: input.unitPriceMinor,
+    discountPercent: input.discountPercent,
+    taxPercent: input.taxPercent
+  });
+  const totalMinor = calculation.totalMinor;
   const costMinor = input.quantity * input.product.costMinor;
-  const marginMinor = totalMinor - costMinor;
-  const marginPercent = totalMinor > 0 ? (marginMinor / totalMinor) * 100 : 0;
+  const marginMinor = calculation.taxableMinor - costMinor;
+  const marginPercent =
+    calculation.taxableMinor > 0
+      ? (marginMinor / calculation.taxableMinor) * 100
+      : 0;
 
   return {
     costMinor,
+    discountMinor: calculation.discountMinor,
+    discountPercent: input.discountPercent,
     id: `sale-line-${Date.now()}`,
     marginMinor,
     marginPercent,
     product: input.product,
     quantity: input.quantity,
+    subtotalMinor: calculation.subtotalMinor,
+    taxMinor: calculation.taxMinor,
+    taxPercent: input.taxPercent,
     totalMinor,
+    unit: input.unit,
     unitCostMinorAtSale: input.product.costMinor,
     unitPriceMinor: input.unitPriceMinor
   };
+}
+
+function parsePercentage(value: string): number | null {
+  if (value.trim() === "") {
+    return 0;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function calculateDocumentLine(input: {
+  quantity: number;
+  unitAmountMinor: number;
+  discountPercent: number | null;
+  taxPercent: number | null;
+}) {
+  const subtotalMinor = input.quantity * input.unitAmountMinor;
+  const discountPercent = input.discountPercent ?? 0;
+  const taxPercent = input.taxPercent ?? 0;
+  const discountMinor = Math.round((subtotalMinor * discountPercent) / 100);
+  const taxableMinor = subtotalMinor - discountMinor;
+  const taxMinor = Math.round((taxableMinor * taxPercent) / 100);
+
+  return {
+    subtotalMinor,
+    discountMinor,
+    taxableMinor,
+    taxMinor,
+    totalMinor: taxableMinor + taxMinor
+  };
+}
+
+function formatDocumentNumber(prefix: string, number: string): string {
+  const normalizedPrefix = prefix.trim().toUpperCase();
+  return normalizedPrefix === "" ? number : `${normalizedPrefix}-${number}`;
+}
+
+function getTodayInputValue(): string {
+  const today = new Date();
+  const offsetMs = today.getTimezoneOffset() * 60_000;
+  return new Date(today.getTime() - offsetMs).toISOString().slice(0, 10);
 }

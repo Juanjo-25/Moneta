@@ -2173,4 +2173,34 @@ describe("App navigation", () => {
       )
     );
   });
+
+  it("persists the document prefix and seller and calculates line discount and tax", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Nombre o razon social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.type(screen.getByLabelText("Prefijo"), "FV");
+    await user.type(screen.getByLabelText("Vendedor"), "Laura Gomez");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.selectOptions(screen.getByLabelText("Unidad"), "Libra");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.clear(screen.getByLabelText("Descuento %"));
+    await user.type(screen.getByLabelText("Descuento %"), "10");
+    await user.selectOptions(screen.getByLabelText("Impuesto"), "19");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("FV-001")).toBeTruthy();
+    expect(within(salesTable).getByText("Laura Gomez")).toBeTruthy();
+    expect(within(salesTable).getByText(/\$\s*9\.639/)).toBeTruthy();
+  });
 });

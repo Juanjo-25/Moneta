@@ -56,23 +56,45 @@ type SectionContentProps = {
   onSetSupplierActive: (supplierId: string, active: boolean) => void;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
+    branch: string;
+    prefix: string;
+    seller: string;
+    concept: string;
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
   }) => void;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;
@@ -81,12 +103,24 @@ type SectionContentProps = {
   }) => string | null;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
+    branch: string;
+    prefix: string;
+    invoiceNumber: string;
+    issuedAt: string;
+    seller: string;
+    concept: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
+      unit: string;
       quantity: number;
       unitCostMinorAtSale: number;
       unitPriceMinor: number;
+      discountPercent: number;
+      discountMinor: number;
+      taxPercent: number;
+      taxMinor: number;
+      subtotalMinor: number;
       costMinor: number;
       marginMinor: number;
       marginPercent: number;

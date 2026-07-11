@@ -5,6 +5,7 @@ type TextFieldProps = {
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   label: string;
   onChange: (value: string) => void;
+  placeholder?: string | undefined;
   readOnly?: boolean | undefined;
   type?: HTMLInputTypeAttribute;
   value: string;
@@ -15,6 +16,7 @@ export function TextField({
   inputMode,
   label,
   onChange,
+  placeholder,
   readOnly = false,
   type = "text",
   value
@@ -29,6 +31,7 @@ export function TextField({
         id={id}
         inputMode={inputMode}
         onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         readOnly={readOnly}
         type={type}
         value={value}
