@@ -1019,6 +1019,71 @@ button,
   background: #f0fdf4;
 }
 
+.sale-actions-cell {
+  width: 96px;
+}
+
+.sale-actions-menu {
+  display: inline-grid;
+  justify-items: end;
+  position: relative;
+}
+
+.sale-actions-trigger {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sale-actions-trigger:hover,
+.sale-actions-trigger[aria-expanded="true"] {
+  border-color: #cbd5e1;
+  background: #e6edf5;
+  color: var(--text-primary);
+}
+
+.sale-actions-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgb(15 118 110 / 12%);
+}
+
+.sale-actions-list {
+  display: grid;
+  min-width: 172px;
+  margin-top: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  box-shadow: 0 14px 28px rgb(15 23 42 / 12%);
+  overflow: hidden;
+}
+
+.sale-actions-list button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sale-actions-list button:hover,
+.sale-actions-list button:focus-visible {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
 .secondary-action {
   min-height: 42px;
   border: 1px solid var(--border-soft);

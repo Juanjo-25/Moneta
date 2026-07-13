@@ -221,6 +221,7 @@ export function SalesSection({
   const [editForm, setEditForm] = useState<SaleEditState | null>(null);
   const [editLines, setEditLines] = useState<SaleLineRecord[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
+  const [openSaleActionsId, setOpenSaleActionsId] = useState<string | null>(null);
 
   const activeCustomers = customers.filter((customer) => customer.active);
   const selectedCustomer =
@@ -1010,17 +1011,64 @@ export function SalesSection({
                   <td>{sale.quantity}</td>
                   <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                   <td>{formatCurrency(sale.totalMinor)}</td>
-                  <td>
-                    <SecondaryActionButton onClick={() => beginSaleEdit(sale)} variant="compact">Editar venta</SecondaryActionButton>
-                    <SecondaryActionButton
-                      onClick={() => {
-                        void generateInvoiceForSale(sale);
+                  <td className="sale-actions-cell">
+                    <div
+                      className="sale-actions-menu"
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget)) {
+                          setOpenSaleActionsId(null);
+                        }
                       }}
-                      variant="compact"
                     >
-                      Generar factura PDF
-                    </SecondaryActionButton>
-                    <SecondaryActionButton onClick={() => removeSale(sale.id)} variant="compact">Eliminar venta</SecondaryActionButton>
+                      <button
+                        aria-expanded={openSaleActionsId === sale.id}
+                        aria-haspopup="menu"
+                        aria-label={`Acciones de venta ${sale.invoiceNumber}`}
+                        className="sale-actions-trigger"
+                        onClick={() =>
+                          setOpenSaleActionsId((currentId) =>
+                            currentId === sale.id ? null : sale.id
+                          )
+                        }
+                        type="button"
+                      >
+                        ...
+                      </button>
+                      {openSaleActionsId === sale.id ? (
+                        <div className="sale-actions-list" role="menu">
+                          <button
+                            onClick={() => {
+                              setOpenSaleActionsId(null);
+                              beginSaleEdit(sale);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Editar venta
+                          </button>
+                          <button
+                            onClick={() => {
+                              setOpenSaleActionsId(null);
+                              void generateInvoiceForSale(sale);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Generar factura PDF
+                          </button>
+                          <button
+                            onClick={() => {
+                              setOpenSaleActionsId(null);
+                              removeSale(sale.id);
+                            }}
+                            role="menuitem"
+                            type="button"
+                          >
+                            Eliminar venta
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
