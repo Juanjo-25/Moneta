@@ -69,6 +69,20 @@ function formatDateOffsetFromToday(days: number): string {
   return `${year}-${month}-${day}`;
 }
 
+async function clickFirstSaleAction(user: UserEvent, actionName: string) {
+  const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+  const firstActionsButton = within(salesTable).getAllByRole("button", {
+    name: /Acciones de venta/
+  })[0];
+
+  if (!firstActionsButton) {
+    throw new Error("No sale actions button was rendered.");
+  }
+
+  await user.click(firstActionsButton);
+  await user.click(screen.getByRole("menuitem", { name: actionName }));
+}
+
 describe("App navigation", () => {
   beforeEach(() => {
     generateInvoicePdfMock.mockReset();
@@ -771,7 +785,7 @@ describe("App navigation", () => {
     const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
     expect(within(salesTable).getByText(/\$\s*7\.700/)).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+    await clickFirstSaleAction(user, "Generar factura PDF");
     expect(generateInvoicePdfMock).toHaveBeenCalledWith(
       expect.objectContaining({
         items: [
@@ -2140,7 +2154,7 @@ describe("App navigation", () => {
     await user.type(screen.getByLabelText("Direccion"), "Calle 99");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
     await user.click(screen.getByRole("button", { name: "Ventas" }));
-    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+    await clickFirstSaleAction(user, "Generar factura PDF");
 
     await waitFor(() =>
       expect(generateInvoicePdfMock).toHaveBeenCalledWith(
@@ -2208,7 +2222,7 @@ describe("App navigation", () => {
     await user.type(screen.getByLabelText("Cantidad"), "2");
     await user.click(screen.getByLabelText("Pagada"));
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
-    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+    await clickFirstSaleAction(user, "Generar factura PDF");
 
     await waitFor(() =>
       expect(generateInvoicePdfMock).toHaveBeenCalledWith(
@@ -2267,7 +2281,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
-    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+    await clickFirstSaleAction(user, "Generar factura PDF");
 
     await waitFor(() =>
       expect(generateInvoicePdfMock).toHaveBeenCalledWith(
@@ -2311,7 +2325,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
-    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+    await clickFirstSaleAction(user, "Generar factura PDF");
 
     await waitFor(() =>
       expect(generateInvoicePdfMock).toHaveBeenCalledWith(
@@ -2355,7 +2369,7 @@ describe("App navigation", () => {
     await user.click(screen.getByLabelText("Pendiente"));
     await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-15");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
-    await user.click(screen.getByRole("button", { name: "Generar factura PDF" }));
+    await clickFirstSaleAction(user, "Generar factura PDF");
 
     await waitFor(() =>
       expect(generateInvoicePdfMock).toHaveBeenCalledWith(
@@ -2421,7 +2435,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad"), "2");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
-    await user.click(screen.getByRole("button", { name: "Editar venta" }));
+    await clickFirstSaleAction(user, "Editar venta");
     await user.clear(screen.getByLabelText("Cantidad Arroz libra"));
     await user.type(screen.getByLabelText("Cantidad Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
@@ -2451,7 +2465,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad"), "2");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
-    await user.click(screen.getByRole("button", { name: "Eliminar venta" }));
+    await clickFirstSaleAction(user, "Eliminar venta");
 
     expect(screen.getByText("Sin ventas registradas")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Productos" }));
