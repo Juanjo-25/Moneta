@@ -3,6 +3,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PayablesTable } from "../components/PayablesTable";
 import type { DueMetadata } from "../lib/dates";
 import { CarteraDashboardSection } from "./cartera/CarteraDashboardSection";
+import { CreditNotesSection } from "./credit-notes/CreditNotesSection";
 import { CustomersSection } from "./customers/CustomersSection";
 import { ProductsSection } from "./products/ProductsSection";
 import { PurchasesSection } from "./purchases/PurchasesSection";
@@ -18,6 +19,7 @@ import type {
   CustomerFormErrors,
   CustomerFormState,
   CustomerRecord,
+  CreditNoteRecord,
   ProductRecord,
   PurchasePaymentStatus,
   PurchaseRecord,
@@ -45,6 +47,7 @@ type SectionContentProps = {
     sales: SaleRecord[];
   }) => CustomerSummary;
   compareDueDates: (leftDueAt: string, rightDueAt: string) => number;
+  creditNotes: CreditNoteRecord[];
   customers: CustomerRecord[];
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
@@ -128,6 +131,15 @@ type SectionContentProps = {
       totalMinor: number;
     }>;
   }) => string | null;
+  onRegisterCreditNote: (input: {
+    sale: SaleRecord;
+    issuedAt: string;
+    reason: string;
+    lines: Array<{
+      saleLineId: string;
+      quantity: number;
+    }>;
+  }) => string | null;
   onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
   onDeleteSale: (saleId: string) => void;
   onRegisterSupplierPayment: (input: {
@@ -162,6 +174,7 @@ type SectionContentProps = {
 export function SectionContent({
   buildCustomerSummary,
   compareDueDates,
+  creditNotes,
   customers,
   formatCurrency,
   formatIntegerInput,
@@ -176,6 +189,7 @@ export function SectionContent({
   onRegisterPurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
+  onRegisterCreditNote,
   onUpdateSale,
   onDeleteSale,
   onRegisterSupplierPayment,
@@ -270,6 +284,19 @@ export function SectionContent({
     );
   }
 
+  if (section.id === "credit-notes") {
+    return (
+      <CreditNotesSection
+        creditNotes={creditNotes}
+        formatCurrency={formatCurrency}
+        formatIntegerInput={formatIntegerInput}
+        onRegisterCreditNote={onRegisterCreditNote}
+        parseNonNegativeInteger={parseNonNegativeInteger}
+        sales={sales}
+      />
+    );
+  }
+
   if (section.id === "receivables") {
     return (
       <CarteraDashboardSection
@@ -315,6 +342,7 @@ export function SectionContent({
   if (section.id === "reports") {
     return (
       <ReportsSection
+        creditNotes={creditNotes}
         formatCurrency={formatCurrency}
         purchases={purchases}
         receivables={receivables}
