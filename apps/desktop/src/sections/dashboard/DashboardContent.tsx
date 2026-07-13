@@ -820,7 +820,7 @@ function DashboardProductPieChart({
 
       <div className="dashboard-pie-detail">
         <span>Producto seleccionado</span>
-        <strong>Seleccionado: {selectedRow.label}</strong>
+        <strong>{selectedRow.label}</strong>
         <small>{selectedRow.meta}</small>
         <b>{formatCurrency(selectedRow.valueMinor)}</b>
       </div>

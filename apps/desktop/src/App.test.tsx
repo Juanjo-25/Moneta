@@ -318,8 +318,9 @@ describe("App navigation", () => {
     await user.click(within(productPieChart).getByRole("button", { name: "Seleccionar Arroz libra" }));
     expect(within(productPieChart).getByText("Producto seleccionado")).toBeTruthy();
     expect(within(productPieChart).getByText("2 unidades")).toBeTruthy();
-    expect(screen.getByText("Arroz libra")).toBeTruthy();
+    expect(within(productPieChart).getAllByText("Arroz libra").length).toBeGreaterThan(0);
     expect(screen.getByText("Ana Perez")).toBeTruthy();
+    expect(screen.getByText("Ana Perez").closest(".dashboard-ranking-row")).toBeTruthy();
     expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 
