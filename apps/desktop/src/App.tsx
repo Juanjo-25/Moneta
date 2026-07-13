@@ -27,6 +27,7 @@ import type {
   CustomerRecord,
   AppSettings,
   CustomerValidationOptions,
+  CreditNoteRecord,
   ProductRecord,
   PurchasePaymentStatus,
   PurchaseRecord,
@@ -109,6 +110,14 @@ const navigationItems: SectionConfig[] = [
     primaryAction: "Nueva venta",
     emptyTitle: "Sin ventas registradas",
     emptyBody: "Registra ventas para actualizar inventario y cartera."
+  },
+  {
+    id: "credit-notes",
+    label: "Notas credito",
+    title: "Notas credito",
+    description: "Devoluciones y ajustes de ventas",
+    emptyTitle: "Sin notas credito",
+    emptyBody: "Las devoluciones registradas apareceran aqui."
   },
   {
     id: "customers",
@@ -254,6 +263,7 @@ export function App() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
   const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [creditNotes, setCreditNotes] = useState<CreditNoteRecord[]>([]);
   const [receivables, setReceivables] = useState<ReceivableRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
@@ -286,6 +296,20 @@ export function App() {
         : total,
     0
   );
+  const creditNotesTodayTotal = creditNotes.reduce(
+    (total, creditNote) =>
+      isSameLocalDay(new Date(creditNote.occurredAtMs), today)
+        ? total + creditNote.totalMinor
+        : total,
+    0
+  );
+  const creditNotesMonthTotal = creditNotes.reduce(
+    (total, creditNote) =>
+      isSameLocalMonth(new Date(creditNote.occurredAtMs), today)
+        ? total + creditNote.totalMinor
+        : total,
+    0
+  );
   const pendingReceivablesTotal = receivables.reduce(
     (total, receivable) => total + receivable.amountMinor,
     0
@@ -295,8 +319,14 @@ export function App() {
       label: "Productos activos",
       value: String(products.filter((product) => product.active).length)
     },
-    { label: "Ventas de hoy", value: formatCurrency(salesTodayTotal) },
-    { label: "Ventas del mes", value: formatCurrency(salesMonthTotal) },
+    {
+      label: "Ventas de hoy",
+      value: formatCurrency(Math.max(salesTodayTotal - creditNotesTodayTotal, 0))
+    },
+    {
+      label: "Ventas del mes",
+      value: formatCurrency(Math.max(salesMonthTotal - creditNotesMonthTotal, 0))
+    },
     {
       label: "Cartera pendiente",
       value: formatCurrency(pendingReceivablesTotal)
@@ -869,6 +899,117 @@ export function App() {
     setReceivables((currentReceivables) =>
       currentReceivables.filter((receivable) => receivable.saleId !== saleId)
     );
+    setCreditNotes((currentCreditNotes) =>
+      currentCreditNotes.filter((creditNote) => creditNote.saleId !== saleId)
+    );
+  }
+
+  function registerCreditNoteInSession(input: {
+    sale: SaleRecord;
+    issuedAt: string;
+    reason: string;
+    lines: Array<{
+      saleLineId: string;
+      quantity: number;
+    }>;
+  }): string | null {
+    const creditedQuantityByLine = creditNotes.reduce((totals, creditNote) => {
+      if (creditNote.saleId !== input.sale.id) {
+        return totals;
+      }
+
+      creditNote.lines.forEach((line) => {
+        totals.set(line.saleLineId, (totals.get(line.saleLineId) ?? 0) + line.quantity);
+      });
+
+      return totals;
+    }, new Map<string, number>());
+    const selectedLines = input.lines
+      .map((line) => {
+        const saleLine = input.sale.lines.find(
+          (currentLine) => currentLine.id === line.saleLineId
+        );
+
+        return saleLine ? { quantity: line.quantity, saleLine } : null;
+      })
+      .filter((line): line is NonNullable<typeof line> => line !== null);
+
+    if (selectedLines.length === 0) {
+      return "Debes acreditar al menos una linea de la venta.";
+    }
+
+    const invalidLine = selectedLines.find(({ quantity, saleLine }) => {
+      const alreadyCredited = creditedQuantityByLine.get(saleLine.id) ?? 0;
+      return quantity <= 0 || quantity > saleLine.quantity - alreadyCredited;
+    });
+
+    if (invalidLine) {
+      return "La cantidad a acreditar supera lo disponible en la venta.";
+    }
+
+    const occurredAtMs = Date.now();
+    const occurredAt = new Date(occurredAtMs);
+    const creditNoteId = `credit-note-${occurredAtMs}`;
+    const lines = selectedLines.map(({ quantity, saleLine }, index) => ({
+      costMinor: Math.round((saleLine.costMinor / saleLine.quantity) * quantity),
+      discountPercent: saleLine.discountPercent,
+      id: `${creditNoteId}-line-${index}`,
+      marginMinor: Math.round((saleLine.marginMinor / saleLine.quantity) * quantity),
+      marginPercent: saleLine.marginPercent,
+      productId: saleLine.productId,
+      productName: saleLine.productName,
+      quantity,
+      saleLineId: saleLine.id,
+      taxPercent: saleLine.taxPercent,
+      totalMinor: Math.round((saleLine.totalMinor / saleLine.quantity) * quantity),
+      unit: saleLine.unit,
+      unitPriceMinor: saleLine.unitPriceMinor
+    }));
+    const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) => {
+        const returnedQuantity = lines
+          .filter((line) => line.productId === product.id)
+          .reduce((total, line) => total + line.quantity, 0);
+
+        return returnedQuantity > 0
+          ? { ...product, stock: product.stock + returnedQuantity }
+          : product;
+      })
+    );
+    setCreditNotes((currentCreditNotes) => [
+      {
+        customer: input.sale.customer,
+        customerId: input.sale.customerId,
+        customerName: input.sale.customerName,
+        id: creditNoteId,
+        invoiceNumber: input.sale.invoiceNumber,
+        issuedAt: input.issuedAt,
+        lines,
+        number: `NC-${String(currentCreditNotes.length + 1).padStart(3, "0")}`,
+        occurredAtLabel: formatOccurredAtLabel(occurredAt),
+        occurredAtMs,
+        reason: input.reason.trim() || "Devolucion de producto",
+        saleId: input.sale.id,
+        totalMinor
+      },
+      ...currentCreditNotes
+    ]);
+    setReceivables((currentReceivables) =>
+      currentReceivables
+        .map((receivable) =>
+          receivable.saleId === input.sale.id
+            ? {
+                ...receivable,
+                amountMinor: Math.max(receivable.amountMinor - totalMinor, 0)
+              }
+            : receivable
+        )
+        .filter((receivable) => receivable.amountMinor > 0)
+    );
+
+    return null;
   }
 
   return (
@@ -929,6 +1070,7 @@ export function App() {
 
         {activeSection.id === "dashboard" ? (
           <DashboardContent
+            creditNotes={creditNotes}
             formatCurrency={formatCurrency}
             lowStockProducts={lowStockProducts}
             metrics={metrics}
@@ -941,6 +1083,7 @@ export function App() {
             buildCustomerSummary={buildCustomerSummary}
             compareDueDates={compareDueDates}
             customers={customers}
+            creditNotes={creditNotes}
             formatCurrency={formatCurrency}
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
@@ -954,6 +1097,7 @@ export function App() {
             onRegisterPurchase={registerPurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
+            onRegisterCreditNote={registerCreditNoteInSession}
             onUpdateSale={updateSaleInSession}
             onDeleteSale={deleteSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}

@@ -1132,12 +1132,18 @@ button,
   gap: 18px;
 }
 
-.sales-form {
+.sales-form,
+.credit-note-form {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   background: var(--surface-elevated);
   padding: 18px;
   box-shadow: var(--shadow-subtle);
+}
+
+.credit-notes-layout {
+  display: grid;
+  gap: 18px;
 }
 
 .customers-layout {
@@ -1252,7 +1258,8 @@ button,
 }
 
 .sale-edit-lines input,
-.sale-edit-lines select {
+.sale-edit-lines select,
+.credit-notes-layout .data-table input {
   width: 100%;
   min-width: 78px;
   border: 1px solid var(--border-soft);

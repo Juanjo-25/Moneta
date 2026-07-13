@@ -10,6 +10,7 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SubmenuSwitch } from "../../components/SubmenuSwitch";
 import { parseLocalDate } from "../../lib/dates";
 import type {
+  CreditNoteRecord,
   PurchaseRecord,
   ReceivableRecord,
   SaleRecord,
@@ -163,24 +164,41 @@ function formatLocalDateLabel(value: string): string {
   return formatDateLabel(parsed);
 }
 
-function buildMarginSummary(sales: SaleRecord[]): MarginSummary {
+function buildMarginSummary(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): MarginSummary {
   const revenueMinor = sales.reduce((sum, sale) => sum + sale.totalMinor, 0);
   const costMinor = sales.reduce(
     (sum, sale) => sum + sale.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
     0
   );
-  const marginMinor = revenueMinor - costMinor;
+  const creditedRevenueMinor = creditNotes.reduce(
+    (sum, creditNote) => sum + creditNote.totalMinor,
+    0
+  );
+  const creditedCostMinor = creditNotes.reduce(
+    (sum, creditNote) =>
+      sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+    0
+  );
+  const netRevenueMinor = Math.max(revenueMinor - creditedRevenueMinor, 0);
+  const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
+  const marginMinor = netRevenueMinor - netCostMinor;
 
   return {
-    costMinor,
+    costMinor: netCostMinor,
     marginMinor,
-    marginPercent: revenueMinor > 0 ? (marginMinor / revenueMinor) * 100 : 0,
-    revenueMinor,
+    marginPercent: netRevenueMinor > 0 ? (marginMinor / netRevenueMinor) * 100 : 0,
+    revenueMinor: netRevenueMinor,
     salesCount: sales.length
   };
 }
 
-function buildProductMarginRows(sales: SaleRecord[]): ProductMarginRow[] {
+function buildProductMarginRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): ProductMarginRow[] {
   const productMap = new Map<string, ProductMarginRow>();
 
   sales.forEach((sale) => {
@@ -208,10 +226,40 @@ function buildProductMarginRows(sales: SaleRecord[]): ProductMarginRow[] {
     });
   });
 
-  return [...productMap.values()].sort((left, right) => right.marginMinor - left.marginMinor);
+  creditNotes.forEach((creditNote) => {
+    creditNote.lines.forEach((line) => {
+      const currentRow = productMap.get(line.productId) ?? {
+        costMinor: 0,
+        marginMinor: 0,
+        marginPercent: 0,
+        productId: line.productId,
+        productName: line.productName,
+        quantity: 0,
+        revenueMinor: 0
+      };
+
+      currentRow.quantity = Math.max(currentRow.quantity - line.quantity, 0);
+      currentRow.revenueMinor = Math.max(currentRow.revenueMinor - line.totalMinor, 0);
+      currentRow.costMinor = Math.max(currentRow.costMinor - line.costMinor, 0);
+      currentRow.marginMinor = currentRow.revenueMinor - currentRow.costMinor;
+      currentRow.marginPercent =
+        currentRow.revenueMinor > 0
+          ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
+          : 0;
+
+      productMap.set(line.productId, currentRow);
+    });
+  });
+
+  return [...productMap.values()]
+    .filter((row) => row.revenueMinor > 0 || row.quantity > 0)
+    .sort((left, right) => right.marginMinor - left.marginMinor);
 }
 
-function buildCustomerMarginRows(sales: SaleRecord[]): CustomerMarginRow[] {
+function buildCustomerMarginRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): CustomerMarginRow[] {
   const customerMap = new Map<string, CustomerMarginRow>();
 
   sales.forEach((sale) => {
@@ -239,22 +287,68 @@ function buildCustomerMarginRows(sales: SaleRecord[]): CustomerMarginRow[] {
     customerMap.set(sale.customerId, currentRow);
   });
 
-  return [...customerMap.values()].sort((left, right) => right.marginMinor - left.marginMinor);
+  creditNotes.forEach((creditNote) => {
+    const creditedCostMinor = creditNote.lines.reduce(
+      (sum, line) => sum + line.costMinor,
+      0
+    );
+    const currentRow = customerMap.get(creditNote.customerId) ?? {
+      costMinor: 0,
+      customerId: creditNote.customerId,
+      customerName: creditNote.customerName,
+      marginMinor: 0,
+      marginPercent: 0,
+      purchaseCount: 0,
+      revenueMinor: 0
+    };
+
+    currentRow.revenueMinor = Math.max(currentRow.revenueMinor - creditNote.totalMinor, 0);
+    currentRow.costMinor = Math.max(currentRow.costMinor - creditedCostMinor, 0);
+    currentRow.marginMinor = currentRow.revenueMinor - currentRow.costMinor;
+    currentRow.marginPercent =
+      currentRow.revenueMinor > 0
+        ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
+        : 0;
+
+    customerMap.set(creditNote.customerId, currentRow);
+  });
+
+  return [...customerMap.values()]
+    .filter((row) => row.revenueMinor > 0 || row.purchaseCount > 0)
+    .sort((left, right) => right.marginMinor - left.marginMinor);
 }
 
-function buildSaleMarginRows(sales: SaleRecord[]): SaleMarginRow[] {
+function buildSaleMarginRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): SaleMarginRow[] {
   return sales.map((sale) => {
+    const saleCreditNotes = creditNotes.filter(
+      (creditNote) => creditNote.saleId === sale.id
+    );
     const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
     const marginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
+    const creditedRevenueMinor = saleCreditNotes.reduce(
+      (sum, creditNote) => sum + creditNote.totalMinor,
+      0
+    );
+    const creditedCostMinor = saleCreditNotes.reduce(
+      (sum, creditNote) =>
+        sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+      0
+    );
+    const netRevenueMinor = Math.max(sale.totalMinor - creditedRevenueMinor, 0);
+    const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
+    const netMarginMinor = netRevenueMinor - netCostMinor;
 
     return {
-      costMinor,
+      costMinor: netCostMinor,
       customerName: sale.customerName,
-      marginMinor,
-      marginPercent: sale.totalMinor > 0 ? (marginMinor / sale.totalMinor) * 100 : 0,
+      marginMinor: netMarginMinor,
+      marginPercent: netRevenueMinor > 0 ? (netMarginMinor / netRevenueMinor) * 100 : 0,
       occurredAtLabel: sale.occurredAtLabel,
       paymentStatus: sale.paymentStatus,
-      revenueMinor: sale.totalMinor,
+      revenueMinor: netRevenueMinor,
       saleId: sale.id
     };
   });
@@ -354,6 +448,7 @@ function buildDsoSummary(input: {
 }
 
 function buildCashflowEntries(input: {
+  creditNotes: CreditNoteRecord[];
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
@@ -361,6 +456,7 @@ function buildCashflowEntries(input: {
   supplierPayments: SupplierPaymentRecord[];
 }): CashflowEntry[] {
   const entries: CashflowEntry[] = [];
+  const saleById = new Map(input.sales.map((sale) => [sale.id, sale]));
 
   input.sales.forEach((sale) => {
     if (sale.paymentStatus === "paid") {
@@ -378,6 +474,28 @@ function buildCashflowEntries(input: {
         typeLabel: "Real"
       });
     }
+  });
+
+  input.creditNotes.forEach((creditNote) => {
+    const sale = saleById.get(creditNote.saleId);
+
+    if (sale?.paymentStatus !== "paid") {
+      return;
+    }
+
+    const occurredAt = new Date(creditNote.occurredAtMs);
+    entries.push({
+      dateLabel: formatDateLabel(occurredAt),
+      dateSortMs: creditNote.occurredAtMs,
+      id: `cashflow-${creditNote.id}`,
+      inflowMinor: 0,
+      netMinor: -creditNote.totalMinor,
+      originLabel: "Nota credito",
+      outflowMinor: creditNote.totalMinor,
+      partyName: creditNote.customerName,
+      type: "real",
+      typeLabel: "Real"
+    });
   });
 
   input.purchases.forEach((purchase) => {
@@ -509,7 +627,10 @@ function buildCashflowPeriodRows(entries: CashflowEntry[]): CashflowPeriodRow[] 
   return [...periodMap.values()].sort((left, right) => left.dateSortMs - right.dateSortMs);
 }
 
-function buildUtilityPeriodRows(sales: SaleRecord[]): UtilityPeriodRow[] {
+function buildUtilityPeriodRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): UtilityPeriodRow[] {
   const periodMap = new Map<string, UtilityPeriodRow>();
 
   sales.forEach((sale) => {
@@ -537,6 +658,37 @@ function buildUtilityPeriodRows(sales: SaleRecord[]): UtilityPeriodRow[] {
     currentRow.revenueMinor += sale.totalMinor;
     currentRow.costMinor += costMinor;
     currentRow.marginMinor += marginMinor;
+    currentRow.marginPercent =
+      currentRow.revenueMinor > 0
+        ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
+        : 0;
+
+    periodMap.set(dateKey, currentRow);
+  });
+
+  creditNotes.forEach((creditNote) => {
+    const occurredAt = new Date(creditNote.occurredAtMs);
+    const dateKey = formatDateKey(occurredAt);
+    const dateSortMs = new Date(
+      occurredAt.getFullYear(),
+      occurredAt.getMonth(),
+      occurredAt.getDate()
+    ).getTime();
+    const costMinor = creditNote.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    const currentRow = periodMap.get(dateKey) ?? {
+      costMinor: 0,
+      dateKey,
+      dateLabel: formatDateLabel(occurredAt),
+      dateSortMs,
+      marginMinor: 0,
+      marginPercent: 0,
+      revenueMinor: 0,
+      salesCount: 0
+    };
+
+    currentRow.revenueMinor = Math.max(currentRow.revenueMinor - creditNote.totalMinor, 0);
+    currentRow.costMinor = Math.max(currentRow.costMinor - costMinor, 0);
+    currentRow.marginMinor = currentRow.revenueMinor - currentRow.costMinor;
     currentRow.marginPercent =
       currentRow.revenueMinor > 0
         ? (currentRow.marginMinor / currentRow.revenueMinor) * 100
@@ -575,6 +727,7 @@ function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
 }
 
 type ReportsSectionProps = {
+  creditNotes: CreditNoteRecord[];
   formatCurrency: (minor: number) => string;
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
@@ -584,6 +737,7 @@ type ReportsSectionProps = {
 };
 
 export function ReportsSection({
+  creditNotes,
   formatCurrency,
   purchases,
   receivables,
@@ -597,10 +751,10 @@ export function ReportsSection({
   const [detailView, setDetailView] = useState<ReportDetailView>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
-  const summary = buildMarginSummary(sales);
-  const productRows = buildProductMarginRows(sales);
-  const customerRows = buildCustomerMarginRows(sales);
-  const saleRows = buildSaleMarginRows(sales);
+  const summary = buildMarginSummary(sales, creditNotes);
+  const productRows = buildProductMarginRows(sales, creditNotes);
+  const customerRows = buildCustomerMarginRows(sales, creditNotes);
+  const saleRows = buildSaleMarginRows(sales, creditNotes);
   const productMaxMargin = productRows[0]?.marginMinor ?? 0;
   const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
   const saleMaxMargin = saleRows[0]?.marginMinor ?? 0;
@@ -610,6 +764,7 @@ export function ReportsSection({
   const dsoSummary = buildDsoSummary({ receivables, sales });
   const dsoClientRows = buildDsoClientRows({ receivables, sales });
   const cashflowEntries = buildCashflowEntries({
+    creditNotes,
     purchases,
     receivables,
     sales,
@@ -625,7 +780,7 @@ export function ReportsSection({
       Math.abs(row.projectedNetMinor)
     ])
   );
-  const utilityPeriodRows = buildUtilityPeriodRows(sales);
+  const utilityPeriodRows = buildUtilityPeriodRows(sales, creditNotes);
   const utilitySummary = buildUtilitySummary(utilityPeriodRows);
   const utilityMaxMargin = Math.max(1, ...utilityPeriodRows.map((row) => Math.abs(row.marginMinor)));
   const netMarginMinor = summary.marginMinor;

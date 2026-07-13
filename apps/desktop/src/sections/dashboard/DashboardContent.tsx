@@ -2,7 +2,7 @@ import { useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
 import { PanelHeader } from "../../components/PanelHeader";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
-import type { ProductRecord, SaleRecord } from "../../types";
+import type { CreditNoteRecord, ProductRecord, SaleRecord } from "../../types";
 
 type DashboardTrendRow = {
   label: string;
@@ -28,6 +28,7 @@ type DashboardTrendSeries = {
 };
 
 type DashboardContentProps = {
+  creditNotes: CreditNoteRecord[];
   formatCurrency: (minor: number) => string;
   lowStockProducts: ProductRecord[];
   metrics: Array<{ label: string; value: string }>;
@@ -37,6 +38,7 @@ type DashboardContentProps = {
 };
 
 export function DashboardContent({
+  creditNotes,
   formatCurrency,
   lowStockProducts,
   metrics,
@@ -44,7 +46,7 @@ export function DashboardContent({
   onOpenReports,
   sales
 }: DashboardContentProps) {
-  const dailyPeriodOptions = buildDashboardPeriodOptions(sales);
+  const dailyPeriodOptions = buildDashboardPeriodOptions(sales, creditNotes);
   const [periodOne, setPeriodOne] = useState(dailyPeriodOptions[0]!.value);
   const [periodTwo, setPeriodTwo] = useState(
     dailyPeriodOptions[1]?.value ?? dailyPeriodOptions[0]!.value
@@ -57,6 +59,7 @@ export function DashboardContent({
       label: "Periodo 1",
       rows: buildDashboardDailySalesRows(
         sales,
+        creditNotes,
         parseDashboardPeriodValue(periodOne)
       )
     },
@@ -65,13 +68,14 @@ export function DashboardContent({
       label: "Periodo 2",
       rows: buildDashboardDailySalesRows(
         sales,
+        creditNotes,
         parseDashboardPeriodValue(periodTwo)
       )
     }
   ];
-  const monthlySalesRows = buildDashboardMonthlySalesRows(sales);
-  const productRows = buildDashboardProductRows(sales);
-  const customerRows = buildDashboardCustomerRows(sales);
+  const monthlySalesRows = buildDashboardMonthlySalesRows(sales, creditNotes);
+  const productRows = buildDashboardProductRows(sales, creditNotes);
+  const customerRows = buildDashboardCustomerRows(sales, creditNotes);
 
   return (
     <>
@@ -231,6 +235,7 @@ function isSameLocalMonth(left: Date, right: Date): boolean {
 
 function buildDashboardDailySalesRows(
   sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[],
   referenceDate = new Date()
 ): DashboardTrendRow[] {
   const totalsByDay = new Map<number, number>();
@@ -245,6 +250,19 @@ function buildDashboardDailySalesRows(
     totalsByDay.set(
       occurredAt.getDate(),
       (totalsByDay.get(occurredAt.getDate()) ?? 0) + sale.totalMinor
+    );
+  });
+
+  creditNotes.forEach((creditNote) => {
+    const occurredAt = new Date(creditNote.occurredAtMs);
+
+    if (!isSameLocalMonth(occurredAt, referenceDate)) {
+      return;
+    }
+
+    totalsByDay.set(
+      occurredAt.getDate(),
+      Math.max((totalsByDay.get(occurredAt.getDate()) ?? 0) - creditNote.totalMinor, 0)
     );
   });
 
@@ -294,6 +312,7 @@ function shiftMonth(date: Date, offset: number): Date {
 
 function buildDashboardPeriodOptions(
   sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[],
   referenceDate = new Date()
 ): DashboardPeriodOption[] {
   const periodValues = new Set<string>([
@@ -303,6 +322,9 @@ function buildDashboardPeriodOptions(
 
   sales.forEach((sale) => {
     periodValues.add(formatDashboardPeriodValue(new Date(sale.occurredAtMs)));
+  });
+  creditNotes.forEach((creditNote) => {
+    periodValues.add(formatDashboardPeriodValue(new Date(creditNote.occurredAtMs)));
   });
 
   return [...periodValues]
@@ -315,6 +337,7 @@ function buildDashboardPeriodOptions(
 
 function buildDashboardMonthlySalesRows(
   sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[],
   referenceDate = new Date()
 ): DashboardTrendRow[] {
   const totalsByMonth = new Map<number, number>();
@@ -333,13 +356,29 @@ function buildDashboardMonthlySalesRows(
     );
   });
 
+  creditNotes.forEach((creditNote) => {
+    const occurredAt = new Date(creditNote.occurredAtMs);
+
+    if (occurredAt.getFullYear() !== referenceDate.getFullYear()) {
+      return;
+    }
+
+    totalsByMonth.set(
+      occurredAt.getMonth(),
+      Math.max((totalsByMonth.get(occurredAt.getMonth()) ?? 0) - creditNote.totalMinor, 0)
+    );
+  });
+
   return Array.from({ length: 12 }, (_, month) => ({
     label: formatter.format(new Date(referenceDate.getFullYear(), month, 1)),
     valueMinor: totalsByMonth.get(month) ?? 0
   }));
 }
 
-function buildDashboardProductRows(sales: SaleRecord[]): DashboardRankingRow[] {
+function buildDashboardProductRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): DashboardRankingRow[] {
   const productMap = new Map<
     string,
     { label: string; quantity: number; valueMinor: number }
@@ -359,7 +398,22 @@ function buildDashboardProductRows(sales: SaleRecord[]): DashboardRankingRow[] {
     });
   });
 
+  creditNotes.forEach((creditNote) => {
+    creditNote.lines.forEach((line) => {
+      const currentRow = productMap.get(line.productId) ?? {
+        label: line.productName,
+        quantity: 0,
+        valueMinor: 0
+      };
+
+      currentRow.quantity = Math.max(currentRow.quantity - line.quantity, 0);
+      currentRow.valueMinor = Math.max(currentRow.valueMinor - line.totalMinor, 0);
+      productMap.set(line.productId, currentRow);
+    });
+  });
+
   return [...productMap.entries()]
+    .filter(([, row]) => row.valueMinor > 0 || row.quantity > 0)
     .map(([id, row]) => ({
       id,
       label: row.label,
@@ -370,7 +424,10 @@ function buildDashboardProductRows(sales: SaleRecord[]): DashboardRankingRow[] {
     .slice(0, 5);
 }
 
-function buildDashboardCustomerRows(sales: SaleRecord[]): DashboardRankingRow[] {
+function buildDashboardCustomerRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): DashboardRankingRow[] {
   const customerMap = new Map<
     string,
     { label: string; purchases: number; valueMinor: number }
@@ -388,7 +445,19 @@ function buildDashboardCustomerRows(sales: SaleRecord[]): DashboardRankingRow[] 
     customerMap.set(sale.customerId, currentRow);
   });
 
+  creditNotes.forEach((creditNote) => {
+    const currentRow = customerMap.get(creditNote.customerId) ?? {
+      label: creditNote.customerName,
+      purchases: 0,
+      valueMinor: 0
+    };
+
+    currentRow.valueMinor = Math.max(currentRow.valueMinor - creditNote.totalMinor, 0);
+    customerMap.set(creditNote.customerId, currentRow);
+  });
+
   return [...customerMap.entries()]
+    .filter(([, row]) => row.valueMinor > 0 || row.purchases > 0)
     .map(([id, row]) => ({
       id,
       label: row.label,
