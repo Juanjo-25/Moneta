@@ -125,9 +125,12 @@ export type CreditNoteLineRecord = {
 };
 
 export type CreditNoteAdjustmentType = "return" | "discount";
+export type CreditNoteStatus = "draft" | "confirmed" | "void";
 
 export type CreditNoteRecord = {
   adjustmentType: CreditNoteAdjustmentType;
+  confirmedAtLabel: string;
+  confirmedAtMs: number;
   id: string;
   number: string;
   saleId: string;
@@ -137,10 +140,14 @@ export type CreditNoteRecord = {
   customerName: string;
   issuedAt: string;
   reason: string;
+  receivableDueAt: string;
+  status: CreditNoteStatus;
   totalMinor: number;
   lines: CreditNoteLineRecord[];
   occurredAtMs: number;
   occurredAtLabel: string;
+  voidedAtLabel: string;
+  voidedAtMs: number;
 };
 
 export type PurchasePaymentStatus = "paid" | "pending";

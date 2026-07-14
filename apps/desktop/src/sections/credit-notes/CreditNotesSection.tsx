@@ -9,11 +9,13 @@ import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
   CreditNoteAdjustmentType,
   CreditNoteRecord,
+  CreditNoteStatus,
   SaleLineRecord,
   SaleRecord
 } from "../../types";
@@ -33,6 +35,10 @@ type CreditNotesSectionProps = {
       quantity: number;
     }>;
   }) => string | null;
+  onSetCreditNoteStatus: (
+    creditNoteId: string,
+    status: CreditNoteStatus
+  ) => void;
   parseNonNegativeInteger: (value: string) => number | null;
   sales: SaleRecord[];
 };
@@ -76,6 +82,7 @@ export function CreditNotesSection({
   formatCurrency,
   formatIntegerInput,
   onRegisterCreditNote,
+  onSetCreditNoteStatus,
   parseNonNegativeInteger,
   sales
 }: CreditNotesSectionProps) {
@@ -257,12 +264,19 @@ export function CreditNotesSection({
             value={String(creditNotes.length)}
           />
           <SummaryCard
-            label="Total acreditado"
-            value={formatCurrency(totalCreditedMinor)}
+            label="Confirmadas"
+            value={String(
+              creditNotes.filter((creditNote) => creditNote.status === "confirmed")
+                .length
+            )}
           />
           <SummaryCard
-            label="Ventas disponibles"
-            value={String(sales.length)}
+            label="Total acreditado"
+            value={formatCurrency(
+              creditNotes
+                .filter((creditNote) => creditNote.status === "confirmed")
+                .reduce((total, creditNote) => total + creditNote.totalMinor, 0)
+            )}
           />
           <SummaryCard
             label="Total de esta nota"
@@ -446,8 +460,10 @@ export function CreditNotesSection({
               "Cliente",
               "Motivo",
               "Tipo",
+              "Estado",
               "Lineas",
-              "Total"
+              "Total",
+              "Acciones"
             ]}
           />
           <tbody>
@@ -463,8 +479,26 @@ export function CreditNotesSection({
                     ? "Descuento"
                     : "Devolución"}
                 </td>
+                <td>{formatCreditNoteStatus(creditNote.status)}</td>
                 <td>{creditNote.lines.length}</td>
                 <td>{formatCurrency(creditNote.totalMinor)}</td>
+                <td>
+                  {creditNote.status === "draft" ? (
+                    <PrimaryActionButton
+                      onClick={() => onSetCreditNoteStatus(creditNote.id, "confirmed")}
+                    >
+                      Confirmar
+                    </PrimaryActionButton>
+                  ) : null}
+                  {creditNote.status === "confirmed" ? (
+                    <SecondaryActionButton
+                      onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                      variant="compact"
+                    >
+                      Anular
+                    </SecondaryActionButton>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -489,11 +523,11 @@ function buildCreditBalanceByLine(
 } {
   return creditNotes.reduce(
     (totals, creditNote) => {
-    if (creditNote.saleId !== saleId) {
-      return totals;
-    }
+      if (creditNote.saleId !== saleId || creditNote.status === "void") {
+        return totals;
+      }
 
-    creditNote.lines.forEach((line) => {
+      creditNote.lines.forEach((line) => {
         totals.amountByLine.set(
           line.saleLineId,
           (totals.amountByLine.get(line.saleLineId) ?? 0) + line.totalMinor
@@ -502,15 +536,27 @@ function buildCreditBalanceByLine(
           line.saleLineId,
           (totals.quantityByLine.get(line.saleLineId) ?? 0) + line.quantity
         );
-    });
+      });
 
-    return totals;
+      return totals;
     },
     {
       amountByLine: new Map<string, number>(),
       quantityByLine: new Map<string, number>()
     }
   );
+}
+
+function formatCreditNoteStatus(status: CreditNoteStatus): string {
+  if (status === "confirmed") {
+    return "Confirmada";
+  }
+
+  if (status === "void") {
+    return "Anulada";
+  }
+
+  return "Borrador";
 }
 
 function calculateCreditLineTotal(line: SaleLineRecord, quantity: number): number {
