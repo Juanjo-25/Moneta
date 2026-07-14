@@ -12,6 +12,7 @@ import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
+  CreditNoteAdjustmentType,
   CreditNoteRecord,
   SaleLineRecord,
   SaleRecord
@@ -23,9 +24,11 @@ type CreditNotesSectionProps = {
   formatIntegerInput: (value: string) => string;
   onRegisterCreditNote: (input: {
     sale: SaleRecord;
+    adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
     reason: string;
     lines: Array<{
+      amountMinor: number;
       saleLineId: string;
       quantity: number;
     }>;
@@ -35,6 +38,7 @@ type CreditNotesSectionProps = {
 };
 
 type CreditNoteFormState = {
+  adjustmentType: CreditNoteAdjustmentType;
   issuedAt: string;
   reason: string;
   saleId: string;
@@ -47,9 +51,23 @@ type CreditNoteFormErrors = {
   submit?: string | undefined;
 };
 
+const creditNoteReasonsByType: Record<CreditNoteAdjustmentType, string[]> = {
+  discount: [
+    "Rebaja o descuento parcial o total",
+    "Ajuste de precio",
+    "Descuento comercial por pronto pago",
+    "Descuento comercial por volumen de ventas"
+  ],
+  return: [
+    "Devolución de parte de los bienes; no aceptación de partes del servicio",
+    "Anulación de factura electrónica"
+  ]
+};
+
 const emptyCreditNoteForm: CreditNoteFormState = {
+  adjustmentType: "return",
   issuedAt: getTodayInputValue(),
-  reason: "Devolucion de producto",
+  reason: creditNoteReasonsByType.return[0]!,
   saleId: ""
 };
 
@@ -62,26 +80,53 @@ export function CreditNotesSection({
   sales
 }: CreditNotesSectionProps) {
   const [form, setForm] = useState<CreditNoteFormState>(emptyCreditNoteForm);
+  const [lineAmounts, setLineAmounts] = useState<Record<string, string>>({});
   const [lineQuantities, setLineQuantities] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<CreditNoteFormErrors>({});
   const selectedSale = sales.find((sale) => sale.id === form.saleId) ?? null;
-  const creditedQuantityByLine = useMemo(
-    () => buildCreditedQuantityByLine(creditNotes, selectedSale?.id ?? ""),
+  const creditBalanceByLine = useMemo(
+    () => buildCreditBalanceByLine(creditNotes, selectedSale?.id ?? ""),
     [creditNotes, selectedSale?.id]
   );
   const availableLines =
-    selectedSale?.lines.map((line) => ({
-      ...line,
-      creditedQuantity: creditedQuantityByLine.get(line.id) ?? 0,
-      availableQuantity: line.quantity - (creditedQuantityByLine.get(line.id) ?? 0)
-    })) ?? [];
+    selectedSale?.lines.map((line) => {
+      const creditedAmountMinor = creditBalanceByLine.amountByLine.get(line.id) ?? 0;
+      const creditedQuantity = creditBalanceByLine.quantityByLine.get(line.id) ?? 0;
+      const availableAmountMinor = line.totalMinor - creditedAmountMinor;
+      const unitTotalMinor = line.totalMinor / line.quantity;
+
+      return {
+        ...line,
+        availableAmountMinor,
+        availableQuantity: Math.min(
+          line.quantity - creditedQuantity,
+          Math.floor(availableAmountMinor / unitTotalMinor)
+        ),
+        creditedAmountMinor,
+        creditedQuantity
+      };
+    }) ?? [];
   const selectedCreditLines = selectedSale
     ? availableLines
         .map((line) => {
+          if (form.adjustmentType === "discount") {
+            const amountMinor = parseNonNegativeInteger(lineAmounts[line.id] ?? "");
+
+            return amountMinor && amountMinor > 0
+              ? {
+                  amountMinor,
+                  line,
+                  quantity: 0,
+                  totalMinor: amountMinor
+                }
+              : null;
+          }
+
           const quantity = parseNonNegativeInteger(lineQuantities[line.id] ?? "");
 
           return quantity && quantity > 0
             ? {
+                amountMinor: calculateCreditLineTotal(line, quantity),
                 line,
                 quantity,
                 totalMinor: calculateCreditLineTotal(line, quantity)
@@ -98,20 +143,43 @@ export function CreditNotesSection({
     (total, creditNote) => total + creditNote.totalMinor,
     0
   );
+  const reasonOptions = creditNoteReasonsByType[form.adjustmentType];
 
   useEffect(() => {
+    setLineAmounts({});
     setLineQuantities({});
     setErrors({});
-  }, [form.saleId]);
+  }, [form.adjustmentType, form.saleId]);
 
   function updateField(field: keyof CreditNoteFormState, value: string) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
+  function updateAdjustmentType(adjustmentType: CreditNoteAdjustmentType) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      adjustmentType,
+      reason: creditNoteReasonsByType[adjustmentType][0]!
+    }));
+    setErrors((currentErrors) => ({ ...currentErrors, lines: undefined }));
+  }
+
   function updateLineQuantity(lineId: string, value: string) {
     setLineQuantities((currentQuantities) => ({
       ...currentQuantities,
+      [lineId]: formatIntegerInput(value)
+    }));
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      lines: undefined,
+      submit: undefined
+    }));
+  }
+
+  function updateLineAmount(lineId: string, value: string) {
+    setLineAmounts((currentAmounts) => ({
+      ...currentAmounts,
       [lineId]: formatIntegerInput(value)
     }));
     setErrors((currentErrors) => ({
@@ -133,15 +201,23 @@ export function CreditNotesSection({
       nextErrors.issuedAt = "La fecha de la nota credito es obligatoria.";
     }
     if (selectedCreditLines.length === 0) {
-      nextErrors.lines = "Debes acreditar al menos una cantidad.";
+      nextErrors.lines =
+        form.adjustmentType === "discount"
+          ? "Debes acreditar al menos un valor."
+          : "Debes acreditar al menos una cantidad.";
     }
 
-    const invalidLine = selectedCreditLines.find(
-      ({ line, quantity }) => quantity > line.availableQuantity
+    const invalidLine = selectedCreditLines.find(({ amountMinor, line, quantity }) =>
+      form.adjustmentType === "discount"
+        ? amountMinor > line.availableAmountMinor
+        : quantity > line.availableQuantity
     );
 
     if (invalidLine) {
-      nextErrors.lines = "La cantidad a acreditar supera lo disponible.";
+      nextErrors.lines =
+        form.adjustmentType === "discount"
+          ? "El valor a acreditar supera lo disponible."
+          : "La cantidad a acreditar supera lo disponible.";
     }
 
     setErrors(nextErrors);
@@ -151,8 +227,10 @@ export function CreditNotesSection({
     }
 
     const submitError = onRegisterCreditNote({
+      adjustmentType: form.adjustmentType,
       issuedAt: form.issuedAt.trim(),
-      lines: selectedCreditLines.map(({ line, quantity }) => ({
+      lines: selectedCreditLines.map(({ amountMinor, line, quantity }) => ({
+        amountMinor,
         quantity,
         saleLineId: line.id
       })),
@@ -220,11 +298,33 @@ export function CreditNotesSection({
               type="date"
               value={form.issuedAt}
             />
-            <TextField
-              label="Motivo"
-              onChange={(value) => updateField("reason", value)}
-              value={form.reason}
-            />
+            <label className="field" htmlFor="tipo-nota-credito">
+              <span>Tipo de ajuste</span>
+              <select
+                id="tipo-nota-credito"
+                onChange={(event) =>
+                  updateAdjustmentType(event.target.value as CreditNoteAdjustmentType)
+                }
+                value={form.adjustmentType}
+              >
+                <option value="return">Devolución de productos</option>
+                <option value="discount">Descuento / ajuste de valor</option>
+              </select>
+            </label>
+            <label className="field" htmlFor="motivo-nota-credito">
+              <span>Motivo</span>
+              <select
+                id="motivo-nota-credito"
+                onChange={(event) => updateField("reason", event.target.value)}
+                value={form.reason}
+              >
+                {reasonOptions.map((reason) => (
+                  <option key={reason} value={reason}>
+                    {reason}
+                  </option>
+                ))}
+              </select>
+            </label>
             <TextField
               label="Cliente"
               onChange={() => undefined}
@@ -238,7 +338,11 @@ export function CreditNotesSection({
         <section className="document-lines" aria-label="Detalle nota credito">
           <div className="document-lines-heading">
             <h2>Detalle a acreditar</h2>
-            <span>Selecciona las cantidades que regresan al inventario.</span>
+            <span>
+              {form.adjustmentType === "discount"
+                ? "Ingresa el valor que reduce la venta sin mover inventario."
+                : "Selecciona las cantidades que regresan al inventario."}
+            </span>
           </div>
 
           {selectedSale ? (
@@ -249,7 +353,7 @@ export function CreditNotesSection({
                   "Vendido",
                   "Acreditado",
                   "Disponible",
-                  "Cantidad nota",
+                  form.adjustmentType === "discount" ? "Valor nota" : "Cantidad nota",
                   "Total nota"
                 ]}
               />
@@ -262,20 +366,43 @@ export function CreditNotesSection({
                     <tr key={line.id}>
                       <td>{line.productName}</td>
                       <td>{line.quantity}</td>
-                      <td>{line.creditedQuantity}</td>
-                      <td>{line.availableQuantity}</td>
                       <td>
-                        <input
-                          aria-label={`Cantidad a acreditar ${line.productName}`}
-                          inputMode="numeric"
-                          onChange={(event) =>
-                            updateLineQuantity(line.id, event.target.value)
-                          }
-                          value={lineQuantities[line.id] ?? ""}
-                        />
+                        {form.adjustmentType === "discount"
+                          ? formatCurrency(line.creditedAmountMinor)
+                          : line.creditedQuantity}
                       </td>
                       <td>
-                        {formatCurrency(calculateCreditLineTotal(line, parsedQuantity))}
+                        {form.adjustmentType === "discount"
+                          ? formatCurrency(line.availableAmountMinor)
+                          : line.availableQuantity}
+                      </td>
+                      <td>
+                        {form.adjustmentType === "discount" ? (
+                          <input
+                            aria-label={`Valor a acreditar ${line.productName}`}
+                            inputMode="numeric"
+                            onChange={(event) =>
+                              updateLineAmount(line.id, event.target.value)
+                            }
+                            value={lineAmounts[line.id] ?? ""}
+                          />
+                        ) : (
+                          <input
+                            aria-label={`Cantidad a acreditar ${line.productName}`}
+                            inputMode="numeric"
+                            onChange={(event) =>
+                              updateLineQuantity(line.id, event.target.value)
+                            }
+                            value={lineQuantities[line.id] ?? ""}
+                          />
+                        )}
+                      </td>
+                      <td>
+                        {formatCurrency(
+                          form.adjustmentType === "discount"
+                            ? parseNonNegativeInteger(lineAmounts[line.id] ?? "") ?? 0
+                            : calculateCreditLineTotal(line, parsedQuantity)
+                        )}
                       </td>
                     </tr>
                   );
@@ -296,6 +423,11 @@ export function CreditNotesSection({
 
         <SummaryCard compact>
           <span>Lineas acreditadas {selectedCreditLines.length}</span>
+          <span>
+            {form.adjustmentType === "discount"
+              ? "Sin movimiento de inventario"
+              : "Devuelve inventario"}
+          </span>
           <strong>Total nota {formatCurrency(creditTotalMinor)}</strong>
         </SummaryCard>
 
@@ -313,7 +445,8 @@ export function CreditNotesSection({
               "Venta",
               "Cliente",
               "Motivo",
-              "Productos",
+              "Tipo",
+              "Lineas",
               "Total"
             ]}
           />
@@ -325,6 +458,11 @@ export function CreditNotesSection({
                 <td>{creditNote.invoiceNumber}</td>
                 <td>{creditNote.customerName}</td>
                 <td>{creditNote.reason}</td>
+                <td>
+                  {creditNote.adjustmentType === "discount"
+                    ? "Descuento"
+                    : "Devolución"}
+                </td>
                 <td>{creditNote.lines.length}</td>
                 <td>{formatCurrency(creditNote.totalMinor)}</td>
               </tr>
@@ -342,21 +480,37 @@ export function CreditNotesSection({
   );
 }
 
-function buildCreditedQuantityByLine(
+function buildCreditBalanceByLine(
   creditNotes: CreditNoteRecord[],
   saleId: string
-): Map<string, number> {
-  return creditNotes.reduce((totals, creditNote) => {
+): {
+  amountByLine: Map<string, number>;
+  quantityByLine: Map<string, number>;
+} {
+  return creditNotes.reduce(
+    (totals, creditNote) => {
     if (creditNote.saleId !== saleId) {
       return totals;
     }
 
     creditNote.lines.forEach((line) => {
-      totals.set(line.saleLineId, (totals.get(line.saleLineId) ?? 0) + line.quantity);
+        totals.amountByLine.set(
+          line.saleLineId,
+          (totals.amountByLine.get(line.saleLineId) ?? 0) + line.totalMinor
+        );
+        totals.quantityByLine.set(
+          line.saleLineId,
+          (totals.quantityByLine.get(line.saleLineId) ?? 0) + line.quantity
+        );
     });
 
     return totals;
-  }, new Map<string, number>());
+    },
+    {
+      amountByLine: new Map<string, number>(),
+      quantityByLine: new Map<string, number>()
+    }
+  );
 }
 
 function calculateCreditLineTotal(line: SaleLineRecord, quantity: number): number {

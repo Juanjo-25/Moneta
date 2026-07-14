@@ -27,6 +27,7 @@ import type {
   CustomerRecord,
   AppSettings,
   CustomerValidationOptions,
+  CreditNoteAdjustmentType,
   CreditNoteRecord,
   ProductRecord,
   PurchasePaymentStatus,
@@ -906,9 +907,11 @@ export function App() {
 
   function registerCreditNoteInSession(input: {
     sale: SaleRecord;
+    adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
     reason: string;
     lines: Array<{
+      amountMinor: number;
       saleLineId: string;
       quantity: number;
     }>;
@@ -924,13 +927,26 @@ export function App() {
 
       return totals;
     }, new Map<string, number>());
+    const creditedAmountByLine = creditNotes.reduce((totals, creditNote) => {
+      if (creditNote.saleId !== input.sale.id) {
+        return totals;
+      }
+
+      creditNote.lines.forEach((line) => {
+        totals.set(line.saleLineId, (totals.get(line.saleLineId) ?? 0) + line.totalMinor);
+      });
+
+      return totals;
+    }, new Map<string, number>());
     const selectedLines = input.lines
       .map((line) => {
         const saleLine = input.sale.lines.find(
           (currentLine) => currentLine.id === line.saleLineId
         );
 
-        return saleLine ? { quantity: line.quantity, saleLine } : null;
+        return saleLine
+          ? { amountMinor: line.amountMinor, quantity: line.quantity, saleLine }
+          : null;
       })
       .filter((line): line is NonNullable<typeof line> => line !== null);
 
@@ -938,30 +954,47 @@ export function App() {
       return "Debes acreditar al menos una linea de la venta.";
     }
 
-    const invalidLine = selectedLines.find(({ quantity, saleLine }) => {
+    const invalidLine = selectedLines.find(({ amountMinor, quantity, saleLine }) => {
+      const alreadyCreditedAmount = creditedAmountByLine.get(saleLine.id) ?? 0;
       const alreadyCredited = creditedQuantityByLine.get(saleLine.id) ?? 0;
-      return quantity <= 0 || quantity > saleLine.quantity - alreadyCredited;
+      return input.adjustmentType === "discount"
+        ? amountMinor <= 0 || amountMinor > saleLine.totalMinor - alreadyCreditedAmount
+        : quantity <= 0 ||
+            quantity > saleLine.quantity - alreadyCredited ||
+            amountMinor > saleLine.totalMinor - alreadyCreditedAmount;
     });
 
     if (invalidLine) {
-      return "La cantidad a acreditar supera lo disponible en la venta.";
+      return input.adjustmentType === "discount"
+        ? "El valor a acreditar supera lo disponible en la venta."
+        : "La cantidad a acreditar supera lo disponible en la venta.";
     }
 
     const occurredAtMs = Date.now();
     const occurredAt = new Date(occurredAtMs);
     const creditNoteId = `credit-note-${occurredAtMs}`;
-    const lines = selectedLines.map(({ quantity, saleLine }, index) => ({
-      costMinor: Math.round((saleLine.costMinor / saleLine.quantity) * quantity),
+    const lines = selectedLines.map(({ amountMinor, quantity, saleLine }, index) => ({
+      costMinor:
+        input.adjustmentType === "discount"
+          ? 0
+          : Math.round((saleLine.costMinor / saleLine.quantity) * quantity),
       discountPercent: saleLine.discountPercent,
       id: `${creditNoteId}-line-${index}`,
-      marginMinor: Math.round((saleLine.marginMinor / saleLine.quantity) * quantity),
-      marginPercent: saleLine.marginPercent,
+      marginMinor:
+        input.adjustmentType === "discount"
+          ? amountMinor
+          : Math.round((saleLine.marginMinor / saleLine.quantity) * quantity),
+      marginPercent:
+        input.adjustmentType === "discount" ? 100 : saleLine.marginPercent,
       productId: saleLine.productId,
       productName: saleLine.productName,
-      quantity,
+      quantity: input.adjustmentType === "discount" ? 0 : quantity,
       saleLineId: saleLine.id,
       taxPercent: saleLine.taxPercent,
-      totalMinor: Math.round((saleLine.totalMinor / saleLine.quantity) * quantity),
+      totalMinor:
+        input.adjustmentType === "discount"
+          ? amountMinor
+          : Math.round((saleLine.totalMinor / saleLine.quantity) * quantity),
       unit: saleLine.unit,
       unitPriceMinor: saleLine.unitPriceMinor
     }));
@@ -980,6 +1013,7 @@ export function App() {
     );
     setCreditNotes((currentCreditNotes) => [
       {
+        adjustmentType: input.adjustmentType,
         customer: input.sale.customer,
         customerId: input.sale.customerId,
         customerName: input.sale.customerName,
@@ -990,7 +1024,9 @@ export function App() {
         number: `NC-${String(currentCreditNotes.length + 1).padStart(3, "0")}`,
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         occurredAtMs,
-        reason: input.reason.trim() || "Devolucion de producto",
+        reason:
+          input.reason.trim() ||
+          "Devolución de parte de los bienes; no aceptación de partes del servicio",
         saleId: input.sale.id,
         totalMinor
       },

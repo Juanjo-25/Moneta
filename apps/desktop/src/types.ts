@@ -124,7 +124,10 @@ export type CreditNoteLineRecord = {
   totalMinor: number;
 };
 
+export type CreditNoteAdjustmentType = "return" | "discount";
+
 export type CreditNoteRecord = {
+  adjustmentType: CreditNoteAdjustmentType;
   id: string;
   number: string;
   saleId: string;

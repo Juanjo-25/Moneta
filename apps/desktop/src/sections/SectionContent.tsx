@@ -18,6 +18,7 @@ import type {
   AppSettings,
   CustomerFormErrors,
   CustomerFormState,
+  CreditNoteAdjustmentType,
   CustomerRecord,
   CreditNoteRecord,
   ProductRecord,
@@ -133,9 +134,11 @@ type SectionContentProps = {
   }) => string | null;
   onRegisterCreditNote: (input: {
     sale: SaleRecord;
+    adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
     reason: string;
     lines: Array<{
+      amountMinor: number;
       saleLineId: string;
       quantity: number;
     }>;
