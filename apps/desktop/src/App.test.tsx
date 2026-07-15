@@ -504,8 +504,8 @@ describe("App navigation", () => {
       })
     ).toBeTruthy();
     expect(
-      screen.getByRole("option", { name: "Anulación de factura electrónica" })
-    ).toBeTruthy();
+      screen.queryByRole("option", { name: "Anulación de factura electrónica" })
+    ).toBeNull();
     expect(
       screen.queryByRole("option", { name: "Rebaja o descuento parcial o total" })
     ).toBeNull();
@@ -525,7 +525,12 @@ describe("App navigation", () => {
     ).toBeTruthy();
     expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*4\.500/)).toBeTruthy();
-    await user.click(within(creditNotesTable).getByRole("button", { name: "Confirmar" }));
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
+    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    expect(within(reviewPanel).getByText("Entran 1 unidades")).toBeTruthy();
+    expect(within(reviewPanel).getByText("Sin saldo por cobrar")).toBeTruthy();
+    expect(within(reviewPanel).getByText("Arroz libra")).toBeTruthy();
+    await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
     expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
@@ -600,7 +605,10 @@ describe("App navigation", () => {
     expect(within(creditNotesTable).getByText("Descuento")).toBeTruthy();
     expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*1\.000/)).toBeTruthy();
-    await user.click(within(creditNotesTable).getByRole("button", { name: "Confirmar" }));
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
+    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    expect(within(reviewPanel).getAllByText("Sin movimiento")).toHaveLength(2);
+    await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
     expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
@@ -675,7 +683,8 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
-    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
@@ -709,7 +718,8 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
-    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
 

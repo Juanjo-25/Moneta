@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -65,8 +66,7 @@ const creditNoteReasonsByType: Record<CreditNoteAdjustmentType, string[]> = {
     "Descuento comercial por volumen de ventas"
   ],
   return: [
-    "Devolución de parte de los bienes; no aceptación de partes del servicio",
-    "Anulación de factura electrónica"
+    "Devolución de parte de los bienes; no aceptación de partes del servicio"
   ]
 };
 
@@ -90,6 +90,7 @@ export function CreditNotesSection({
   const [lineAmounts, setLineAmounts] = useState<Record<string, string>>({});
   const [lineQuantities, setLineQuantities] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<CreditNoteFormErrors>({});
+  const [reviewCreditNoteId, setReviewCreditNoteId] = useState<string | null>(null);
   const selectedSale = sales.find((sale) => sale.id === form.saleId) ?? null;
   const creditBalanceByLine = useMemo(
     () => buildCreditBalanceByLine(creditNotes, selectedSale?.id ?? ""),
@@ -467,40 +468,66 @@ export function CreditNotesSection({
             ]}
           />
           <tbody>
-            {creditNotes.map((creditNote) => (
-              <tr key={creditNote.id}>
-                <td>{creditNote.occurredAtLabel}</td>
-                <td>{creditNote.number}</td>
-                <td>{creditNote.invoiceNumber}</td>
-                <td>{creditNote.customerName}</td>
-                <td>{creditNote.reason}</td>
-                <td>
-                  {creditNote.adjustmentType === "discount"
-                    ? "Descuento"
-                    : "Devolución"}
-                </td>
-                <td>{formatCreditNoteStatus(creditNote.status)}</td>
-                <td>{creditNote.lines.length}</td>
-                <td>{formatCurrency(creditNote.totalMinor)}</td>
-                <td>
-                  {creditNote.status === "draft" ? (
-                    <PrimaryActionButton
-                      onClick={() => onSetCreditNoteStatus(creditNote.id, "confirmed")}
-                    >
-                      Confirmar
-                    </PrimaryActionButton>
+            {creditNotes.map((creditNote) => {
+              const relatedSale =
+                sales.find((sale) => sale.id === creditNote.saleId) ?? null;
+              const isReviewing = reviewCreditNoteId === creditNote.id;
+
+              return (
+                <Fragment key={creditNote.id}>
+                  <tr>
+                    <td>{creditNote.occurredAtLabel}</td>
+                    <td>{creditNote.number}</td>
+                    <td>{creditNote.invoiceNumber}</td>
+                    <td>{creditNote.customerName}</td>
+                    <td>{creditNote.reason}</td>
+                    <td>
+                      {creditNote.adjustmentType === "discount"
+                        ? "Descuento"
+                        : "Devolución"}
+                    </td>
+                    <td>{formatCreditNoteStatus(creditNote.status)}</td>
+                    <td>{creditNote.lines.length}</td>
+                    <td>{formatCurrency(creditNote.totalMinor)}</td>
+                    <td>
+                      {creditNote.status === "draft" ? (
+                        <PrimaryActionButton
+                          onClick={() =>
+                            setReviewCreditNoteId(isReviewing ? null : creditNote.id)
+                          }
+                        >
+                          Revisar
+                        </PrimaryActionButton>
+                      ) : null}
+                      {creditNote.status === "confirmed" ? (
+                        <SecondaryActionButton
+                          onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                          variant="compact"
+                        >
+                          Anular
+                        </SecondaryActionButton>
+                      ) : null}
+                    </td>
+                  </tr>
+                  {isReviewing ? (
+                    <tr className="credit-note-review-row">
+                      <td colSpan={10}>
+                        <CreditNoteReviewPanel
+                          creditNote={creditNote}
+                          formatCurrency={formatCurrency}
+                          onCancel={() => setReviewCreditNoteId(null)}
+                          onConfirm={() => {
+                            onSetCreditNoteStatus(creditNote.id, "confirmed");
+                            setReviewCreditNoteId(null);
+                          }}
+                          salePaymentStatus={relatedSale?.paymentStatus ?? "paid"}
+                        />
+                      </td>
+                    </tr>
                   ) : null}
-                  {creditNote.status === "confirmed" ? (
-                    <SecondaryActionButton
-                      onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
-                      variant="compact"
-                    >
-                      Anular
-                    </SecondaryActionButton>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </DataTable>
       ) : (
@@ -510,6 +537,111 @@ export function CreditNotesSection({
           title="Sin notas credito"
         />
       )}
+    </section>
+  );
+}
+
+type CreditNoteReviewPanelProps = {
+  creditNote: CreditNoteRecord;
+  formatCurrency: (minor: number) => string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  salePaymentStatus: SaleRecord["paymentStatus"];
+};
+
+function CreditNoteReviewPanel({
+  creditNote,
+  formatCurrency,
+  onCancel,
+  onConfirm,
+  salePaymentStatus
+}: CreditNoteReviewPanelProps) {
+  const totalReturnedQuantity = creditNote.lines.reduce(
+    (total, line) => total + line.quantity,
+    0
+  );
+
+  return (
+    <section
+      aria-label={`Resumen antes de confirmar ${creditNote.number}`}
+      className="credit-note-review"
+    >
+      <div className="credit-note-review-heading">
+        <div>
+          <span>Resumen antes de confirmar</span>
+          <strong>{creditNote.number}</strong>
+        </div>
+        <div className="credit-note-review-actions">
+          <SecondaryActionButton onClick={onCancel} variant="compact">
+            Cancelar
+          </SecondaryActionButton>
+          <PrimaryActionButton onClick={onConfirm}>Confirmar nota</PrimaryActionButton>
+        </div>
+      </div>
+
+      <div className="credit-note-impact-grid">
+        <div>
+          <span>Venta afectada</span>
+          <strong>{creditNote.invoiceNumber}</strong>
+          <small>{creditNote.customerName}</small>
+        </div>
+        <div>
+          <span>Total acreditado</span>
+          <strong>{formatCurrency(creditNote.totalMinor)}</strong>
+          <small>{formatCreditNoteAdjustmentType(creditNote.adjustmentType)}</small>
+        </div>
+        <div>
+          <span>Inventario</span>
+          <strong>
+            {creditNote.adjustmentType === "return"
+              ? `Entran ${totalReturnedQuantity} unidades`
+              : "Sin movimiento"}
+          </strong>
+          <small>
+            {creditNote.adjustmentType === "return"
+              ? "Se suma stock al confirmar."
+              : "Solo reduce el valor de la venta."}
+          </small>
+        </div>
+        <div>
+          <span>Cartera</span>
+          <strong>
+            {salePaymentStatus === "pending"
+              ? `Reduce ${formatCurrency(creditNote.totalMinor)}`
+              : "Sin saldo por cobrar"}
+          </strong>
+          <small>
+            {salePaymentStatus === "pending"
+              ? "Se descuenta de cartera al confirmar."
+              : "Queda como ajuste de venta pagada."}
+          </small>
+        </div>
+      </div>
+
+      <DataTable ariaLabel={`Lineas del resumen ${creditNote.number}`}>
+        <DataTableHeader
+          labels={[
+            "Producto",
+            "Cantidad",
+            "Valor unitario",
+            "Total acreditado"
+          ]}
+        />
+        <tbody>
+          {creditNote.lines.map((line) => (
+            <tr key={line.id}>
+              <td>{line.productName}</td>
+              <td>
+                {creditNote.adjustmentType === "return"
+                  ? `${line.quantity} ${line.unit}`
+                  : "Sin movimiento"}
+              </td>
+              <td>{formatCurrency(line.unitPriceMinor)}</td>
+              <td>{formatCurrency(line.totalMinor)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
     </section>
   );
 }
@@ -557,6 +689,14 @@ function formatCreditNoteStatus(status: CreditNoteStatus): string {
   }
 
   return "Borrador";
+}
+
+function formatCreditNoteAdjustmentType(
+  adjustmentType: CreditNoteAdjustmentType
+): string {
+  return adjustmentType === "discount"
+    ? "Descuento / ajuste de valor"
+    : "Devolución de productos";
 }
 
 function calculateCreditLineTotal(line: SaleLineRecord, quantity: number): number {

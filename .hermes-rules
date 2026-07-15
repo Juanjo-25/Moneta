@@ -1,0 +1,46 @@
+# Reglas para Hermes Agent en Moneta
+
+Moneta es una app de escritorio local para Windows, pensada para un solo computador. No asumas nube, multiusuario, backend remoto ni facturación fiscal/DIAN si el usuario no lo pide.
+
+## Forma de trabajo
+
+- Lee primero el código actual antes de proponer o cambiar.
+- Haz cambios pequeños, atómicos y orientados a un comportamiento concreto.
+- Si hay cambios locales que no hiciste, no los reviertas.
+- Mantén la UI en español.
+- Respeta el monorepo:
+  - `apps/desktop`: React/Tauri.
+  - `packages/domain`: reglas puras de dominio.
+  - `packages/application`: casos de uso.
+- La integración con SQLite está pausada hasta que el usuario la retome explícitamente.
+
+## Reglas de producto
+
+- Ventas pendientes también descuentan inventario.
+- Las facturas son PDF directo del lado cliente, no DOCX ni DIAN.
+- Las ventas/facturas históricas conservan la foto original del cliente aunque luego se edite.
+- Clientes inactivos siguen visibles en historia, cartera y reportes, pero no se usan en ventas nuevas.
+- `Proveedores` es un directorio editable; Antioquia es valor por defecto, no bloqueado.
+- `Compras` no debe pedir ni mostrar `Vendedor`.
+- El número de factura de compra se genera automáticamente.
+- En compras, la fecha de vencimiento solo aparece si está pendiente.
+- Si se crea un producto desde compras, se guarda primero sin costo; el costo real va en la línea de compra.
+- `Cartera` es un tablero único con dos vistas: `Por cobrar` y `Por pagar`.
+- `Notas credito` es una sección propia; no reescribe ventas históricas, reconcilia inventario/cartera/reportes.
+
+## UI
+
+- Moneta es una herramienta operativa: prioriza claridad, densidad, tablas, formularios y jerarquía visual.
+- No conviertas pantallas internas en landing pages.
+- Reutiliza patrones existentes, especialmente `TextField` para ayuda/error.
+- Si el usuario pide revisión “en texto”, responde primero con crítica textual.
+- Si pide hacerlo “más atómico”, reduce el alcance a un slice pequeño.
+
+## Verificación
+
+Usa preferiblemente:
+
+```bash
+CI=true pnpm --config.confirmModulesPurge=false --filter @moneta/desktop test
+CI=true pnpm --config.confirmModulesPurge=false --filter @moneta/desktop typecheck
+CI=true pnpm --config.confirmModulesPurge=false --filter @moneta/desktop build

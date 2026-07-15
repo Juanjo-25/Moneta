@@ -1224,6 +1224,75 @@ button,
   gap: 18px;
 }
 
+.credit-note-review-row td {
+  background: var(--surface-soft);
+}
+
+.credit-note-review {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  padding: 14px;
+}
+
+.credit-note-review-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.credit-note-review-heading div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.credit-note-review-heading span,
+.credit-note-impact-grid span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.credit-note-review-heading strong {
+  color: var(--text-primary);
+  font-size: 17px;
+}
+
+.credit-note-review-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.credit-note-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.credit-note-impact-grid > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  padding: 12px;
+}
+
+.credit-note-impact-grid strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.credit-note-impact-grid small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 .customers-layout {
   display: grid;
   gap: 18px;
