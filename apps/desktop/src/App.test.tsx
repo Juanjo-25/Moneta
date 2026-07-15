@@ -318,8 +318,9 @@ describe("App navigation", () => {
     await user.click(within(productPieChart).getByRole("button", { name: "Seleccionar Arroz libra" }));
     expect(within(productPieChart).getByText("Producto seleccionado")).toBeTruthy();
     expect(within(productPieChart).getByText("2 unidades")).toBeTruthy();
-    expect(screen.getByText("Arroz libra")).toBeTruthy();
+    expect(within(productPieChart).getAllByText("Arroz libra").length).toBeGreaterThan(0);
     expect(screen.getByText("Ana Perez")).toBeTruthy();
+    expect(screen.getByText("Ana Perez").closest(".dashboard-ranking-row")).toBeTruthy();
     expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 
@@ -497,6 +498,17 @@ describe("App navigation", () => {
       screen.getByLabelText("Venta acreditada"),
       screen.getByRole("option", { name: "001 - Ana Perez" })
     );
+    expect(
+      screen.getByRole("option", {
+        name: "Devolución de parte de los bienes; no aceptación de partes del servicio"
+      })
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("option", { name: "Anulación de factura electrónica" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: "Rebaja o descuento parcial o total" })
+    ).toBeNull();
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
 
@@ -506,7 +518,20 @@ describe("App navigation", () => {
     expect(within(creditNotesTable).getByText("NC-001")).toBeTruthy();
     expect(within(creditNotesTable).getByText("001")).toBeTruthy();
     expect(within(creditNotesTable).getByText("Ana Perez")).toBeTruthy();
+    expect(
+      within(creditNotesTable).getByText(
+        "Devolución de parte de los bienes; no aceptación de partes del servicio"
+      )
+    ).toBeTruthy();
+    expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*4\.500/)).toBeTruthy();
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
+    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    expect(within(reviewPanel).getByText("Entran 1 unidades")).toBeTruthy();
+    expect(within(reviewPanel).getByText("Sin saldo por cobrar")).toBeTruthy();
+    expect(within(reviewPanel).getByText("Arroz libra")).toBeTruthy();
+    await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
+    expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
@@ -515,6 +540,119 @@ describe("App navigation", () => {
       within(productsTable).getByRole("row", {
         name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
       })
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Notas credito" }));
+    await user.click(screen.getByRole("button", { name: "Anular" }));
+    expect(screen.getByText("Anulada")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    expect(
+      within(screen.getByRole("table", { name: "Productos registrados" })).getByRole(
+        "row",
+        {
+          name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+        }
+      )
+    ).toBeTruthy();
+  });
+
+  it("registers a discount credit note without returning inventory", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Descuento");
+    await user.type(screen.getByLabelText("NIT o C.C."), "555");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Notas credito" }));
+    await user.selectOptions(
+      screen.getByLabelText("Venta acreditada"),
+      screen.getByRole("option", { name: "001 - Cliente Descuento" })
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Tipo de ajuste"),
+      screen.getByRole("option", { name: "Descuento / ajuste de valor" })
+    );
+    expect((screen.getByLabelText("Motivo") as HTMLSelectElement).value).toBe(
+      "Rebaja o descuento parcial o total"
+    );
+    expect(
+      screen.queryByRole("option", {
+        name: "Devolución de parte de los bienes; no aceptación de partes del servicio"
+      })
+    ).toBeNull();
+    expect(screen.getByRole("option", { name: "Ajuste de precio" })).toBeTruthy();
+    await user.type(screen.getByLabelText("Valor a acreditar Arroz libra"), "1000");
+    await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
+
+    const creditNotesTable = screen.getByRole("table", {
+      name: "Notas credito registradas"
+    });
+    expect(
+      within(creditNotesTable).getByText("Rebaja o descuento parcial o total")
+    ).toBeTruthy();
+    expect(within(creditNotesTable).getByText("Descuento")).toBeTruthy();
+    expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
+    expect(within(creditNotesTable).getByText(/\$\s*1\.000/)).toBeTruthy();
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
+    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    expect(within(reviewPanel).getAllByText("Sin movimiento")).toHaveLength(2);
+    await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
+    expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+      })
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
+
+    const metrics = screen.getByRole("region", { name: "Resumen analitico" });
+    const monthSalesCard = within(metrics)
+      .getByText("Ventas del mes")
+      .closest(".metric-card");
+    expect(monthSalesCard).toBeTruthy();
+    expect(within(monthSalesCard as HTMLElement).getByText(/\$\s*8\.000/)).toBeTruthy();
+    expect(
+      within(screen.getByLabelText("Grafico productos mas vendidos")).getByText("2 unidades")
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+
+    const profitabilitySummary = screen.getByLabelText("Resumen rentabilidad general");
+    expect(within(profitabilitySummary).getByText(/\$\s*8\.000/)).toBeTruthy();
+    expect(within(profitabilitySummary).getByText(/\$\s*6\.400/)).toBeTruthy();
+    expect(within(profitabilitySummary).getAllByText(/\$\s*1\.600/)).toHaveLength(2);
+
+    await user.click(
+      within(screen.getByRole("tablist", { name: "Tipos de reportes" })).getByRole("tab", {
+        name: "Flujo de caja"
+      })
+    );
+
+    const cashflowSummary = screen.getByLabelText("Resumen flujo de caja");
+    expect(within(cashflowSummary).getByText(/\$\s*9\.000/)).toBeTruthy();
+    expect(within(cashflowSummary).getByText(/\$\s*1\.000/)).toBeTruthy();
+    expect(within(cashflowSummary).getByText(/\$\s*8\.000/)).toBeTruthy();
+    expect(
+      within(screen.getByRole("table", { name: "Detalle flujo de caja" })).getByText(
+        "Nota credito"
+      )
     ).toBeTruthy();
   });
 
@@ -545,6 +683,8 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
+    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
@@ -578,6 +718,8 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
+    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
 

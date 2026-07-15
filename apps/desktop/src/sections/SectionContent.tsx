@@ -18,6 +18,8 @@ import type {
   AppSettings,
   CustomerFormErrors,
   CustomerFormState,
+  CreditNoteAdjustmentType,
+  CreditNoteStatus,
   CustomerRecord,
   CreditNoteRecord,
   ProductRecord,
@@ -133,13 +135,19 @@ type SectionContentProps = {
   }) => string | null;
   onRegisterCreditNote: (input: {
     sale: SaleRecord;
+    adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
     reason: string;
     lines: Array<{
+      amountMinor: number;
       saleLineId: string;
       quantity: number;
     }>;
   }) => string | null;
+  onSetCreditNoteStatus: (
+    creditNoteId: string,
+    status: CreditNoteStatus
+  ) => void;
   onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
   onDeleteSale: (saleId: string) => void;
   onRegisterSupplierPayment: (input: {
@@ -190,6 +198,7 @@ export function SectionContent({
   onRegisterPaidSale,
   onRegisterPendingSale,
   onRegisterCreditNote,
+  onSetCreditNoteStatus,
   onUpdateSale,
   onDeleteSale,
   onRegisterSupplierPayment,
@@ -291,6 +300,7 @@ export function SectionContent({
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
         onRegisterCreditNote={onRegisterCreditNote}
+        onSetCreditNoteStatus={onSetCreditNoteStatus}
         parseNonNegativeInteger={parseNonNegativeInteger}
         sales={sales}
       />
@@ -342,7 +352,7 @@ export function SectionContent({
   if (section.id === "reports") {
     return (
       <ReportsSection
-        creditNotes={creditNotes}
+        creditNotes={creditNotes.filter((creditNote) => creditNote.status === "confirmed")}
         formatCurrency={formatCurrency}
         purchases={purchases}
         receivables={receivables}

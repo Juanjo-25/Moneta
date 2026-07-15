@@ -27,7 +27,9 @@ import type {
   CustomerRecord,
   AppSettings,
   CustomerValidationOptions,
+  CreditNoteAdjustmentType,
   CreditNoteRecord,
+  CreditNoteStatus,
   ProductRecord,
   PurchasePaymentStatus,
   PurchaseRecord,
@@ -296,14 +298,17 @@ export function App() {
         : total,
     0
   );
-  const creditNotesTodayTotal = creditNotes.reduce(
+  const confirmedCreditNotes = creditNotes.filter(
+    (creditNote) => creditNote.status === "confirmed"
+  );
+  const creditNotesTodayTotal = confirmedCreditNotes.reduce(
     (total, creditNote) =>
       isSameLocalDay(new Date(creditNote.occurredAtMs), today)
         ? total + creditNote.totalMinor
         : total,
     0
   );
-  const creditNotesMonthTotal = creditNotes.reduce(
+  const creditNotesMonthTotal = confirmedCreditNotes.reduce(
     (total, creditNote) =>
       isSameLocalMonth(new Date(creditNote.occurredAtMs), today)
         ? total + creditNote.totalMinor
@@ -906,20 +911,33 @@ export function App() {
 
   function registerCreditNoteInSession(input: {
     sale: SaleRecord;
+    adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
     reason: string;
     lines: Array<{
+      amountMinor: number;
       saleLineId: string;
       quantity: number;
     }>;
   }): string | null {
     const creditedQuantityByLine = creditNotes.reduce((totals, creditNote) => {
-      if (creditNote.saleId !== input.sale.id) {
+      if (creditNote.saleId !== input.sale.id || creditNote.status === "void") {
         return totals;
       }
 
       creditNote.lines.forEach((line) => {
         totals.set(line.saleLineId, (totals.get(line.saleLineId) ?? 0) + line.quantity);
+      });
+
+      return totals;
+    }, new Map<string, number>());
+    const creditedAmountByLine = creditNotes.reduce((totals, creditNote) => {
+      if (creditNote.saleId !== input.sale.id || creditNote.status === "void") {
+        return totals;
+      }
+
+      creditNote.lines.forEach((line) => {
+        totals.set(line.saleLineId, (totals.get(line.saleLineId) ?? 0) + line.totalMinor);
       });
 
       return totals;
@@ -930,7 +948,9 @@ export function App() {
           (currentLine) => currentLine.id === line.saleLineId
         );
 
-        return saleLine ? { quantity: line.quantity, saleLine } : null;
+        return saleLine
+          ? { amountMinor: line.amountMinor, quantity: line.quantity, saleLine }
+          : null;
       })
       .filter((line): line is NonNullable<typeof line> => line !== null);
 
@@ -938,48 +958,57 @@ export function App() {
       return "Debes acreditar al menos una linea de la venta.";
     }
 
-    const invalidLine = selectedLines.find(({ quantity, saleLine }) => {
+    const invalidLine = selectedLines.find(({ amountMinor, quantity, saleLine }) => {
+      const alreadyCreditedAmount = creditedAmountByLine.get(saleLine.id) ?? 0;
       const alreadyCredited = creditedQuantityByLine.get(saleLine.id) ?? 0;
-      return quantity <= 0 || quantity > saleLine.quantity - alreadyCredited;
+      return input.adjustmentType === "discount"
+        ? amountMinor <= 0 || amountMinor > saleLine.totalMinor - alreadyCreditedAmount
+        : quantity <= 0 ||
+            quantity > saleLine.quantity - alreadyCredited ||
+            amountMinor > saleLine.totalMinor - alreadyCreditedAmount;
     });
 
     if (invalidLine) {
-      return "La cantidad a acreditar supera lo disponible en la venta.";
+      return input.adjustmentType === "discount"
+        ? "El valor a acreditar supera lo disponible en la venta."
+        : "La cantidad a acreditar supera lo disponible en la venta.";
     }
 
     const occurredAtMs = Date.now();
     const occurredAt = new Date(occurredAtMs);
     const creditNoteId = `credit-note-${occurredAtMs}`;
-    const lines = selectedLines.map(({ quantity, saleLine }, index) => ({
-      costMinor: Math.round((saleLine.costMinor / saleLine.quantity) * quantity),
+    const lines = selectedLines.map(({ amountMinor, quantity, saleLine }, index) => ({
+      costMinor:
+        input.adjustmentType === "discount"
+          ? 0
+          : Math.round((saleLine.costMinor / saleLine.quantity) * quantity),
       discountPercent: saleLine.discountPercent,
       id: `${creditNoteId}-line-${index}`,
-      marginMinor: Math.round((saleLine.marginMinor / saleLine.quantity) * quantity),
-      marginPercent: saleLine.marginPercent,
+      marginMinor:
+        input.adjustmentType === "discount"
+          ? amountMinor
+          : Math.round((saleLine.marginMinor / saleLine.quantity) * quantity),
+      marginPercent:
+        input.adjustmentType === "discount" ? 100 : saleLine.marginPercent,
       productId: saleLine.productId,
       productName: saleLine.productName,
-      quantity,
+      quantity: input.adjustmentType === "discount" ? 0 : quantity,
       saleLineId: saleLine.id,
       taxPercent: saleLine.taxPercent,
-      totalMinor: Math.round((saleLine.totalMinor / saleLine.quantity) * quantity),
+      totalMinor:
+        input.adjustmentType === "discount"
+          ? amountMinor
+          : Math.round((saleLine.totalMinor / saleLine.quantity) * quantity),
       unit: saleLine.unit,
       unitPriceMinor: saleLine.unitPriceMinor
     }));
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
 
-    setProducts((currentProducts) =>
-      currentProducts.map((product) => {
-        const returnedQuantity = lines
-          .filter((line) => line.productId === product.id)
-          .reduce((total, line) => total + line.quantity, 0);
-
-        return returnedQuantity > 0
-          ? { ...product, stock: product.stock + returnedQuantity }
-          : product;
-      })
-    );
     setCreditNotes((currentCreditNotes) => [
       {
+        adjustmentType: input.adjustmentType,
+        confirmedAtLabel: "",
+        confirmedAtMs: 0,
         customer: input.sale.customer,
         customerId: input.sale.customerId,
         customerName: input.sale.customerName,
@@ -990,26 +1019,147 @@ export function App() {
         number: `NC-${String(currentCreditNotes.length + 1).padStart(3, "0")}`,
         occurredAtLabel: formatOccurredAtLabel(occurredAt),
         occurredAtMs,
-        reason: input.reason.trim() || "Devolucion de producto",
+        receivableDueAt:
+          receivables.find((receivable) => receivable.saleId === input.sale.id)?.dueAt ??
+          "",
+        reason:
+          input.reason.trim() ||
+          "Devolución de parte de los bienes; no aceptación de partes del servicio",
         saleId: input.sale.id,
-        totalMinor
+        status: "draft",
+        totalMinor,
+        voidedAtLabel: "",
+        voidedAtMs: 0
       },
       ...currentCreditNotes
     ]);
+
+    return null;
+  }
+
+  function applyCreditNoteEffects(creditNote: CreditNoteRecord) {
+    if (creditNote.adjustmentType === "return") {
+      setProducts((currentProducts) =>
+        currentProducts.map((product) => {
+          const returnedQuantity = creditNote.lines
+            .filter((line) => line.productId === product.id)
+            .reduce((total, line) => total + line.quantity, 0);
+
+          return returnedQuantity > 0
+            ? { ...product, stock: product.stock + returnedQuantity }
+            : product;
+        })
+      );
+    }
+
     setReceivables((currentReceivables) =>
       currentReceivables
         .map((receivable) =>
-          receivable.saleId === input.sale.id
+          receivable.saleId === creditNote.saleId
             ? {
                 ...receivable,
-                amountMinor: Math.max(receivable.amountMinor - totalMinor, 0)
+                amountMinor: Math.max(receivable.amountMinor - creditNote.totalMinor, 0)
               }
             : receivable
         )
         .filter((receivable) => receivable.amountMinor > 0)
     );
+  }
 
-    return null;
+  function reverseCreditNoteEffects(creditNote: CreditNoteRecord) {
+    if (creditNote.adjustmentType === "return") {
+      setProducts((currentProducts) =>
+        currentProducts.map((product) => {
+          const returnedQuantity = creditNote.lines
+            .filter((line) => line.productId === product.id)
+            .reduce((total, line) => total + line.quantity, 0);
+
+          return returnedQuantity > 0
+            ? { ...product, stock: Math.max(product.stock - returnedQuantity, 0) }
+            : product;
+        })
+      );
+    }
+
+    const sale = sales.find((currentSale) => currentSale.id === creditNote.saleId);
+
+    if (sale?.paymentStatus !== "pending") {
+      return;
+    }
+
+    setReceivables((currentReceivables) => {
+      const existingReceivable = currentReceivables.find(
+        (receivable) => receivable.saleId === creditNote.saleId
+      );
+
+      if (existingReceivable) {
+        return currentReceivables.map((receivable) =>
+          receivable.saleId === creditNote.saleId
+            ? {
+                ...receivable,
+                amountMinor: receivable.amountMinor + creditNote.totalMinor
+              }
+            : receivable
+        );
+      }
+
+      return [
+        {
+          amountMinor: creditNote.totalMinor,
+          customerId: creditNote.customerId,
+          customerName: creditNote.customerName,
+          dueAt: creditNote.receivableDueAt,
+          id: `receivable-${creditNote.saleId}`,
+          saleId: creditNote.saleId,
+          status: "pending"
+        },
+        ...currentReceivables
+      ];
+    });
+  }
+
+  function setCreditNoteStatus(creditNoteId: string, status: CreditNoteStatus) {
+    const selectedCreditNote =
+      creditNotes.find((creditNote) => creditNote.id === creditNoteId) ?? null;
+
+    if (!selectedCreditNote) {
+      return;
+    }
+
+    const occurredAt = new Date();
+
+    if (status === "confirmed" && selectedCreditNote.status === "draft") {
+      applyCreditNoteEffects(selectedCreditNote);
+      setCreditNotes((currentCreditNotes) =>
+        currentCreditNotes.map((creditNote) =>
+          creditNote.id === creditNoteId
+            ? {
+                ...creditNote,
+                confirmedAtLabel: formatOccurredAtLabel(occurredAt),
+                confirmedAtMs: occurredAt.getTime(),
+                status: "confirmed"
+              }
+            : creditNote
+        )
+      );
+      return;
+    }
+
+    if (status === "void" && selectedCreditNote.status === "confirmed") {
+      reverseCreditNoteEffects(selectedCreditNote);
+      setCreditNotes((currentCreditNotes) =>
+        currentCreditNotes.map((creditNote) =>
+          creditNote.id === creditNoteId
+            ? {
+                ...creditNote,
+                status: "void",
+                voidedAtLabel: formatOccurredAtLabel(occurredAt),
+                voidedAtMs: occurredAt.getTime()
+              }
+            : creditNote
+        )
+      );
+    }
   }
 
   return (
@@ -1070,7 +1220,7 @@ export function App() {
 
         {activeSection.id === "dashboard" ? (
           <DashboardContent
-            creditNotes={creditNotes}
+            creditNotes={confirmedCreditNotes}
             formatCurrency={formatCurrency}
             lowStockProducts={lowStockProducts}
             metrics={metrics}
@@ -1098,6 +1248,7 @@ export function App() {
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterCreditNote={registerCreditNoteInSession}
+            onSetCreditNoteStatus={setCreditNoteStatus}
             onUpdateSale={updateSaleInSession}
             onDeleteSale={deleteSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}
