@@ -6,6 +6,7 @@ export type SectionId =
   | "customers"
   | "suppliers"
   | "credit-notes"
+  | "cash-receipts"
   | "receivables"
   | "reports"
   | "settings";
@@ -104,8 +105,25 @@ export type ReceivableRecord = {
   customerName: string;
   saleId: string;
   amountMinor: number;
+  originalAmountMinor: number;
+  paidAmountMinor: number;
+  balanceMinor: number;
   dueAt: string;
-  status: "pending";
+  status: "pending" | "partial";
+};
+
+export type CustomerReceiptRecord = {
+  id: string;
+  number: string;
+  receivableId: string;
+  saleId: string;
+  customerId: string;
+  customerName: string;
+  amountMinor: number;
+  concept: string;
+  receivedAt: string;
+  receivedAtMs: number;
+  receivedAtLabel: string;
 };
 
 export type CreditNoteLineRecord = {

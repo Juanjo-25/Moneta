@@ -30,6 +30,7 @@ import type {
   CreditNoteAdjustmentType,
   CreditNoteRecord,
   CreditNoteStatus,
+  CustomerReceiptRecord,
   ProductRecord,
   PurchasePaymentStatus,
   PurchaseRecord,
@@ -120,6 +121,14 @@ const navigationItems: SectionConfig[] = [
     description: "Devoluciones y ajustes de ventas",
     emptyTitle: "Sin notas credito",
     emptyBody: "Las devoluciones registradas apareceran aqui."
+  },
+  {
+    id: "cash-receipts",
+    label: "Recibos de caja",
+    title: "Recibos de caja",
+    description: "Abonos y pagos recibidos de clientes",
+    emptyTitle: "Sin recibos registrados",
+    emptyBody: "Los pagos de cartera de clientes apareceran aqui."
   },
   {
     id: "customers",
@@ -256,6 +265,10 @@ function getSupplierPayableStatus(input: {
   return input.paidAmountMinor > 0 ? "partial" : "pending";
 }
 
+function getReceivableStatus(paidAmountMinor: number): ReceivableRecord["status"] {
+  return paidAmountMinor > 0 ? "partial" : "pending";
+}
+
 function isLowStock(product: ProductRecord): boolean {
   return product.stock <= product.minimumStock;
 }
@@ -267,6 +280,7 @@ export function App() {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [creditNotes, setCreditNotes] = useState<CreditNoteRecord[]>([]);
   const [receivables, setReceivables] = useState<ReceivableRecord[]>([]);
+  const [customerReceipts, setCustomerReceipts] = useState<CustomerReceiptRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [supplierPayables, setSupplierPayables] = useState<SupplierPayableRecord[]>([]);
@@ -716,10 +730,13 @@ export function App() {
       setReceivables((currentReceivables) => [
         {
           amountMinor: totalMinor,
+          balanceMinor: totalMinor,
           customerId: input.customer.id,
           customerName: input.customer.name,
           dueAt: input.dueAt ?? "",
           id: `receivable-${saleId}`,
+          originalAmountMinor: totalMinor,
+          paidAmountMinor: 0,
           saleId,
           status: "pending"
         },
@@ -867,10 +884,13 @@ export function App() {
         ? [
             {
               amountMinor: input.sale.totalMinor,
+              balanceMinor: input.sale.totalMinor,
               customerId: input.sale.customerId,
               customerName: input.sale.customerName,
               dueAt: input.dueAt,
               id: `receivable-${input.sale.id}`,
+              originalAmountMinor: input.sale.totalMinor,
+              paidAmountMinor: 0,
               saleId: input.sale.id,
               status: "pending"
             },
@@ -903,6 +923,9 @@ export function App() {
     setSales((currentSales) => currentSales.filter((currentSale) => currentSale.id !== saleId));
     setReceivables((currentReceivables) =>
       currentReceivables.filter((receivable) => receivable.saleId !== saleId)
+    );
+    setCustomerReceipts((currentReceipts) =>
+      currentReceipts.filter((receipt) => receipt.saleId !== saleId)
     );
     setCreditNotes((currentCreditNotes) =>
       currentCreditNotes.filter((creditNote) => creditNote.saleId !== saleId)
@@ -1054,15 +1077,29 @@ export function App() {
 
     setReceivables((currentReceivables) =>
       currentReceivables
-        .map((receivable) =>
-          receivable.saleId === creditNote.saleId
-            ? {
-                ...receivable,
-                amountMinor: Math.max(receivable.amountMinor - creditNote.totalMinor, 0)
-              }
-            : receivable
-        )
-        .filter((receivable) => receivable.amountMinor > 0)
+        .map((receivable) => {
+          if (receivable.saleId !== creditNote.saleId) {
+            return receivable;
+          }
+
+          const originalAmountMinor = Math.max(
+            receivable.originalAmountMinor - creditNote.totalMinor,
+            0
+          );
+          const balanceMinor = Math.max(
+            originalAmountMinor - receivable.paidAmountMinor,
+            0
+          );
+
+          return {
+            ...receivable,
+            amountMinor: balanceMinor,
+            balanceMinor,
+            originalAmountMinor,
+            status: getReceivableStatus(receivable.paidAmountMinor)
+          };
+        })
+        .filter((receivable) => receivable.balanceMinor > 0)
     );
   }
 
@@ -1095,10 +1132,22 @@ export function App() {
       if (existingReceivable) {
         return currentReceivables.map((receivable) =>
           receivable.saleId === creditNote.saleId
-            ? {
-                ...receivable,
-                amountMinor: receivable.amountMinor + creditNote.totalMinor
-              }
+            ? (() => {
+                const originalAmountMinor =
+                  receivable.originalAmountMinor + creditNote.totalMinor;
+                const balanceMinor = Math.max(
+                  originalAmountMinor - receivable.paidAmountMinor,
+                  0
+                );
+
+                return {
+                  ...receivable,
+                  amountMinor: balanceMinor,
+                  balanceMinor,
+                  originalAmountMinor,
+                  status: getReceivableStatus(receivable.paidAmountMinor)
+                };
+              })()
             : receivable
         );
       }
@@ -1106,16 +1155,85 @@ export function App() {
       return [
         {
           amountMinor: creditNote.totalMinor,
+          balanceMinor: creditNote.totalMinor,
           customerId: creditNote.customerId,
           customerName: creditNote.customerName,
           dueAt: creditNote.receivableDueAt,
           id: `receivable-${creditNote.saleId}`,
+          originalAmountMinor: creditNote.totalMinor,
+          paidAmountMinor: 0,
           saleId: creditNote.saleId,
           status: "pending"
         },
         ...currentReceivables
       ];
     });
+  }
+
+  function registerCustomerReceipt(input: {
+    receivableId: string;
+    amountMinor: number;
+    concept: string;
+    receivedAt: string;
+  }): string | null {
+    const selectedReceivable =
+      receivables.find((receivable) => receivable.id === input.receivableId) ?? null;
+
+    if (!selectedReceivable) {
+      return "La cuenta por cobrar ya no esta disponible.";
+    }
+    if (input.amountMinor <= 0) {
+      return "El valor recibido debe ser mayor a cero.";
+    }
+    if (input.amountMinor > selectedReceivable.balanceMinor) {
+      return "El recibo no puede superar el saldo pendiente.";
+    }
+
+    const receivedAtMs = parseLocalDate(input.receivedAt)?.getTime() ?? Date.now();
+    const receivedAtDate = new Date(receivedAtMs);
+
+    setCustomerReceipts((currentReceipts) => [
+      {
+        amountMinor: input.amountMinor,
+        concept: input.concept.trim() || "Abono cartera cliente",
+        customerId: selectedReceivable.customerId,
+        customerName: selectedReceivable.customerName,
+        id: `cash-receipt-${receivedAtMs}`,
+        number: `RC-${String(currentReceipts.length + 1).padStart(3, "0")}`,
+        receivableId: selectedReceivable.id,
+        receivedAt: input.receivedAt,
+        receivedAtLabel: formatOccurredAtLabel(receivedAtDate),
+        receivedAtMs,
+        saleId: selectedReceivable.saleId
+      },
+      ...currentReceipts
+    ]);
+
+    setReceivables((currentReceivables) =>
+      currentReceivables
+        .map((receivable) => {
+          if (receivable.id !== input.receivableId) {
+            return receivable;
+          }
+
+          const paidAmountMinor = receivable.paidAmountMinor + input.amountMinor;
+          const balanceMinor = Math.max(
+            receivable.originalAmountMinor - paidAmountMinor,
+            0
+          );
+
+          return {
+            ...receivable,
+            amountMinor: balanceMinor,
+            balanceMinor,
+            paidAmountMinor,
+            status: getReceivableStatus(paidAmountMinor)
+          };
+        })
+        .filter((receivable) => receivable.balanceMinor > 0)
+    );
+
+    return null;
   }
 
   function setCreditNoteStatus(creditNoteId: string, status: CreditNoteStatus) {
@@ -1248,6 +1366,7 @@ export function App() {
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterCreditNote={registerCreditNoteInSession}
+            onRegisterCustomerReceipt={registerCustomerReceipt}
             onSetCreditNoteStatus={setCreditNoteStatus}
             onUpdateSale={updateSaleInSession}
             onDeleteSale={deleteSaleInSession}
@@ -1263,6 +1382,7 @@ export function App() {
             products={products}
             purchases={purchases}
             receivables={receivables}
+            customerReceipts={customerReceipts}
             sales={sales}
             salesDraft={salesDraft}
             section={activeSection}

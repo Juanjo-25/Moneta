@@ -409,7 +409,7 @@ describe("App navigation", () => {
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
+    expect(within(receivablesTable).getAllByText(/\$\s*13\.500/)).toHaveLength(2);
   });
 
   it("requires a due date for pending sales", async () => {
@@ -472,7 +472,97 @@ describe("App navigation", () => {
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receivablesTable).getByText("2026-07-15")).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*9\.000/)).toBeTruthy();
+    expect(within(receivablesTable).getAllByText(/\$\s*9\.000/)).toHaveLength(2);
+  });
+
+  it("registers a cash receipt for a customer receivable and updates cartera balance", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "3");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-20");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Recibos de caja" }));
+    await user.selectOptions(
+      screen.getByLabelText("Cuenta por cobrar"),
+      screen.getByRole("option", { name: /Carlos Ruiz - sale-/ })
+    );
+    await user.clear(screen.getByLabelText("Fecha recibo"));
+    await user.type(screen.getByLabelText("Fecha recibo"), "2026-07-21");
+    await user.type(screen.getByLabelText("Valor recibido"), "5000");
+    await user.click(screen.getByRole("button", { name: "Guardar recibo" }));
+
+    const receiptsTable = screen.getByRole("table", {
+      name: "Recibos de caja registrados"
+    });
+    expect(within(receiptsTable).getByText("RC-001")).toBeTruthy();
+    expect(within(receiptsTable).getByText("Carlos Ruiz")).toBeTruthy();
+    expect(within(receiptsTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+
+    const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
+    expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
+    expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
+    expect(within(receivablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    expect(within(receivablesTable).getByText(/\$\s*8\.500/)).toBeTruthy();
+    expect(within(receivablesTable).getByText("Abonada")).toBeTruthy();
+  });
+
+  it("uses cash receipts as real inflows and keeps the remaining receivable projected", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "3");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-20");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Recibos de caja" }));
+    await user.selectOptions(
+      screen.getByLabelText("Cuenta por cobrar"),
+      screen.getByRole("option", { name: /Carlos Ruiz - sale-/ })
+    );
+    await user.type(screen.getByLabelText("Valor recibido"), "5000");
+    await user.click(screen.getByRole("button", { name: "Guardar recibo" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByRole("tablist", { name: "Tipos de reportes" })).getByRole(
+        "tab",
+        { name: "Flujo de caja" }
+      )
+    );
+
+    const cashflowTable = screen.getByRole("table", { name: "Detalle flujo de caja" });
+    expect(within(cashflowTable).getByText("Recibo de caja")).toBeTruthy();
+    expect(within(cashflowTable).getByText("Cuenta por cobrar")).toBeTruthy();
+    expect(within(cashflowTable).getAllByText(/\$\s*5\.000/)).toHaveLength(2);
+    expect(within(cashflowTable).getAllByText(/\$\s*8\.500/)).toHaveLength(2);
   });
 
   it("registers a credit note for a paid sale and returns stock", async () => {
@@ -689,7 +779,7 @@ describe("App navigation", () => {
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*4\.500/)).toBeTruthy();
+    expect(within(receivablesTable).getAllByText(/\$\s*4\.500/)).toHaveLength(2);
     expect(within(receivablesTable).queryByText(/\$\s*9\.000/)).toBeNull();
   });
 
@@ -846,7 +936,7 @@ describe("App navigation", () => {
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*11\.500/)).toBeTruthy();
+    expect(within(receivablesTable).getAllByText(/\$\s*11\.500/)).toHaveLength(2);
   });
 
   it("preloads the product sale price and allows overriding it before adding a line", async () => {

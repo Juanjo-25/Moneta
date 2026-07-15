@@ -220,7 +220,17 @@ function ReceivablesTable({
   return (
     <DataTable ariaLabel="Cartera por cobrar">
       <DataTableHeader
-        labels={["Cliente", "Venta", "Vence", "Saldo", "Rango", "Alerta", "Estado"]}
+        labels={[
+          "Cliente",
+          "Venta",
+          "Vence",
+          "Original",
+          "Recibido",
+          "Saldo",
+          "Rango",
+          "Alerta",
+          "Estado"
+        ]}
       />
       <tbody>
         {receivables.map((receivable) => {
@@ -231,10 +241,12 @@ function ReceivablesTable({
               <td>{receivable.customerName}</td>
               <td>{receivable.saleId}</td>
               <td>{receivable.dueAt || "Sin vencimiento"}</td>
-              <td>{formatCurrency(receivable.amountMinor)}</td>
+              <td>{formatCurrency(receivable.originalAmountMinor)}</td>
+              <td>{formatCurrency(receivable.paidAmountMinor)}</td>
+              <td>{formatCurrency(receivable.balanceMinor)}</td>
               <td>{dueMetadata.bucketLabel}</td>
               <td>{dueMetadata.alertLabel}</td>
-              <td>Pendiente</td>
+              <td>{receivable.status === "partial" ? "Abonada" : "Pendiente"}</td>
             </tr>
           );
         })}
