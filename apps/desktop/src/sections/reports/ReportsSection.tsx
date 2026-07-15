@@ -11,6 +11,7 @@ import { SubmenuSwitch } from "../../components/SubmenuSwitch";
 import { parseLocalDate } from "../../lib/dates";
 import type {
   CreditNoteRecord,
+  CustomerReceiptRecord,
   PurchaseRecord,
   ReceivableRecord,
   SaleRecord,
@@ -449,6 +450,7 @@ function buildDsoSummary(input: {
 
 function buildCashflowEntries(input: {
   creditNotes: CreditNoteRecord[];
+  customerReceipts: CustomerReceiptRecord[];
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
@@ -527,6 +529,22 @@ function buildCashflowEntries(input: {
       originLabel: "Abono proveedor",
       outflowMinor: payment.amountMinor,
       partyName: payment.supplierName,
+      type: "real",
+      typeLabel: "Real"
+    });
+  });
+
+  input.customerReceipts.forEach((receipt) => {
+    const receivedAt = new Date(receipt.receivedAtMs);
+    entries.push({
+      dateLabel: formatDateLabel(receivedAt),
+      dateSortMs: receipt.receivedAtMs,
+      id: receipt.id,
+      inflowMinor: receipt.amountMinor,
+      netMinor: receipt.amountMinor,
+      originLabel: "Recibo de caja",
+      outflowMinor: 0,
+      partyName: receipt.customerName,
       type: "real",
       typeLabel: "Real"
     });
@@ -728,6 +746,7 @@ function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
 
 type ReportsSectionProps = {
   creditNotes: CreditNoteRecord[];
+  customerReceipts: CustomerReceiptRecord[];
   formatCurrency: (minor: number) => string;
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
@@ -738,6 +757,7 @@ type ReportsSectionProps = {
 
 export function ReportsSection({
   creditNotes,
+  customerReceipts,
   formatCurrency,
   purchases,
   receivables,
@@ -765,6 +785,7 @@ export function ReportsSection({
   const dsoClientRows = buildDsoClientRows({ receivables, sales });
   const cashflowEntries = buildCashflowEntries({
     creditNotes,
+    customerReceipts,
     purchases,
     receivables,
     sales,
