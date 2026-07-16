@@ -12,6 +12,7 @@ import { parseLocalDate } from "../../lib/dates";
 import type {
   CreditNoteRecord,
   CustomerReceiptRecord,
+  PurchaseExpenseCategory,
   PurchaseRecord,
   ReceivableRecord,
   SaleRecord,
@@ -133,6 +134,7 @@ type UtilitySummary = {
 
 type ExpenseEntry = {
   amountMinor: number;
+  categoryLabel: string;
   dateLabel: string;
   dateSortMs: number;
   id: string;
@@ -151,8 +153,8 @@ type ExpenseSummary = {
 
 type ExpenseOriginRow = {
   amountMinor: number;
+  categoryLabel: string;
   count: number;
-  originLabel: string;
   participationPercent: number;
 };
 
@@ -188,6 +190,20 @@ function formatLocalDateLabel(value: string): string {
   }
 
   return formatDateLabel(parsed);
+}
+
+function formatExpenseCategory(category: PurchaseExpenseCategory): string {
+  const labels: Record<PurchaseExpenseCategory, string> = {
+    inventory: "Inventario / proveedores",
+    services: "Servicios",
+    payroll: "Nomina",
+    rent: "Arriendo",
+    transport: "Transporte",
+    taxes: "Impuestos",
+    other: "Otros"
+  };
+
+  return labels[category];
 }
 
 function buildMarginSummary(
@@ -786,6 +802,7 @@ function buildExpenseEntries(input: {
 
     entries.push({
       amountMinor: purchase.totalMinor,
+      categoryLabel: formatExpenseCategory(purchase.expenseCategory),
       dateLabel: formatDateLabel(occurredAt),
       dateSortMs: purchase.occurredAtMs,
       id: `expense-purchase-${purchase.id}`,
@@ -802,6 +819,9 @@ function buildExpenseEntries(input: {
 
     entries.push({
       amountMinor: payment.amountMinor,
+      categoryLabel: formatExpenseCategory(
+        payment.expenseCategory ?? purchase?.expenseCategory ?? "inventory"
+      ),
       dateLabel: formatDateLabel(paidAt),
       dateSortMs: payment.paidAtMs,
       id: `expense-payment-${payment.id}`,
@@ -819,6 +839,7 @@ function buildExpenseEntries(input: {
 
       entries.push({
         amountMinor: payable.balanceMinor,
+        categoryLabel: formatExpenseCategory(payable.expenseCategory),
         dateLabel: formatLocalDateLabel(payable.dueAt),
         dateSortMs: dueAtMs,
         id: `expense-payable-${payable.id}`,
@@ -849,14 +870,14 @@ function buildExpenseSummary(entries: ExpenseEntry[]): ExpenseSummary {
 }
 
 function buildExpenseOriginRows(entries: ExpenseEntry[]): ExpenseOriginRow[] {
-  const originMap = new Map<string, ExpenseOriginRow>();
+  const categoryMap = new Map<string, ExpenseOriginRow>();
   const totalExpenseMinor = entries.reduce((sum, entry) => sum + entry.amountMinor, 0);
 
   entries.forEach((entry) => {
-    const currentRow = originMap.get(entry.originLabel) ?? {
+    const currentRow = categoryMap.get(entry.categoryLabel) ?? {
       amountMinor: 0,
+      categoryLabel: entry.categoryLabel,
       count: 0,
-      originLabel: entry.originLabel,
       participationPercent: 0
     };
 
@@ -865,10 +886,10 @@ function buildExpenseOriginRows(entries: ExpenseEntry[]): ExpenseOriginRow[] {
     currentRow.participationPercent =
       totalExpenseMinor > 0 ? (currentRow.amountMinor / totalExpenseMinor) * 100 : 0;
 
-    originMap.set(entry.originLabel, currentRow);
+    categoryMap.set(entry.categoryLabel, currentRow);
   });
 
-  return [...originMap.values()].sort((left, right) => right.amountMinor - left.amountMinor);
+  return [...categoryMap.values()].sort((left, right) => right.amountMinor - left.amountMinor);
 }
 
 type ReportsSectionProps = {

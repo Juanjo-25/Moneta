@@ -169,6 +169,14 @@ export type CreditNoteRecord = {
 };
 
 export type PurchasePaymentStatus = "paid" | "pending";
+export type PurchaseExpenseCategory =
+  | "inventory"
+  | "services"
+  | "payroll"
+  | "rent"
+  | "transport"
+  | "taxes"
+  | "other";
 
 export type PurchaseLineRecord = {
   id: string;
@@ -189,6 +197,7 @@ export type PurchaseRecord = {
   id: string;
   supplierId: string;
   supplierName: string;
+  expenseCategory: PurchaseExpenseCategory;
   branch: string;
   prefix: string;
   currency: "COP";
@@ -237,6 +246,7 @@ export type SupplierPayableRecord = {
   id: string;
   supplierId: string;
   supplierName: string;
+  expenseCategory: PurchaseExpenseCategory;
   purchaseId: string;
   invoiceNumber: string;
   originalAmountMinor: number;
@@ -252,6 +262,7 @@ export type SupplierPaymentRecord = {
   purchaseId: string;
   supplierId: string;
   supplierName: string;
+  expenseCategory: PurchaseExpenseCategory;
   amountMinor: number;
   paidAtMs: number;
   paidAtLabel: string;

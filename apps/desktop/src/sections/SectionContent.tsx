@@ -25,6 +25,7 @@ import type {
   CustomerRecord,
   CreditNoteRecord,
   ProductRecord,
+  PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
   ReceivableRecord,
@@ -72,6 +73,7 @@ type SectionContentProps = {
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
+    expenseCategory: PurchaseExpenseCategory;
     lines: Array<{
       product: ProductRecord;
       unit: string;
