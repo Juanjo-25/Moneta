@@ -1158,6 +1158,7 @@ describe("App navigation", () => {
     ).toBe("true");
     expect(within(submenu).getByRole("tab", { name: "DSO" })).toBeTruthy();
     expect(within(submenu).getByRole("tab", { name: "Flujo de caja" })).toBeTruthy();
+    expect(within(submenu).getByRole("tab", { name: "Egresos" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cascada" })).toBeNull();
 
     const profitabilityMenu = screen.getByRole("tablist", { name: "Tipos de rentabilidad" });
@@ -1336,6 +1337,80 @@ describe("App navigation", () => {
     expect(within(table).getByText("Cuenta por pagar")).toBeTruthy();
     expect(within(table).getByText("Cliente Proyectado")).toBeTruthy();
     expect(within(table).getAllByText("Proveedor Flujo").length).toBeGreaterThan(0);
+  });
+
+  it("shows detailed company expenses in the egresos report", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSupplierFixture(user, "Proveedor Egresos");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-01");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "3");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.selectOptions(
+      screen.getByLabelText("Proveedor"),
+      screen.getByRole("option", { name: "Proveedor Egresos" })
+    );
+    await user.clear(screen.getByLabelText("Fecha emision"));
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-02");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.clear(screen.getByLabelText("Cantidad compra"));
+    await user.type(screen.getByLabelText("Cantidad compra"), "5");
+    await user.clear(screen.getByLabelText("Costo unitario"));
+    await user.type(screen.getByLabelText("Costo unitario"), "2000");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-07-25");
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+    await user.click(screen.getByRole("radio", { name: "Por pagar" }));
+    const payablesTable = screen.getByRole("table", { name: "Cartera por pagar" });
+    await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "4000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByRole("tablist", { name: "Tipos de reportes" })).getByRole("tab", {
+        name: "Egresos"
+      })
+    );
+
+    const summary = screen.getByLabelText("Resumen egresos");
+    expect(within(summary).getByText("Egresos reales")).toBeTruthy();
+    expect(within(summary).getByText("Egresos proyectados")).toBeTruthy();
+    expect(within(summary).getByText("Compromisos totales")).toBeTruthy();
+    expect(within(summary).getByText("Proveedores")).toBeTruthy();
+    expect(within(summary).getByText(/\$\s*13\.000/)).toBeTruthy();
+    expect(within(summary).getByText(/\$\s*6\.000/)).toBeTruthy();
+    expect(within(summary).getByText(/\$\s*19\.000/)).toBeTruthy();
+
+    expect(screen.getByLabelText("Grafico egresos por origen")).toBeTruthy();
+
+    const originTable = screen.getByRole("table", { name: "Resumen egresos por origen" });
+    expect(within(originTable).getByText("Compra pagada")).toBeTruthy();
+    expect(within(originTable).getByText("Abono proveedor")).toBeTruthy();
+    expect(within(originTable).getByText("Cuenta por pagar")).toBeTruthy();
+
+    const detailTable = screen.getByRole("table", { name: "Detalle egresos" });
+    expect(within(detailTable).getAllByText("Real")).toHaveLength(2);
+    expect(within(detailTable).getByText("Proyectado")).toBeTruthy();
+    expect(within(detailTable).getAllByText("Proveedor Egresos").length).toBeGreaterThan(0);
+    expect(within(detailTable).getByText(/\$\s*9\.000/)).toBeTruthy();
+    expect(within(detailTable).getByText(/\$\s*4\.000/)).toBeTruthy();
+    expect(within(detailTable).getByText(/\$\s*6\.000/)).toBeTruthy();
   });
 
   it("shows utilidades by day after renaming variacion directa", async () => {

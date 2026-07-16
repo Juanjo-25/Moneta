@@ -32,6 +32,7 @@ import type {
   CreditNoteStatus,
   CustomerReceiptRecord,
   ProductRecord,
+  PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
   ReceivableRecord,
@@ -484,6 +485,7 @@ export function App() {
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
+    expenseCategory: PurchaseExpenseCategory;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -543,6 +545,7 @@ export function App() {
         branch: input.branch,
         concept: input.concept,
         currency: "COP",
+        expenseCategory: input.expenseCategory,
         id: purchaseId,
         invoiceNumber: input.invoiceNumber,
         issuedAt: input.issuedAt,
@@ -568,6 +571,7 @@ export function App() {
         {
           balanceMinor: totalMinor,
           dueAt: input.dueAt,
+          expenseCategory: input.expenseCategory,
           id: `payable-${purchaseId}`,
           invoiceNumber: input.invoiceNumber,
           originalAmountMinor: totalMinor,
@@ -592,6 +596,7 @@ export function App() {
       setSupplierPayments((currentPayments) => [
         {
           amountMinor: input.amountMinor,
+          expenseCategory: selectedPayable.expenseCategory,
           id: `supplier-payment-${Date.now()}`,
           paidAtLabel: formatOccurredAtLabel(paidAt),
           paidAtMs: paidAt.getTime(),

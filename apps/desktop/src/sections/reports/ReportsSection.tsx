@@ -12,6 +12,7 @@ import { parseLocalDate } from "../../lib/dates";
 import type {
   CreditNoteRecord,
   CustomerReceiptRecord,
+  PurchaseExpenseCategory,
   PurchaseRecord,
   ReceivableRecord,
   SaleRecord,
@@ -59,7 +60,7 @@ type SaleMarginRow = {
 };
 
 type ReportDetailView = "product" | "customer" | "sales" | "sale" | null;
-type ReportTab = "profitability" | "dso" | "cashflow" | "variance";
+type ReportTab = "profitability" | "dso" | "cashflow" | "expenses" | "variance";
 type ProfitabilityTab = "overview" | "customer" | "product" | "sales";
 
 type DsoSummary = {
@@ -131,6 +132,32 @@ type UtilitySummary = {
   worstPeriodMarginMinor: number;
 };
 
+type ExpenseEntry = {
+  amountMinor: number;
+  categoryLabel: string;
+  dateLabel: string;
+  dateSortMs: number;
+  id: string;
+  invoiceNumber: string;
+  originLabel: string;
+  partyName: string;
+  statusLabel: "Real" | "Proyectado";
+};
+
+type ExpenseSummary = {
+  projectedExpenseMinor: number;
+  providerCount: number;
+  realExpenseMinor: number;
+  totalExpenseMinor: number;
+};
+
+type ExpenseOriginRow = {
+  amountMinor: number;
+  categoryLabel: string;
+  count: number;
+  participationPercent: number;
+};
+
 function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
@@ -163,6 +190,20 @@ function formatLocalDateLabel(value: string): string {
   }
 
   return formatDateLabel(parsed);
+}
+
+function formatExpenseCategory(category: PurchaseExpenseCategory): string {
+  const labels: Record<PurchaseExpenseCategory, string> = {
+    inventory: "Inventario / proveedores",
+    services: "Servicios",
+    payroll: "Nomina",
+    rent: "Arriendo",
+    transport: "Transporte",
+    taxes: "Impuestos",
+    other: "Otros"
+  };
+
+  return labels[category];
 }
 
 function buildMarginSummary(
@@ -744,6 +785,113 @@ function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
   };
 }
 
+function buildExpenseEntries(input: {
+  purchases: PurchaseRecord[];
+  supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
+}): ExpenseEntry[] {
+  const entries: ExpenseEntry[] = [];
+  const purchaseById = new Map(input.purchases.map((purchase) => [purchase.id, purchase]));
+
+  input.purchases.forEach((purchase) => {
+    if (purchase.paymentStatus !== "paid") {
+      return;
+    }
+
+    const occurredAt = new Date(purchase.occurredAtMs);
+
+    entries.push({
+      amountMinor: purchase.totalMinor,
+      categoryLabel: formatExpenseCategory(purchase.expenseCategory),
+      dateLabel: formatDateLabel(occurredAt),
+      dateSortMs: purchase.occurredAtMs,
+      id: `expense-purchase-${purchase.id}`,
+      invoiceNumber: purchase.invoiceNumber,
+      originLabel: "Compra pagada",
+      partyName: purchase.supplierName,
+      statusLabel: "Real"
+    });
+  });
+
+  input.supplierPayments.forEach((payment) => {
+    const paidAt = new Date(payment.paidAtMs);
+    const purchase = purchaseById.get(payment.purchaseId);
+
+    entries.push({
+      amountMinor: payment.amountMinor,
+      categoryLabel: formatExpenseCategory(
+        payment.expenseCategory ?? purchase?.expenseCategory ?? "inventory"
+      ),
+      dateLabel: formatDateLabel(paidAt),
+      dateSortMs: payment.paidAtMs,
+      id: `expense-payment-${payment.id}`,
+      invoiceNumber: purchase?.invoiceNumber ?? payment.purchaseId,
+      originLabel: "Abono proveedor",
+      partyName: payment.supplierName,
+      statusLabel: "Real"
+    });
+  });
+
+  input.supplierPayables
+    .filter((payable) => payable.balanceMinor > 0)
+    .forEach((payable) => {
+      const dueAtMs = parseLocalDate(payable.dueAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+
+      entries.push({
+        amountMinor: payable.balanceMinor,
+        categoryLabel: formatExpenseCategory(payable.expenseCategory),
+        dateLabel: formatLocalDateLabel(payable.dueAt),
+        dateSortMs: dueAtMs,
+        id: `expense-payable-${payable.id}`,
+        invoiceNumber: payable.invoiceNumber,
+        originLabel: "Cuenta por pagar",
+        partyName: payable.supplierName,
+        statusLabel: "Proyectado"
+      });
+    });
+
+  return entries.sort((left, right) => left.dateSortMs - right.dateSortMs);
+}
+
+function buildExpenseSummary(entries: ExpenseEntry[]): ExpenseSummary {
+  const realExpenseMinor = entries
+    .filter((entry) => entry.statusLabel === "Real")
+    .reduce((sum, entry) => sum + entry.amountMinor, 0);
+  const projectedExpenseMinor = entries
+    .filter((entry) => entry.statusLabel === "Proyectado")
+    .reduce((sum, entry) => sum + entry.amountMinor, 0);
+
+  return {
+    projectedExpenseMinor,
+    providerCount: new Set(entries.map((entry) => entry.partyName)).size,
+    realExpenseMinor,
+    totalExpenseMinor: realExpenseMinor + projectedExpenseMinor
+  };
+}
+
+function buildExpenseOriginRows(entries: ExpenseEntry[]): ExpenseOriginRow[] {
+  const categoryMap = new Map<string, ExpenseOriginRow>();
+  const totalExpenseMinor = entries.reduce((sum, entry) => sum + entry.amountMinor, 0);
+
+  entries.forEach((entry) => {
+    const currentRow = categoryMap.get(entry.categoryLabel) ?? {
+      amountMinor: 0,
+      categoryLabel: entry.categoryLabel,
+      count: 0,
+      participationPercent: 0
+    };
+
+    currentRow.amountMinor += entry.amountMinor;
+    currentRow.count += 1;
+    currentRow.participationPercent =
+      totalExpenseMinor > 0 ? (currentRow.amountMinor / totalExpenseMinor) * 100 : 0;
+
+    categoryMap.set(entry.categoryLabel, currentRow);
+  });
+
+  return [...categoryMap.values()].sort((left, right) => right.amountMinor - left.amountMinor);
+}
+
 type ReportsSectionProps = {
   creditNotes: CreditNoteRecord[];
   customerReceipts: CustomerReceiptRecord[];
@@ -801,6 +949,14 @@ export function ReportsSection({
       Math.abs(row.projectedNetMinor)
     ])
   );
+  const expenseEntries = buildExpenseEntries({
+    purchases,
+    supplierPayables,
+    supplierPayments
+  });
+  const expenseSummary = buildExpenseSummary(expenseEntries);
+  const expenseOriginRows = buildExpenseOriginRows(expenseEntries);
+  const expenseMaxAmount = Math.max(1, ...expenseOriginRows.map((row) => row.amountMinor));
   const utilityPeriodRows = buildUtilityPeriodRows(sales, creditNotes);
   const utilitySummary = buildUtilitySummary(utilityPeriodRows);
   const utilityMaxMargin = Math.max(1, ...utilityPeriodRows.map((row) => Math.abs(row.marginMinor)));
@@ -813,6 +969,7 @@ export function ReportsSection({
     { id: "profitability", label: "Rentabilidad", title: "Rentabilidad" },
     { id: "dso", label: "DSO", title: "DSO" },
     { id: "cashflow", label: "Flujo de caja", title: "Flujo de caja" },
+    { id: "expenses", label: "Egresos", title: "Egresos" },
     { id: "variance", label: "Utilidades", title: "Utilidades" }
   ];
 
@@ -1037,6 +1194,104 @@ export function ReportsSection({
                   ))}
                 </tbody>
               </DataTable>
+            )}
+          </>
+        )}
+      </section>
+    );
+  }
+
+  if (activeReportTab === "expenses") {
+    const summaryItems = [
+      {
+        label: "Egresos reales",
+        value: formatCurrency(expenseSummary.realExpenseMinor)
+      },
+      {
+        label: "Egresos proyectados",
+        value: formatCurrency(expenseSummary.projectedExpenseMinor)
+      },
+      {
+        label: "Compromisos totales",
+        value: formatCurrency(expenseSummary.totalExpenseMinor)
+      },
+      {
+        label: "Proveedores",
+        value: String(expenseSummary.providerCount)
+      }
+    ];
+
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        <ReportSummaryShell>
+          <CompactSummaryGrid ariaLabel="Resumen egresos" items={summaryItems} />
+        </ReportSummaryShell>
+
+        {expenseEntries.length === 0 ? (
+          <EmptyState
+            body="Registra compras pagadas, abonos o cuentas por pagar para detallar los egresos."
+            className="section-empty"
+            title="Sin egresos para analizar"
+          />
+        ) : (
+          <>
+            <ReportPrimaryInsightPanel
+              title="Egresos"
+              description="Salidas reales y compromisos proyectados agrupados por origen."
+            >
+              <div className="report-chart report-chart-detail" aria-label="Grafico egresos por origen">
+                {expenseOriginRows.map((row) => (
+                  <div className="report-bar-row report-bar-row-detail" key={row.originLabel}>
+                    <span>{row.originLabel}</span>
+                    <div className="report-bar-track">
+                      <div
+                        className="report-bar-fill report-bar-fill-negative"
+                        style={{ width: `${(row.amountMinor / expenseMaxAmount) * 100}%` }}
+                      />
+                    </div>
+                    <strong>{formatCurrency(row.amountMinor)}</strong>
+                  </div>
+                ))}
+              </div>
+            </ReportPrimaryInsightPanel>
+
+            {renderReportSupportingContent(
+              <>
+                <DataTable ariaLabel="Resumen egresos por origen">
+                  <DataTableHeader
+                    labels={["Origen", "Valor", "Participacion", "Movimientos"]}
+                  />
+                  <tbody>
+                    {expenseOriginRows.map((row) => (
+                      <tr key={row.originLabel}>
+                        <td>{row.originLabel}</td>
+                        <td>{formatCurrency(row.amountMinor)}</td>
+                        <td>{formatPercent(row.participationPercent)}</td>
+                        <td>{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+
+                <DataTable ariaLabel="Detalle egresos">
+                  <DataTableHeader
+                    labels={["Fecha", "Estado", "Origen", "Proveedor", "Factura", "Valor"]}
+                  />
+                  <tbody>
+                    {expenseEntries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{entry.dateLabel}</td>
+                        <td>{entry.statusLabel}</td>
+                        <td>{entry.originLabel}</td>
+                        <td>{entry.partyName}</td>
+                        <td>{entry.invoiceNumber}</td>
+                        <td>{formatCurrency(entry.amountMinor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+              </>
             )}
           </>
         )}

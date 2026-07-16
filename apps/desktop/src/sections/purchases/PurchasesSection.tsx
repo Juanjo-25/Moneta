@@ -11,6 +11,7 @@ import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
   ProductRecord,
+  PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
   SupplierFormErrors,
@@ -34,6 +35,7 @@ type PurchaseDraftLine = {
 
 type PurchaseFormState = {
   branch: string;
+  expenseCategory: PurchaseExpenseCategory;
   prefix: string;
   concept: string;
   supplierId: string;
@@ -92,6 +94,7 @@ type PurchasesSectionProps = {
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
+    expenseCategory: PurchaseExpenseCategory;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -126,6 +129,7 @@ const emptyPurchaseForm: PurchaseFormState = {
   prefix: "",
   concept: "Factura de compra",
   dueAt: "",
+  expenseCategory: "inventory",
   invoiceNumber: "",
   issuedAt: "",
   paymentStatus: "paid",
@@ -145,6 +149,26 @@ const emptyPurchaseProductForm: PurchaseProductFormState = {
   salePrice: "",
   sku: ""
 };
+
+const expenseCategoryOptions: Array<{
+  label: string;
+  value: PurchaseExpenseCategory;
+}> = [
+  { label: "Inventario / proveedores", value: "inventory" },
+  { label: "Servicios", value: "services" },
+  { label: "Nomina", value: "payroll" },
+  { label: "Arriendo", value: "rent" },
+  { label: "Transporte", value: "transport" },
+  { label: "Impuestos", value: "taxes" },
+  { label: "Otros", value: "other" }
+];
+
+function formatExpenseCategory(category: PurchaseExpenseCategory): string {
+  return (
+    expenseCategoryOptions.find((option) => option.value === category)?.label ??
+    "Otros"
+  );
+}
 
 export function PurchasesSection({
   formatCurrency,
@@ -472,6 +496,7 @@ export function PurchasesSection({
       branch: form.branch.trim() || "Principal",
       concept: form.concept.trim() || "Factura de compra",
       dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
+      expenseCategory: form.expenseCategory,
       invoiceNumber: documentNumber,
       issuedAt: form.issuedAt.trim(),
       lines: linesToRegister.map((line) => ({
@@ -507,6 +532,7 @@ export function PurchasesSection({
             <TextField error={errors.issuedAt} label="Fecha emision" onChange={(value) => updateField("issuedAt", value)} type="date" value={form.issuedAt} />
             {form.paymentStatus === "pending" ? <TextField error={errors.dueAt} label="Fecha vencimiento" onChange={(value) => updateField("dueAt", value)} type="date" value={form.dueAt} /> : null}
             <div className="field"><span>Forma de pago</span><div aria-label="Estado de factura compra" className="payment-status-group" role="radiogroup"><label htmlFor="compra-pagada"><input checked={form.paymentStatus === "paid"} id="compra-pagada" name="purchase-payment-status" onChange={() => updateField("paymentStatus", "paid")} type="radio" />Pagada</label><label htmlFor="compra-pendiente"><input checked={form.paymentStatus === "pending"} id="compra-pendiente" name="purchase-payment-status" onChange={() => updateField("paymentStatus", "pending")} type="radio" />Pendiente</label></div></div>
+            <label className="field" htmlFor="categoria-egreso-compra"><span>Categoria egreso</span><select id="categoria-egreso-compra" onChange={(event) => updateField("expenseCategory", event.target.value as PurchaseExpenseCategory)} value={form.expenseCategory}>{expenseCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <TextField label="Moneda" onChange={() => undefined} readOnly value="Peso colombiano (COP)" />
             <TextField label="Concepto" onChange={(value) => updateField("concept", value)} value={form.concept} />
           </div>
@@ -641,6 +667,7 @@ export function PurchasesSection({
               "Fecha",
               "Proveedor",
               "Factura",
+              "Categoria",
               "Producto",
               "Cantidad",
               "Estado",
@@ -653,6 +680,7 @@ export function PurchasesSection({
                 <td>{purchase.occurredAtLabel}</td>
                 <td>{purchase.supplierName}</td>
                 <td>{purchase.invoiceNumber}</td>
+                <td>{formatExpenseCategory(purchase.expenseCategory)}</td>
                 <td>{purchase.productName}</td>
                 <td>{purchase.quantity}</td>
                 <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
