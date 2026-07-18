@@ -648,6 +648,10 @@ function buildCashflowEntries(input: {
   });
 
   input.customerReceipts.forEach((receipt) => {
+    if (!receipt.active) {
+      return;
+    }
+
     const receivedAt = new Date(receipt.receivedAtMs);
     entries.push({
       dateLabel: formatDateLabel(receivedAt),

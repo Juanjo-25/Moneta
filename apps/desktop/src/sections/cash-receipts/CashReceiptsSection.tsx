@@ -4,6 +4,7 @@ import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type { CustomerReceiptRecord, ReceivableRecord } from "../../types";
@@ -32,6 +33,7 @@ type CashReceiptsSectionProps = {
     concept: string;
     receivedAt: string;
   }) => Promise<string | null>;
+  onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
   parseNonNegativeInteger: (value: string) => number | null;
   receivables: ReceivableRecord[];
 };
@@ -48,18 +50,21 @@ export function CashReceiptsSection({
   formatCurrency,
   formatIntegerInput,
   onRegisterCustomerReceipt,
+  onVoidCustomerReceipt,
   parseNonNegativeInteger,
   receivables
 }: CashReceiptsSectionProps) {
   const [form, setForm] = useState<CashReceiptFormState>(emptyReceiptForm);
   const [errors, setErrors] = useState<CashReceiptFormErrors>({});
+  const [receiptActionError, setReceiptActionError] = useState<string | null>(null);
   const selectedReceivable =
     receivables.find((receivable) => receivable.id === form.receivableId) ?? null;
   const openReceivablesTotal = receivables.reduce(
     (total, receivable) => total + receivable.balanceMinor,
     0
   );
-  const receiptsTotal = customerReceipts.reduce(
+  const activeReceipts = customerReceipts.filter((receipt) => receipt.active);
+  const receiptsTotal = activeReceipts.reduce(
     (total, receipt) => total + receipt.amountMinor,
     0
   );
@@ -112,6 +117,15 @@ export function CashReceiptsSection({
     setErrors({});
   }
 
+  async function voidReceipt(receiptId: string) {
+    setReceiptActionError(null);
+    const actionError = await onVoidCustomerReceipt(receiptId);
+
+    if (actionError) {
+      setReceiptActionError(actionError);
+    }
+  }
+
   return (
     <section className="cash-receipts-layout">
       <section className="metric-grid" aria-label="Resumen recibos de caja">
@@ -120,8 +134,8 @@ export function CashReceiptsSection({
           value={formatCurrency(openReceivablesTotal)}
         />
         <SummaryCard
-          label="Recibos registrados"
-          value={String(customerReceipts.length)}
+          label="Recibos activos"
+          value={String(activeReceipts.length)}
         />
         <SummaryCard
           label="Total recibido"
@@ -194,6 +208,8 @@ export function CashReceiptsSection({
       <CashReceiptsTable
         customerReceipts={customerReceipts}
         formatCurrency={formatCurrency}
+        onVoidReceipt={voidReceipt}
+        receiptActionError={receiptActionError}
       />
     </section>
   );
@@ -239,10 +255,14 @@ function OpenReceivablesTable({
 
 function CashReceiptsTable({
   customerReceipts,
-  formatCurrency
+  formatCurrency,
+  onVoidReceipt,
+  receiptActionError
 }: {
   customerReceipts: CustomerReceiptRecord[];
   formatCurrency: (minor: number) => string;
+  onVoidReceipt: (receiptId: string) => Promise<void>;
+  receiptActionError: string | null;
 }) {
   if (customerReceipts.length === 0) {
     return (
@@ -255,23 +275,46 @@ function CashReceiptsTable({
   }
 
   return (
-    <DataTable ariaLabel="Recibos de caja registrados">
-      <DataTableHeader
-        labels={["Recibo", "Fecha", "Cliente", "Venta", "Concepto", "Valor"]}
-      />
-      <tbody>
-        {customerReceipts.map((receipt) => (
-          <tr key={receipt.id}>
-            <td>{receipt.number}</td>
-            <td>{receipt.receivedAt}</td>
-            <td>{receipt.customerName}</td>
-            <td>{receipt.saleId}</td>
-            <td>{receipt.concept}</td>
-            <td>{formatCurrency(receipt.amountMinor)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </DataTable>
+    <>
+      {receiptActionError ? <p className="form-error">{receiptActionError}</p> : null}
+      <DataTable ariaLabel="Recibos de caja registrados">
+        <DataTableHeader
+          labels={[
+            "Recibo",
+            "Fecha",
+            "Cliente",
+            "Venta",
+            "Concepto",
+            "Estado",
+            "Valor",
+            "Accion"
+          ]}
+        />
+        <tbody>
+          {customerReceipts.map((receipt) => (
+            <tr key={receipt.id}>
+              <td>{receipt.number}</td>
+              <td>{receipt.receivedAt}</td>
+              <td>{receipt.customerName}</td>
+              <td>{receipt.saleId}</td>
+              <td>{receipt.concept}</td>
+              <td>{receipt.active ? "Activo" : `Anulado ${receipt.voidedAtLabel}`}</td>
+              <td>{formatCurrency(receipt.amountMinor)}</td>
+              <td>
+                {receipt.active ? (
+                  <SecondaryActionButton
+                    onClick={() => void onVoidReceipt(receipt.id)}
+                    variant="compact"
+                  >
+                    Anular
+                  </SecondaryActionButton>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </>
   );
 }
 

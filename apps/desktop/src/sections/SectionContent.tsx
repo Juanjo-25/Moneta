@@ -158,6 +158,7 @@ type SectionContentProps = {
     concept: string;
     receivedAt: string;
   }) => Promise<string | null>;
+  onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
@@ -217,6 +218,7 @@ export function SectionContent({
   onRegisterPendingSale,
   onRegisterCreditNote,
   onRegisterCustomerReceipt,
+  onVoidCustomerReceipt,
   onSetCreditNoteStatus,
   onUpdateSale,
   onDeleteSale,
@@ -333,6 +335,7 @@ export function SectionContent({
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
         onRegisterCustomerReceipt={onRegisterCustomerReceipt}
+        onVoidCustomerReceipt={onVoidCustomerReceipt}
         parseNonNegativeInteger={parseNonNegativeInteger}
         receivables={receivables}
       />

@@ -1088,15 +1088,16 @@ describe("App navigation", () => {
     expect(within(receiptsTable).getByText("RC-001")).toBeTruthy();
     expect(within(receiptsTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receiptsTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    await user.click(within(receiptsTable).getByRole("button", { name: "Anular" }));
+    expect(within(receiptsTable).getByText(/Anulado/)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*8\.500/)).toBeTruthy();
-    expect(within(receivablesTable).getByText("Abonada")).toBeTruthy();
+    expect(within(receivablesTable).getAllByText(/\$\s*13\.500/)).toHaveLength(2);
+    expect(within(receivablesTable).getByText(/\$\s*0/)).toBeTruthy();
+    expect(within(receivablesTable).getByText("Pendiente")).toBeTruthy();
   });
 
   it("uses cash receipts as real inflows and keeps the remaining receivable projected", async () => {

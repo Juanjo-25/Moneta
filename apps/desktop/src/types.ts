@@ -113,9 +113,14 @@ export type ReceivableRecord = {
 };
 
 export type CustomerReceiptRecord = {
+  active: boolean;
   id: string;
   number: string;
   receivableId: string;
+  receivableOriginalAmountMinor: number;
+  receivablePaidAmountMinorBefore: number;
+  receivableBalanceMinorBefore: number;
+  receivableDueAt: string;
   saleId: string;
   customerId: string;
   customerName: string;
@@ -124,6 +129,8 @@ export type CustomerReceiptRecord = {
   receivedAt: string;
   receivedAtMs: number;
   receivedAtLabel: string;
+  voidedAtLabel: string;
+  voidedAtMs: number;
 };
 
 export type CreditNoteLineRecord = {

@@ -40,6 +40,7 @@ import {
   saveNativeSupplier,
   saveNativeSupplierPayment,
   updateNativeSale,
+  voidNativeCustomerReceipt,
   type NativeConnectionStatus
 } from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
@@ -1658,17 +1659,24 @@ export function App() {
       status: getReceivableStatus(paidAmountMinor)
     };
     const receipt: CustomerReceiptRecord = {
+      active: true,
       amountMinor: input.amountMinor,
       concept: input.concept.trim() || "Abono cartera cliente",
       customerId: selectedReceivable.customerId,
       customerName: selectedReceivable.customerName,
       id: `cash-receipt-${receivedAtMs}`,
       number: `RC-${String(customerReceipts.length + 1).padStart(3, "0")}`,
+      receivableBalanceMinorBefore: selectedReceivable.balanceMinor,
+      receivableDueAt: selectedReceivable.dueAt,
       receivableId: selectedReceivable.id,
+      receivableOriginalAmountMinor: selectedReceivable.originalAmountMinor,
+      receivablePaidAmountMinorBefore: selectedReceivable.paidAmountMinor,
       receivedAt: input.receivedAt,
       receivedAtLabel: formatOccurredAtLabel(receivedAtDate),
       receivedAtMs,
-      saleId: selectedReceivable.saleId
+      saleId: selectedReceivable.saleId,
+      voidedAtLabel: "",
+      voidedAtMs: 0
     };
 
     try {
@@ -1691,6 +1699,75 @@ export function App() {
         )
         .filter((currentReceivable) => currentReceivable.balanceMinor > 0)
     );
+
+    return null;
+  }
+
+  async function voidCustomerReceipt(receiptId: string): Promise<string | null> {
+    const selectedReceipt =
+      customerReceipts.find((receipt) => receipt.id === receiptId) ?? null;
+
+    if (!selectedReceipt) {
+      return "El recibo de caja ya no esta disponible.";
+    }
+    if (!selectedReceipt.active) {
+      return "El recibo de caja ya esta anulado.";
+    }
+
+    const voidedAt = new Date();
+    const fallbackSale = sales.find((sale) => sale.id === selectedReceipt.saleId) ?? null;
+    const originalAmountMinor =
+      selectedReceipt.receivableOriginalAmountMinor > 0
+        ? selectedReceipt.receivableOriginalAmountMinor
+        : fallbackSale?.totalMinor ?? selectedReceipt.amountMinor;
+    const paidAmountMinor =
+      selectedReceipt.receivableOriginalAmountMinor > 0
+        ? selectedReceipt.receivablePaidAmountMinorBefore
+        : Math.max(originalAmountMinor - selectedReceipt.amountMinor, 0);
+    const balanceMinor =
+      selectedReceipt.receivableOriginalAmountMinor > 0
+        ? selectedReceipt.receivableBalanceMinorBefore
+        : Math.max(originalAmountMinor - paidAmountMinor, 0);
+    const receivable: ReceivableRecord = {
+      amountMinor: balanceMinor,
+      balanceMinor,
+      customerId: selectedReceipt.customerId,
+      customerName: selectedReceipt.customerName,
+      dueAt: selectedReceipt.receivableDueAt,
+      id: selectedReceipt.receivableId,
+      originalAmountMinor,
+      paidAmountMinor,
+      saleId: selectedReceipt.saleId,
+      status: getReceivableStatus(paidAmountMinor)
+    };
+    const voidedReceipt: CustomerReceiptRecord = {
+      ...selectedReceipt,
+      active: false,
+      voidedAtLabel: formatOccurredAtLabel(voidedAt),
+      voidedAtMs: voidedAt.getTime()
+    };
+
+    try {
+      await voidNativeCustomerReceipt({ receipt: voidedReceipt, receivable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo anular el recibo de caja local."
+      });
+      return "No se pudo anular el recibo de caja local.";
+    }
+
+    setCustomerReceipts((currentReceipts) =>
+      currentReceipts.map((currentReceipt) =>
+        currentReceipt.id === receiptId ? voidedReceipt : currentReceipt
+      )
+    );
+    setReceivables((currentReceivables) => [
+      receivable,
+      ...currentReceivables.filter(
+        (currentReceivable) => currentReceivable.id !== receivable.id
+      )
+    ]);
 
     return null;
   }
@@ -1883,6 +1960,7 @@ export function App() {
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterCreditNote={registerCreditNoteInSession}
             onRegisterCustomerReceipt={registerCustomerReceipt}
+            onVoidCustomerReceipt={voidCustomerReceipt}
             onSetCreditNoteStatus={setCreditNoteStatus}
             onUpdateSale={updateSaleInSession}
             onDeleteSale={deleteSaleInSession}

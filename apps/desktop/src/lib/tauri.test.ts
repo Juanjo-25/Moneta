@@ -23,7 +23,8 @@ import {
   saveNativeSettings,
   saveNativeSupplier,
   saveNativeSupplierPayment,
-  updateNativeSale
+  updateNativeSale,
+  voidNativeCustomerReceipt
 } from "./tauri";
 
 function setTauriInvoke(
@@ -332,17 +333,24 @@ describe("native sale persistence", () => {
     status: "pending" as const
   };
   const receipt = {
+    active: true,
     amountMinor: 4500,
     concept: "Abono cartera cliente",
     customerId: "customer-1",
     customerName: "Ana Perez",
     id: "cash-receipt-1",
     number: "RC-001",
+    receivableBalanceMinorBefore: 9000,
+    receivableDueAt: "2026-08-18",
     receivableId: "receivable-sale-1",
+    receivableOriginalAmountMinor: 9000,
+    receivablePaidAmountMinorBefore: 0,
     receivedAt: "2026-07-18",
     receivedAtLabel: "18/07/26, 12:30",
     receivedAtMs: 4,
-    saleId: "sale-1"
+    saleId: "sale-1",
+    voidedAtLabel: "",
+    voidedAtMs: 0
   };
   const updatedReceivable = {
     ...receivable,
@@ -419,6 +427,9 @@ describe("native sale persistence", () => {
     ).resolves.toBe(false);
     await expect(
       saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
+    ).resolves.toBe(false);
+    await expect(
+      voidNativeCustomerReceipt({ receipt, receivable })
     ).resolves.toBe(false);
     await expect(saveNativeCreditNote(creditNote)).resolves.toBe(false);
     await expect(
@@ -508,6 +519,25 @@ describe("native sale persistence", () => {
     expect(invoke).toHaveBeenCalledWith("save_customer_receipt", {
       receipt,
       receivable: updatedReceivable
+    });
+  });
+
+  it("voids a customer receipt through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+    const voidedReceipt = {
+      ...receipt,
+      active: false,
+      voidedAtLabel: "18/07/26, 13:00",
+      voidedAtMs: 7
+    };
+
+    await expect(
+      voidNativeCustomerReceipt({ receipt: voidedReceipt, receivable })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("void_customer_receipt", {
+      receipt: voidedReceipt,
+      receivable
     });
   });
 

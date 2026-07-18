@@ -129,9 +129,14 @@ struct ReceivableRecord {
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CustomerReceiptRecord {
+    active: bool,
     id: String,
     number: String,
     receivable_id: String,
+    receivable_original_amount_minor: i64,
+    receivable_paid_amount_minor_before: i64,
+    receivable_balance_minor_before: i64,
+    receivable_due_at: String,
     sale_id: String,
     customer_id: String,
     customer_name: String,
@@ -140,6 +145,8 @@ struct CustomerReceiptRecord {
     received_at: String,
     received_at_ms: i64,
     received_at_label: String,
+    voided_at_label: String,
+    voided_at_ms: i64,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -310,6 +317,13 @@ struct SaleDeletePersistence {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CustomerReceiptPersistence {
+    receipt: CustomerReceiptRecord,
+    receivable: ReceivableRecord,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomerReceiptVoidPersistence {
     receipt: CustomerReceiptRecord,
     receivable: ReceivableRecord,
 }
@@ -706,9 +720,14 @@ fn list_customer_receipts(app: tauri::AppHandle) -> Result<Vec<CustomerReceiptRe
         .prepare(
             "
             SELECT
+              active,
               id,
               number,
               receivable_id,
+              receivable_original_amount_minor,
+              receivable_paid_amount_minor_before,
+              receivable_balance_minor_before,
+              receivable_due_at,
               sale_id,
               customer_id,
               customer_name,
@@ -716,7 +735,9 @@ fn list_customer_receipts(app: tauri::AppHandle) -> Result<Vec<CustomerReceiptRe
               concept,
               received_at,
               received_at_ms,
-              received_at_label
+              received_at_label,
+              voided_at_label,
+              voided_at_ms
             FROM customer_receipts
             ORDER BY received_at_ms DESC, id DESC
             ",
@@ -726,17 +747,24 @@ fn list_customer_receipts(app: tauri::AppHandle) -> Result<Vec<CustomerReceiptRe
     let rows = statement
         .query_map([], |row| {
             Ok(CustomerReceiptRecord {
-                id: row.get(0)?,
-                number: row.get(1)?,
-                receivable_id: row.get(2)?,
-                sale_id: row.get(3)?,
-                customer_id: row.get(4)?,
-                customer_name: row.get(5)?,
-                amount_minor: row.get(6)?,
-                concept: row.get(7)?,
-                received_at: row.get(8)?,
-                received_at_ms: row.get(9)?,
-                received_at_label: row.get(10)?,
+                active: row.get::<_, i64>(0)? == 1,
+                id: row.get(1)?,
+                number: row.get(2)?,
+                receivable_id: row.get(3)?,
+                receivable_original_amount_minor: row.get(4)?,
+                receivable_paid_amount_minor_before: row.get(5)?,
+                receivable_balance_minor_before: row.get(6)?,
+                receivable_due_at: row.get(7)?,
+                sale_id: row.get(8)?,
+                customer_id: row.get(9)?,
+                customer_name: row.get(10)?,
+                amount_minor: row.get(11)?,
+                concept: row.get(12)?,
+                received_at: row.get(13)?,
+                received_at_ms: row.get(14)?,
+                received_at_label: row.get(15)?,
+                voided_at_label: row.get(16)?,
+                voided_at_ms: row.get(17)?,
             })
         })
         .map_err(|error| format!("No se pudieron leer los recibos de caja: {error}"))?;
@@ -1162,9 +1190,14 @@ fn save_customer_receipt(
         .execute(
             "
             INSERT INTO customer_receipts (
+              active,
               id,
               number,
               receivable_id,
+              receivable_original_amount_minor,
+              receivable_paid_amount_minor_before,
+              receivable_balance_minor_before,
+              receivable_due_at,
               sale_id,
               customer_id,
               customer_name,
@@ -1172,14 +1205,21 @@ fn save_customer_receipt(
               concept,
               received_at,
               received_at_ms,
-              received_at_label
+              received_at_label,
+              voided_at_label,
+              voided_at_ms
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
             ",
             params![
+                if input.receipt.active { 1 } else { 0 },
                 &input.receipt.id,
                 &input.receipt.number,
                 &input.receipt.receivable_id,
+                input.receipt.receivable_original_amount_minor,
+                input.receipt.receivable_paid_amount_minor_before,
+                input.receipt.receivable_balance_minor_before,
+                &input.receipt.receivable_due_at,
                 &input.receipt.sale_id,
                 &input.receipt.customer_id,
                 &input.receipt.customer_name,
@@ -1188,6 +1228,8 @@ fn save_customer_receipt(
                 &input.receipt.received_at,
                 input.receipt.received_at_ms,
                 &input.receipt.received_at_label,
+                &input.receipt.voided_at_label,
+                input.receipt.voided_at_ms,
             ],
         )
         .map_err(|error| format!("No se pudo guardar el recibo de caja: {error}"))?;
@@ -1224,6 +1266,91 @@ fn save_customer_receipt(
     transaction
         .commit()
         .map_err(|error| format!("No se pudo confirmar el recibo de caja: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn void_customer_receipt(
+    app: tauri::AppHandle,
+    input: CustomerReceiptVoidPersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de anulacion: {error}"))?;
+
+    let affected = transaction
+        .execute(
+            "
+            UPDATE customer_receipts
+            SET
+              active = 0,
+              voided_at_label = ?1,
+              voided_at_ms = ?2
+            WHERE id = ?3 AND active = 1
+            ",
+            params![
+                &input.receipt.voided_at_label,
+                input.receipt.voided_at_ms,
+                &input.receipt.id,
+            ],
+        )
+        .map_err(|error| format!("No se pudo anular el recibo de caja: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!(
+            "El recibo de caja {} no existe o ya esta anulado.",
+            input.receipt.number
+        ));
+    }
+
+    transaction
+        .execute(
+            "
+            INSERT INTO receivables (
+              id,
+              customer_id,
+              customer_name,
+              sale_id,
+              amount_minor,
+              original_amount_minor,
+              paid_amount_minor,
+              balance_minor,
+              due_at,
+              status,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              amount_minor = excluded.amount_minor,
+              original_amount_minor = excluded.original_amount_minor,
+              paid_amount_minor = excluded.paid_amount_minor,
+              balance_minor = excluded.balance_minor,
+              due_at = excluded.due_at,
+              status = excluded.status,
+              updated_at = CURRENT_TIMESTAMP
+            ",
+            params![
+                &input.receivable.id,
+                &input.receivable.customer_id,
+                &input.receivable.customer_name,
+                &input.receivable.sale_id,
+                input.receivable.amount_minor,
+                input.receivable.original_amount_minor,
+                input.receivable.paid_amount_minor,
+                input.receivable.balance_minor,
+                &input.receivable.due_at,
+                &input.receivable.status,
+            ],
+        )
+        .map_err(|error| format!("No se pudo restaurar la cuenta por cobrar: {error}"))?;
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la anulacion del recibo: {error}"))?;
 
     Ok(())
 }
@@ -2402,10 +2529,17 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               customer_id TEXT NOT NULL,
               customer_name TEXT NOT NULL,
               amount_minor INTEGER NOT NULL,
+              active INTEGER NOT NULL DEFAULT 1,
               concept TEXT NOT NULL,
+              receivable_original_amount_minor INTEGER NOT NULL DEFAULT 0,
+              receivable_paid_amount_minor_before INTEGER NOT NULL DEFAULT 0,
+              receivable_balance_minor_before INTEGER NOT NULL DEFAULT 0,
+              receivable_due_at TEXT NOT NULL DEFAULT '',
               received_at TEXT NOT NULL,
               received_at_ms INTEGER NOT NULL,
               received_at_label TEXT NOT NULL,
+              voided_at_label TEXT NOT NULL DEFAULT '',
+              voided_at_ms INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               FOREIGN KEY (receivable_id) REFERENCES receivables(id),
               FOREIGN KEY (sale_id) REFERENCES sales(id),
@@ -2558,6 +2692,93 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
 
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "active",
+        "ALTER TABLE customer_receipts ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
+    )?;
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "receivable_original_amount_minor",
+        "ALTER TABLE customer_receipts ADD COLUMN receivable_original_amount_minor INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "receivable_paid_amount_minor_before",
+        "ALTER TABLE customer_receipts ADD COLUMN receivable_paid_amount_minor_before INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "receivable_balance_minor_before",
+        "ALTER TABLE customer_receipts ADD COLUMN receivable_balance_minor_before INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "receivable_due_at",
+        "ALTER TABLE customer_receipts ADD COLUMN receivable_due_at TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "voided_at_label",
+        "ALTER TABLE customer_receipts ADD COLUMN voided_at_label TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        connection,
+        "customer_receipts",
+        "voided_at_ms",
+        "ALTER TABLE customer_receipts ADD COLUMN voided_at_ms INTEGER NOT NULL DEFAULT 0",
+    )?;
+    connection
+        .execute(
+            "
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-anular-recibos-caja')
+            ",
+            [],
+        )
+        .map_err(|error| {
+            format!("No se pudo registrar la migracion de recibos de caja: {error}")
+        })?;
+
+    Ok(())
+}
+
+fn ensure_column(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+    alter_statement: &str,
+) -> Result<(), String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table_name})"))
+        .map_err(|error| format!("No se pudo inspeccionar la tabla {table_name}: {error}"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| format!("No se pudieron leer columnas de {table_name}: {error}"))?;
+    let mut exists = false;
+
+    for column in columns {
+        if column
+            .map_err(|error| format!("No se pudo convertir columna de {table_name}: {error}"))?
+            == column_name
+        {
+            exists = true;
+            break;
+        }
+    }
+
+    if !exists {
+        connection
+            .execute(alter_statement, [])
+            .map_err(|error| format!("No se pudo agregar {column_name} a {table_name}: {error}"))?;
+    }
+
     Ok(())
 }
 
@@ -2579,6 +2800,7 @@ fn main() {
             update_sale,
             delete_sale,
             save_customer_receipt,
+            void_customer_receipt,
             list_credit_notes,
             save_credit_note,
             save_credit_note_status,

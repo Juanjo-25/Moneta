@@ -240,6 +240,21 @@ export async function saveNativeCustomerReceipt(input: {
   return true;
 }
 
+export async function voidNativeCustomerReceipt(input: {
+  receipt: CustomerReceiptRecord;
+  receivable: ReceivableRecord;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("void_customer_receipt", input);
+
+  return true;
+}
+
 export async function loadNativeCreditNotes(): Promise<CreditNoteRecord[] | null> {
   const invoke = window.__TAURI__?.core?.invoke;
 
