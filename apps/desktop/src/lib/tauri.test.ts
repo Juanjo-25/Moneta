@@ -25,22 +25,53 @@ describe("checkNativeConnection", () => {
   });
 
   it("calls the health check command through Tauri", async () => {
-    const invoke = vi.fn().mockResolvedValue("Moneta Tauri conectado");
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+
+      return Promise.resolve({
+        migrationCount: 1,
+        path: "/tmp/moneta.sqlite3"
+      });
+    });
     setTauriInvoke(invoke);
 
     await expect(checkNativeConnection()).resolves.toEqual({
+      databasePath: "/tmp/moneta.sqlite3",
       kind: "connected",
-      message: "Moneta Tauri conectado"
+      message: "Base de datos lista (1 migracion inicial)."
     });
     expect(invoke).toHaveBeenCalledWith("health_check");
+    expect(invoke).toHaveBeenCalledWith("database_status");
   });
 
-  it("reports an error when the health check fails", async () => {
+  it("formats several database migrations", async () => {
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+
+      return Promise.resolve({
+        migrationCount: 2,
+        path: "/tmp/moneta.sqlite3"
+      });
+    });
+    setTauriInvoke(invoke);
+
+    await expect(checkNativeConnection()).resolves.toEqual({
+      databasePath: "/tmp/moneta.sqlite3",
+      kind: "connected",
+      message: "Base de datos lista (2 migraciones iniciales)."
+    });
+  });
+
+  it("reports an error when the native database check fails", async () => {
     setTauriInvoke(vi.fn().mockRejectedValue(new Error("native failed")));
 
     await expect(checkNativeConnection()).resolves.toEqual({
       kind: "error",
-      message: "No se pudo conectar con Tauri."
+      message: "No se pudo conectar con la base de datos local."
     });
   });
 });

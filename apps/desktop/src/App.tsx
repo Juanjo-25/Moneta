@@ -1355,6 +1355,11 @@ export function App() {
       <section className="workspace">
         <div
           className={`native-status native-status-${nativeConnectionStatus.kind}`}
+          title={
+            nativeConnectionStatus.kind === "connected"
+              ? nativeConnectionStatus.databasePath
+              : undefined
+          }
           role="status"
         >
           {nativeConnectionStatus.message}
