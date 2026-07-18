@@ -43,6 +43,14 @@ async function createSecondProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Guardar producto" }));
 }
 
+async function selectFirstInventoryAdjustmentProduct(user: UserEvent) {
+  const productSelect = screen.getByLabelText(
+    "Producto a ajustar"
+  ) as HTMLSelectElement;
+
+  await user.selectOptions(productSelect, productSelect.options[1]?.value ?? "");
+}
+
 async function createSupplierFixture(user: UserEvent, name = "Distribuidora Norte") {
   await user.click(screen.getByRole("button", { name: "Compras" }));
   await user.click(screen.getByRole("button", { name: "Nuevo proveedor" }));
@@ -818,10 +826,7 @@ describe("App navigation", () => {
     render(<App />);
 
     await createProductFixture(user);
-    await user.selectOptions(
-      screen.getByLabelText("Producto a ajustar"),
-      screen.getByRole("option", { name: "Arroz libra" })
-    );
+    await selectFirstInventoryAdjustmentProduct(user);
     await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
     await user.type(screen.getByLabelText("Cantidad"), "2");
     await user.type(screen.getByLabelText("Motivo"), "Merma bodega");
@@ -850,10 +855,7 @@ describe("App navigation", () => {
     render(<App />);
 
     await createProductFixture(user);
-    await user.selectOptions(
-      screen.getByLabelText("Producto a ajustar"),
-      screen.getByRole("option", { name: "Arroz libra" })
-    );
+    await selectFirstInventoryAdjustmentProduct(user);
     await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
     await user.type(screen.getByLabelText("Cantidad"), "5");
     await user.type(screen.getByLabelText("Motivo"), "Salida mal digitada");
@@ -863,6 +865,58 @@ describe("App navigation", () => {
     expect(
       screen.queryByRole("table", { name: "Ajustes de inventario" })
     ).toBeNull();
+  });
+
+  it("shows a unified inventory history from sales, purchases, and adjustments", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await createSupplierFixture(user, "Distribuidora Norte");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-18");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "2");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await selectFirstInventoryAdjustmentProduct(user);
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.type(screen.getByLabelText("Motivo"), "Muestra interna");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+
+    const historyTable = screen.getByRole("table", {
+      name: "Historial de inventario"
+    });
+    expect(within(historyTable).getByText("Venta")).toBeTruthy();
+    expect(within(historyTable).getByText("Compra")).toBeTruthy();
+    expect(within(historyTable).getByText("Ajuste")).toBeTruthy();
+    expect(within(historyTable).getByText("Ana Perez")).toBeTruthy();
+    expect(within(historyTable).getByText("Distribuidora Norte")).toBeTruthy();
+    expect(within(historyTable).getByText("Muestra interna")).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText("Origen"), "sale");
+    expect(within(historyTable).getByText("Venta")).toBeTruthy();
+    expect(within(historyTable).queryByText("Compra")).toBeNull();
+    expect(within(historyTable).queryByText("Ajuste")).toBeNull();
   });
 
   it("shows the product entry form only after clicking nuevo producto", async () => {

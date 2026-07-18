@@ -260,6 +260,7 @@ export function SectionContent({
   if (section.id === "products") {
     return (
       <ProductsSection
+        creditNotes={creditNotes}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
         formVisible={productFormVisible}
@@ -271,6 +272,8 @@ export function SectionContent({
         onUpdateProduct={onUpdateProduct}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
+        purchases={purchases}
+        sales={sales}
       />
     );
   }

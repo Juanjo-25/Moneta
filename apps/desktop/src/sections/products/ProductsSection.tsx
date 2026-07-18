@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -10,7 +10,10 @@ import { TextField } from "../../components/TextField";
 import type {
   InventoryAdjustmentRecord,
   InventoryAdjustmentType,
-  ProductRecord
+  ProductRecord,
+  PurchaseRecord,
+  SaleRecord,
+  CreditNoteRecord
 } from "../../types";
 
 type ProductFormState = {
@@ -35,6 +38,22 @@ type InventoryAdjustmentFormState = {
 type InventoryAdjustmentFormErrors = Partial<
   Record<keyof InventoryAdjustmentFormState, string>
 >;
+type InventoryMovementSource = "purchase" | "sale" | "credit-note" | "adjustment";
+type InventoryMovementRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  source: InventoryMovementSource;
+  sourceLabel: string;
+  documentLabel: string;
+  movementLabel: string;
+  quantityDelta: number;
+  resultingStock: number | null;
+  reason: string;
+  occurredAtMs: number;
+  occurredAtLabel: string;
+};
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -61,7 +80,15 @@ const inventoryAdjustmentLabels: Record<InventoryAdjustmentType, string> = {
   set: "Conteo fisico"
 };
 
+const inventoryMovementSourceLabels: Record<InventoryMovementSource, string> = {
+  adjustment: "Ajuste",
+  "credit-note": "Nota credito",
+  purchase: "Compra",
+  sale: "Venta"
+};
+
 type ProductsSectionProps = {
+  creditNotes: CreditNoteRecord[];
   formVisible: boolean;
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
@@ -78,9 +105,12 @@ type ProductsSectionProps = {
   onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
+  purchases: PurchaseRecord[];
+  sales: SaleRecord[];
 };
 
 export function ProductsSection({
+  creditNotes,
   formVisible,
   formatCurrency,
   formatIntegerInput,
@@ -91,7 +121,9 @@ export function ProductsSection({
   onRegisterInventoryAdjustment,
   onUpdateProduct,
   parseNonNegativeInteger,
-  products
+  products,
+  purchases,
+  sales
 }: ProductsSectionProps) {
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [errors, setErrors] = useState<ProductFormErrors>({});
@@ -104,6 +136,10 @@ export function ProductsSection({
   const [adjustmentErrors, setAdjustmentErrors] =
     useState<InventoryAdjustmentFormErrors>({});
   const [adjustmentMessage, setAdjustmentMessage] = useState("");
+  const [movementProductFilter, setMovementProductFilter] = useState("");
+  const [movementSourceFilter, setMovementSourceFilter] = useState<
+    InventoryMovementSource | ""
+  >("");
   const editingProduct =
     products.find((product) => product.id === editingProductId) ?? null;
   const activeProducts = products.filter((product) => product.active);
@@ -118,6 +154,24 @@ export function ProductsSection({
           ? selectedAdjustmentProduct.stock - adjustmentQuantity
           : adjustmentQuantity
       : null;
+  const inventoryMovements = useMemo(
+    () =>
+      buildInventoryMovements({
+        creditNotes,
+        inventoryAdjustments,
+        purchases,
+        sales
+      }),
+    [creditNotes, inventoryAdjustments, purchases, sales]
+  );
+  const filteredInventoryMovements = inventoryMovements.filter((movement) => {
+    const matchesProduct =
+      movementProductFilter === "" || movement.productId === movementProductFilter;
+    const matchesSource =
+      movementSourceFilter === "" || movement.source === movementSourceFilter;
+
+    return matchesProduct && matchesSource;
+  });
 
   function updateField(
     field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
@@ -588,6 +642,14 @@ export function ProductsSection({
             products={products}
           />
           <InventoryAdjustmentTable adjustments={inventoryAdjustments} />
+          <InventoryMovementsTable
+            movements={filteredInventoryMovements}
+            onProductFilterChange={setMovementProductFilter}
+            onSourceFilterChange={setMovementSourceFilter}
+            productFilter={movementProductFilter}
+            products={products}
+            sourceFilter={movementSourceFilter}
+          />
         </>
       ) : (
         <EmptyState
@@ -598,6 +660,199 @@ export function ProductsSection({
       )}
     </section>
   );
+}
+
+type InventoryMovementsTableProps = {
+  movements: InventoryMovementRecord[];
+  onProductFilterChange: (productId: string) => void;
+  onSourceFilterChange: (source: InventoryMovementSource | "") => void;
+  productFilter: string;
+  products: ProductRecord[];
+  sourceFilter: InventoryMovementSource | "";
+};
+
+function InventoryMovementsTable({
+  movements,
+  onProductFilterChange,
+  onSourceFilterChange,
+  productFilter,
+  products,
+  sourceFilter
+}: InventoryMovementsTableProps) {
+  return (
+    <section className="section-form-shell product-history-panel">
+      <div className="product-history-toolbar">
+        <label className="field" htmlFor="producto-historial-inventario">
+          <span>Producto historial</span>
+          <select
+            id="producto-historial-inventario"
+            onChange={(event) => onProductFilterChange(event.target.value)}
+            value={productFilter}
+          >
+            <option value="">Todos los productos</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field" htmlFor="origen-historial-inventario">
+          <span>Origen</span>
+          <select
+            id="origen-historial-inventario"
+            onChange={(event) =>
+              onSourceFilterChange(event.target.value as InventoryMovementSource | "")
+            }
+            value={sourceFilter}
+          >
+            <option value="">Todos los origenes</option>
+            <option value="purchase">Compras</option>
+            <option value="sale">Ventas</option>
+            <option value="credit-note">Notas credito</option>
+            <option value="adjustment">Ajustes</option>
+          </select>
+        </label>
+      </div>
+
+      {movements.length > 0 ? (
+        <DataTable ariaLabel="Historial de inventario">
+          <DataTableHeader
+            labels={[
+              "Fecha",
+              "Producto",
+              "Origen",
+              "Documento",
+              "Movimiento",
+              "Cantidad",
+              "Stock resultante",
+              "Detalle"
+            ]}
+          />
+          <tbody>
+            {movements.slice(0, 40).map((movement) => (
+              <tr key={movement.id}>
+                <td>{movement.occurredAtLabel}</td>
+                <td>{movement.productName}</td>
+                <td>{movement.sourceLabel}</td>
+                <td>{movement.documentLabel}</td>
+                <td>{movement.movementLabel}</td>
+                <td>
+                  {formatMovementQuantity(movement.quantityDelta)} {movement.unit}
+                </td>
+                <td>
+                  {movement.resultingStock === null
+                    ? "-"
+                    : `${movement.resultingStock} ${movement.unit}`}
+                </td>
+                <td>{movement.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </DataTable>
+      ) : (
+        <EmptyState
+          body="Los movimientos de compras, ventas, notas credito y ajustes apareceran aqui."
+          className="section-empty"
+          title="Sin movimientos de inventario"
+        />
+      )}
+    </section>
+  );
+}
+
+function buildInventoryMovements(input: {
+  creditNotes: CreditNoteRecord[];
+  inventoryAdjustments: InventoryAdjustmentRecord[];
+  purchases: PurchaseRecord[];
+  sales: SaleRecord[];
+}): InventoryMovementRecord[] {
+  const purchaseMovements = input.purchases.flatMap((purchase) =>
+    purchase.lines.map((line) => ({
+      documentLabel: purchase.invoiceNumber,
+      id: `purchase-${purchase.id}-${line.id}`,
+      movementLabel: "Entrada",
+      occurredAtLabel: purchase.occurredAtLabel,
+      occurredAtMs: purchase.occurredAtMs,
+      productId: line.productId,
+      productName: line.productName,
+      quantityDelta: line.quantity,
+      reason: purchase.supplierName,
+      resultingStock: null,
+      source: "purchase" as const,
+      sourceLabel: inventoryMovementSourceLabels.purchase,
+      unit: line.unit
+    }))
+  );
+  const saleMovements = input.sales.flatMap((sale) =>
+    sale.lines.map((line) => ({
+      documentLabel: `${sale.prefix}${sale.invoiceNumber}`,
+      id: `sale-${sale.id}-${line.id}`,
+      movementLabel: "Salida",
+      occurredAtLabel: sale.occurredAtLabel,
+      occurredAtMs: sale.occurredAtMs,
+      productId: line.productId,
+      productName: line.productName,
+      quantityDelta: -line.quantity,
+      reason: sale.customerName,
+      resultingStock: null,
+      source: "sale" as const,
+      sourceLabel: inventoryMovementSourceLabels.sale,
+      unit: line.unit
+    }))
+  );
+  const creditNoteMovements = input.creditNotes
+    .filter(
+      (creditNote) =>
+        creditNote.status === "confirmed" && creditNote.adjustmentType === "return"
+    )
+    .flatMap((creditNote) =>
+      creditNote.lines.map((line) => ({
+        documentLabel: creditNote.number,
+        id: `credit-note-${creditNote.id}-${line.id}`,
+        movementLabel: "Entrada",
+        occurredAtLabel: creditNote.confirmedAtLabel || creditNote.occurredAtLabel,
+        occurredAtMs: creditNote.confirmedAtMs || creditNote.occurredAtMs,
+        productId: line.productId,
+        productName: line.productName,
+        quantityDelta: line.quantity,
+        reason: creditNote.reason,
+        resultingStock: null,
+        source: "credit-note" as const,
+        sourceLabel: inventoryMovementSourceLabels["credit-note"],
+        unit: line.unit
+      }))
+    );
+  const adjustmentMovements = input.inventoryAdjustments.map((adjustment) => ({
+    documentLabel: adjustment.id,
+    id: adjustment.id,
+    movementLabel: inventoryAdjustmentLabels[adjustment.adjustmentType],
+    occurredAtLabel: adjustment.occurredAtLabel,
+    occurredAtMs: adjustment.occurredAtMs,
+    productId: adjustment.productId,
+    productName: adjustment.productName,
+    quantityDelta: adjustment.nextStock - adjustment.previousStock,
+    reason: adjustment.reason,
+    resultingStock: adjustment.nextStock,
+    source: "adjustment" as const,
+    sourceLabel: inventoryMovementSourceLabels.adjustment,
+    unit: adjustment.unit
+  }));
+
+  return [
+    ...purchaseMovements,
+    ...saleMovements,
+    ...creditNoteMovements,
+    ...adjustmentMovements
+  ].sort((left, right) => right.occurredAtMs - left.occurredAtMs);
+}
+
+function formatMovementQuantity(quantityDelta: number): string {
+  if (quantityDelta > 0) {
+    return `+${quantityDelta}`;
+  }
+
+  return String(quantityDelta);
 }
 
 type InventoryAdjustmentTableProps = {
