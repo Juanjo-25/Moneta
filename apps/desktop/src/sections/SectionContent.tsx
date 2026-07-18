@@ -114,7 +114,7 @@ type SectionContentProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -140,7 +140,7 @@ type SectionContentProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterCreditNote: (input: {
     sale: SaleRecord;
     adjustmentType: CreditNoteAdjustmentType;

@@ -4,6 +4,8 @@ import {
   loadNativeCustomers,
   loadNativeProducts,
   loadNativePurchases,
+  loadNativeReceivables,
+  loadNativeSales,
   loadNativeSettings,
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
@@ -11,6 +13,7 @@ import {
   saveNativeCustomer,
   saveNativeProduct,
   saveNativePurchase,
+  saveNativeSale,
   saveNativeSettings,
   saveNativeSupplier,
   saveNativeSupplierPayment
@@ -251,6 +254,107 @@ describe("native customer persistence", () => {
 
     await expect(saveNativeCustomer(customer)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_customer", { customer });
+  });
+});
+
+describe("native sale persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  const customer = {
+    active: true,
+    address: "Calle 1",
+    city: "Medellin",
+    document: "123456789",
+    email: "cliente@correo.com",
+    id: "customer-1",
+    name: "Ana Perez"
+  };
+  const sale = {
+    branch: "Principal",
+    concept: "Factura de venta",
+    currency: "COP" as const,
+    customer,
+    customerId: "customer-1",
+    customerName: "Ana Perez",
+    id: "sale-1",
+    invoiceNumber: "001",
+    issuedAt: "2026-07-18",
+    lines: [
+      {
+        costMinor: 6400,
+        discountMinor: 0,
+        discountPercent: 0,
+        id: "sale-1-line-0",
+        marginMinor: 2600,
+        marginPercent: 28.89,
+        productId: "product-1",
+        productName: "Arroz libra",
+        quantity: 2,
+        subtotalMinor: 9000,
+        taxMinor: 0,
+        taxPercent: 0,
+        totalMinor: 9000,
+        unit: "Unidad",
+        unitCostMinorAtSale: 3200,
+        unitPriceMinor: 4500
+      }
+    ],
+    occurredAtLabel: "18/07/26, 12:20",
+    occurredAtMs: 3,
+    paymentStatus: "pending" as const,
+    prefix: "",
+    productId: "product-1",
+    productName: "Arroz libra",
+    quantity: 2,
+    seller: "Laura Gomez",
+    totalMinor: 9000,
+    unitPriceMinor: 4500
+  };
+  const receivable = {
+    amountMinor: 9000,
+    balanceMinor: 9000,
+    customerId: "customer-1",
+    customerName: "Ana Perez",
+    dueAt: "2026-08-18",
+    id: "receivable-sale-1",
+    originalAmountMinor: 9000,
+    paidAmountMinor: 0,
+    saleId: "sale-1",
+    status: "pending" as const
+  };
+
+  it("returns null sales and receivables and skips saves in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativeSales()).resolves.toBeNull();
+    await expect(loadNativeReceivables()).resolves.toBeNull();
+    await expect(saveNativeSale({ receivable, sale })).resolves.toBe(false);
+  });
+
+  it("loads sales and receivables through Tauri", async () => {
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "list_sales") {
+        return Promise.resolve([sale]);
+      }
+
+      return Promise.resolve([receivable]);
+    });
+    setTauriInvoke(invoke);
+
+    await expect(loadNativeSales()).resolves.toEqual([sale]);
+    await expect(loadNativeReceivables()).resolves.toEqual([receivable]);
+    expect(invoke).toHaveBeenCalledWith("list_sales");
+    expect(invoke).toHaveBeenCalledWith("list_receivables");
+  });
+
+  it("saves a sale through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeSale({ receivable, sale })).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_sale", { receivable, sale });
   });
 });
 

@@ -20,6 +20,8 @@ import {
   loadNativeCustomers,
   loadNativeProducts,
   loadNativePurchases,
+  loadNativeReceivables,
+  loadNativeSales,
   loadNativeSettings,
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
@@ -27,6 +29,7 @@ import {
   saveNativeCustomer,
   saveNativeProduct,
   saveNativePurchase,
+  saveNativeSale,
   saveNativeSettings,
   saveNativeSupplier,
   saveNativeSupplierPayment,
@@ -337,6 +340,8 @@ export function App() {
           storedSettings,
           storedProducts,
           storedCustomers,
+          storedSales,
+          storedReceivables,
           storedSuppliers,
           storedPurchases,
           storedSupplierPayables,
@@ -345,6 +350,8 @@ export function App() {
           loadNativeSettings(),
           loadNativeProducts(),
           loadNativeCustomers(),
+          loadNativeSales(),
+          loadNativeReceivables(),
           loadNativeSuppliers(),
           loadNativePurchases(),
           loadNativeSupplierPayables(),
@@ -359,6 +366,12 @@ export function App() {
         }
         if (isMounted && storedCustomers) {
           setCustomers(storedCustomers);
+        }
+        if (isMounted && storedSales) {
+          setSales(storedSales);
+        }
+        if (isMounted && storedReceivables) {
+          setReceivables(storedReceivables);
         }
         if (isMounted && storedSuppliers) {
           setSuppliers(storedSuppliers);
@@ -873,7 +886,7 @@ export function App() {
     return true;
   }
 
-  function registerSaleInSession(input: {
+  async function registerSaleInSession(input: {
     customer: CustomerRecord;
     branch: string;
     prefix: string;
@@ -899,7 +912,7 @@ export function App() {
       totalMinor: number;
     }>;
     paymentStatus: "paid" | "pending";
-  }): string | null {
+  }): Promise<string | null> {
     const occurredAtMs = Date.now();
     const occurredAt = new Date(occurredAtMs);
     const requestedByProduct = input.lines.reduce((requested, line) => {
@@ -939,6 +952,54 @@ export function App() {
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
     const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
     const firstLine = lines[0]!;
+    const sale: SaleRecord = {
+      branch: input.branch,
+      concept: input.concept,
+      currency: "COP",
+      customer: input.customer,
+      customerId: input.customer.id,
+      customerName: input.customer.name,
+      id: saleId,
+      invoiceNumber: input.invoiceNumber,
+      issuedAt: input.issuedAt,
+      lines,
+      occurredAtMs,
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      paymentStatus: input.paymentStatus,
+      prefix: input.prefix,
+      productId: firstLine.productId,
+      productName:
+        lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+      quantity: totalQuantity,
+      seller: input.seller,
+      totalMinor,
+      unitPriceMinor: firstLine.unitPriceMinor
+    };
+    const receivable: ReceivableRecord | null =
+      input.paymentStatus === "pending"
+        ? {
+            amountMinor: totalMinor,
+            balanceMinor: totalMinor,
+            customerId: input.customer.id,
+            customerName: input.customer.name,
+            dueAt: input.dueAt ?? "",
+            id: `receivable-${saleId}`,
+            originalAmountMinor: totalMinor,
+            paidAmountMinor: 0,
+            saleId,
+            status: "pending"
+          }
+        : null;
+
+    try {
+      await saveNativeSale({ receivable, sale });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la venta local."
+      });
+      return "No se pudo guardar la venta local.";
+    }
 
     setProducts((currentProducts) =>
       currentProducts.map((product) => ({
@@ -946,49 +1007,10 @@ export function App() {
         stock: product.stock - (requestedByProduct.get(product.id) ?? 0)
       }))
     );
-    setSales((currentSales) => [
-      {
-        branch: input.branch,
-        concept: input.concept,
-        currency: "COP",
-        customer: input.customer,
-        customerId: input.customer.id,
-        customerName: input.customer.name,
-        id: saleId,
-        invoiceNumber: input.invoiceNumber,
-        issuedAt: input.issuedAt,
-        lines,
-        occurredAtMs,
-        occurredAtLabel: formatOccurredAtLabel(occurredAt),
-        paymentStatus: input.paymentStatus,
-        prefix: input.prefix,
-        productId: firstLine.productId,
-        productName:
-          lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
-        quantity: totalQuantity,
-        seller: input.seller,
-        totalMinor,
-        unitPriceMinor: firstLine.unitPriceMinor,
-      },
-      ...currentSales
-    ]);
+    setSales((currentSales) => [sale, ...currentSales]);
 
-    if (input.paymentStatus === "pending") {
-      setReceivables((currentReceivables) => [
-        {
-          amountMinor: totalMinor,
-          balanceMinor: totalMinor,
-          customerId: input.customer.id,
-          customerName: input.customer.name,
-          dueAt: input.dueAt ?? "",
-          id: `receivable-${saleId}`,
-          originalAmountMinor: totalMinor,
-          paidAmountMinor: 0,
-          saleId,
-          status: "pending"
-        },
-        ...currentReceivables
-      ]);
+    if (receivable) {
+      setReceivables((currentReceivables) => [receivable, ...currentReceivables]);
     }
 
     return null;
@@ -1018,7 +1040,7 @@ export function App() {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }): string | null {
+  }): Promise<string | null> {
     return registerSaleInSession({
       branch: input.branch,
       concept: input.concept,
@@ -1057,7 +1079,7 @@ export function App() {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }): string | null {
+  }): Promise<string | null> {
     return registerSaleInSession({
       branch: input.branch,
       concept: input.concept,

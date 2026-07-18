@@ -149,7 +149,7 @@ type SalesSectionProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -175,7 +175,7 @@ type SalesSectionProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
   onDeleteSale: (saleId: string) => void;
   onValidateCustomer: (
@@ -396,7 +396,7 @@ export function SalesSection({
     }));
   }
 
-  function submitSale(event: FormEvent<HTMLFormElement>) {
+  async function submitSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: SalesFormErrors = {};
@@ -482,9 +482,9 @@ export function SalesSection({
     let submitError: string | null = null;
 
     if (form.paymentStatus === "paid") {
-      submitError = onRegisterPaidSale(registerInput);
+      submitError = await onRegisterPaidSale(registerInput);
     } else {
-      submitError = onRegisterPendingSale({
+      submitError = await onRegisterPendingSale({
         ...registerInput,
         dueAt: form.dueAt.trim()
       });

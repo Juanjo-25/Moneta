@@ -432,6 +432,108 @@ describe("App navigation", () => {
     );
   });
 
+  it("saves sales and receivables through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 3200,
+      id: "product-stored",
+      minimumStock: 1,
+      name: "Arroz libra",
+      salePriceMinor: 4500,
+      sku: "ARZ-001",
+      stock: 4
+    };
+    const storedCustomer = {
+      active: true,
+      address: "Calle 10",
+      city: "Medellin",
+      document: "123456789",
+      email: "ana@correo.com",
+      id: "customer-stored",
+      name: "Ana Perez"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 5,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([storedCustomer]);
+      }
+      if (command === "list_sales") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_receivables") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_purchases") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_supplier_payables") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_supplier_payments") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await screen.findByRole("option", { name: /Ana Perez/ });
+    await user.selectOptions(screen.getByLabelText("Cliente"), "customer-stored");
+    await user.selectOptions(screen.getByLabelText("Producto"), "product-stored");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-08-18");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_sale",
+        expect.objectContaining({
+          receivable: expect.objectContaining({
+            balanceMinor: 9000,
+            customerId: "customer-stored",
+            dueAt: "2026-08-18",
+            status: "pending"
+          }),
+          sale: expect.objectContaining({
+            customer: storedCustomer,
+            customerId: "customer-stored",
+            customerName: "Ana Perez",
+            paymentStatus: "pending",
+            productName: "Arroz libra",
+            quantity: 2,
+            totalMinor: 9000
+          })
+        })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByText("2")).toBeTruthy();
+  });
+
   it("loads and updates suppliers through SQLite when Tauri is available", async () => {
     const user = userEvent.setup();
     const storedSupplier = {

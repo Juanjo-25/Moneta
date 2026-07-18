@@ -67,6 +67,67 @@ struct CustomerRecord {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct SaleLineRecord {
+    id: String,
+    product_id: String,
+    product_name: String,
+    unit: String,
+    quantity: i64,
+    unit_cost_minor_at_sale: i64,
+    unit_price_minor: i64,
+    discount_percent: f64,
+    discount_minor: i64,
+    tax_percent: f64,
+    tax_minor: i64,
+    subtotal_minor: i64,
+    cost_minor: i64,
+    margin_minor: i64,
+    margin_percent: f64,
+    total_minor: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SaleRecord {
+    id: String,
+    customer: CustomerRecord,
+    customer_id: String,
+    customer_name: String,
+    branch: String,
+    prefix: String,
+    invoice_number: String,
+    seller: String,
+    currency: String,
+    concept: String,
+    issued_at: String,
+    product_id: String,
+    product_name: String,
+    quantity: i64,
+    unit_price_minor: i64,
+    total_minor: i64,
+    lines: Vec<SaleLineRecord>,
+    payment_status: String,
+    occurred_at_ms: i64,
+    occurred_at_label: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceivableRecord {
+    id: String,
+    customer_id: String,
+    customer_name: String,
+    sale_id: String,
+    amount_minor: i64,
+    original_amount_minor: i64,
+    paid_amount_minor: i64,
+    balance_minor: i64,
+    due_at: String,
+    status: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SupplierRecord {
     id: String,
     active: bool,
@@ -163,6 +224,13 @@ struct PurchasePersistence {
 struct SupplierPaymentPersistence {
     payment: SupplierPaymentRecord,
     supplier_payable: SupplierPayableRecord,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SalePersistence {
+    sale: SaleRecord,
+    receivable: Option<ReceivableRecord>,
 }
 
 #[tauri::command]
@@ -396,6 +464,316 @@ fn save_customer(app: tauri::AppHandle, customer: CustomerRecord) -> Result<(), 
             ),
         )
         .map_err(|error| format!("No se pudo guardar el cliente: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn list_sales(app: tauri::AppHandle) -> Result<Vec<SaleRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              customer_json,
+              customer_id,
+              customer_name,
+              branch,
+              prefix,
+              invoice_number,
+              seller,
+              currency,
+              concept,
+              issued_at,
+              product_id,
+              product_name,
+              quantity,
+              unit_price_minor,
+              total_minor,
+              payment_status,
+              occurred_at_ms,
+              occurred_at_label
+            FROM sales
+            ORDER BY occurred_at_ms DESC, id DESC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de ventas: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let customer_json: String = row.get(1)?;
+            let customer = serde_json::from_str(&customer_json).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    1,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?;
+
+            Ok(SaleRecord {
+                id: row.get(0)?,
+                customer,
+                customer_id: row.get(2)?,
+                customer_name: row.get(3)?,
+                branch: row.get(4)?,
+                prefix: row.get(5)?,
+                invoice_number: row.get(6)?,
+                seller: row.get(7)?,
+                currency: row.get(8)?,
+                concept: row.get(9)?,
+                issued_at: row.get(10)?,
+                product_id: row.get(11)?,
+                product_name: row.get(12)?,
+                quantity: row.get(13)?,
+                unit_price_minor: row.get(14)?,
+                total_minor: row.get(15)?,
+                lines: Vec::new(),
+                payment_status: row.get(16)?,
+                occurred_at_ms: row.get(17)?,
+                occurred_at_label: row.get(18)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer las ventas: {error}"))?;
+
+    let mut sales = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir las ventas: {error}"))?;
+
+    for sale in &mut sales {
+        sale.lines = list_sale_lines(&connection, &sale.id)?;
+    }
+
+    Ok(sales)
+}
+
+#[tauri::command]
+fn list_receivables(app: tauri::AppHandle) -> Result<Vec<ReceivableRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              customer_id,
+              customer_name,
+              sale_id,
+              amount_minor,
+              original_amount_minor,
+              paid_amount_minor,
+              balance_minor,
+              due_at,
+              status
+            FROM receivables
+            ORDER BY due_at ASC, id ASC
+            ",
+        )
+        .map_err(|error| {
+            format!("No se pudo preparar la lectura de cartera por cobrar: {error}")
+        })?;
+
+    let rows = statement
+        .query_map([], |row| {
+            Ok(ReceivableRecord {
+                id: row.get(0)?,
+                customer_id: row.get(1)?,
+                customer_name: row.get(2)?,
+                sale_id: row.get(3)?,
+                amount_minor: row.get(4)?,
+                original_amount_minor: row.get(5)?,
+                paid_amount_minor: row.get(6)?,
+                balance_minor: row.get(7)?,
+                due_at: row.get(8)?,
+                status: row.get(9)?,
+            })
+        })
+        .map_err(|error| format!("No se pudo leer la cartera por cobrar: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudo convertir la cartera por cobrar: {error}"))
+}
+
+#[tauri::command]
+fn save_sale(app: tauri::AppHandle, input: SalePersistence) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de venta: {error}"))?;
+    let customer_json = serde_json::to_string(&input.sale.customer)
+        .map_err(|error| format!("No se pudo serializar el cliente de la venta: {error}"))?;
+
+    transaction
+        .execute(
+            "
+            INSERT INTO sales (
+              id,
+              customer_json,
+              customer_id,
+              customer_name,
+              branch,
+              prefix,
+              invoice_number,
+              seller,
+              currency,
+              concept,
+              issued_at,
+              product_id,
+              product_name,
+              quantity,
+              unit_price_minor,
+              total_minor,
+              payment_status,
+              occurred_at_ms,
+              occurred_at_label,
+              updated_at
+            )
+            VALUES (
+              ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+              ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
+              CURRENT_TIMESTAMP
+            )
+            ",
+            params![
+                &input.sale.id,
+                &customer_json,
+                &input.sale.customer_id,
+                &input.sale.customer_name,
+                &input.sale.branch,
+                &input.sale.prefix,
+                &input.sale.invoice_number,
+                &input.sale.seller,
+                &input.sale.currency,
+                &input.sale.concept,
+                &input.sale.issued_at,
+                &input.sale.product_id,
+                &input.sale.product_name,
+                input.sale.quantity,
+                input.sale.unit_price_minor,
+                input.sale.total_minor,
+                &input.sale.payment_status,
+                input.sale.occurred_at_ms,
+                &input.sale.occurred_at_label,
+            ],
+        )
+        .map_err(|error| format!("No se pudo guardar la venta: {error}"))?;
+
+    for line in &input.sale.lines {
+        transaction
+            .execute(
+                "
+                INSERT INTO sale_lines (
+                  id,
+                  sale_id,
+                  product_id,
+                  product_name,
+                  unit,
+                  quantity,
+                  unit_cost_minor_at_sale,
+                  unit_price_minor,
+                  discount_percent,
+                  discount_minor,
+                  tax_percent,
+                  tax_minor,
+                  subtotal_minor,
+                  cost_minor,
+                  margin_minor,
+                  margin_percent,
+                  total_minor
+                )
+                VALUES (
+                  ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+                  ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
+                )
+                ",
+                params![
+                    &line.id,
+                    &input.sale.id,
+                    &line.product_id,
+                    &line.product_name,
+                    &line.unit,
+                    line.quantity,
+                    line.unit_cost_minor_at_sale,
+                    line.unit_price_minor,
+                    line.discount_percent,
+                    line.discount_minor,
+                    line.tax_percent,
+                    line.tax_minor,
+                    line.subtotal_minor,
+                    line.cost_minor,
+                    line.margin_minor,
+                    line.margin_percent,
+                    line.total_minor,
+                ],
+            )
+            .map_err(|error| format!("No se pudo guardar una linea de venta: {error}"))?;
+
+        let affected = transaction
+            .execute(
+                "
+                UPDATE products
+                SET
+                  stock = stock - ?1,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?2 AND stock >= ?1
+                ",
+                params![line.quantity, &line.product_id],
+            )
+            .map_err(|error| format!("No se pudo descontar inventario: {error}"))?;
+
+        if affected == 0 {
+            return Err(format!(
+                "No hay inventario suficiente para {} en SQLite.",
+                line.product_name
+            ));
+        }
+    }
+
+    if let Some(receivable) = &input.receivable {
+        transaction
+            .execute(
+                "
+                INSERT INTO receivables (
+                  id,
+                  customer_id,
+                  customer_name,
+                  sale_id,
+                  amount_minor,
+                  original_amount_minor,
+                  paid_amount_minor,
+                  balance_minor,
+                  due_at,
+                  status,
+                  updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CURRENT_TIMESTAMP)
+                ",
+                params![
+                    &receivable.id,
+                    &receivable.customer_id,
+                    &receivable.customer_name,
+                    &receivable.sale_id,
+                    receivable.amount_minor,
+                    receivable.original_amount_minor,
+                    receivable.paid_amount_minor,
+                    receivable.balance_minor,
+                    &receivable.due_at,
+                    &receivable.status,
+                ],
+            )
+            .map_err(|error| format!("No se pudo guardar la cuenta por cobrar: {error}"))?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la venta: {error}"))?;
 
     Ok(())
 }
@@ -906,6 +1284,61 @@ fn save_supplier_payment(
     Ok(())
 }
 
+fn list_sale_lines(connection: &Connection, sale_id: &str) -> Result<Vec<SaleLineRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              product_id,
+              product_name,
+              unit,
+              quantity,
+              unit_cost_minor_at_sale,
+              unit_price_minor,
+              discount_percent,
+              discount_minor,
+              tax_percent,
+              tax_minor,
+              subtotal_minor,
+              cost_minor,
+              margin_minor,
+              margin_percent,
+              total_minor
+            FROM sale_lines
+            WHERE sale_id = ?1
+            ORDER BY id ASC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de lineas de venta: {error}"))?;
+
+    let rows = statement
+        .query_map([sale_id], |row| {
+            Ok(SaleLineRecord {
+                id: row.get(0)?,
+                product_id: row.get(1)?,
+                product_name: row.get(2)?,
+                unit: row.get(3)?,
+                quantity: row.get(4)?,
+                unit_cost_minor_at_sale: row.get(5)?,
+                unit_price_minor: row.get(6)?,
+                discount_percent: row.get(7)?,
+                discount_minor: row.get(8)?,
+                tax_percent: row.get(9)?,
+                tax_minor: row.get(10)?,
+                subtotal_minor: row.get(11)?,
+                cost_minor: row.get(12)?,
+                margin_minor: row.get(13)?,
+                margin_percent: row.get(14)?,
+                total_minor: row.get(15)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer las lineas de venta: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir las lineas de venta: {error}"))
+}
+
 fn list_purchase_lines(
     connection: &Connection,
     purchase_id: &str,
@@ -1033,6 +1466,70 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS sales (
+              id TEXT PRIMARY KEY,
+              customer_json TEXT NOT NULL,
+              customer_id TEXT NOT NULL,
+              customer_name TEXT NOT NULL,
+              branch TEXT NOT NULL,
+              prefix TEXT NOT NULL,
+              invoice_number TEXT NOT NULL,
+              seller TEXT NOT NULL,
+              currency TEXT NOT NULL,
+              concept TEXT NOT NULL,
+              issued_at TEXT NOT NULL,
+              product_id TEXT NOT NULL,
+              product_name TEXT NOT NULL,
+              quantity INTEGER NOT NULL,
+              unit_price_minor INTEGER NOT NULL,
+              total_minor INTEGER NOT NULL,
+              payment_status TEXT NOT NULL,
+              occurred_at_ms INTEGER NOT NULL,
+              occurred_at_label TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (customer_id) REFERENCES customers(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS sale_lines (
+              id TEXT PRIMARY KEY,
+              sale_id TEXT NOT NULL,
+              product_id TEXT NOT NULL,
+              product_name TEXT NOT NULL,
+              unit TEXT NOT NULL,
+              quantity INTEGER NOT NULL,
+              unit_cost_minor_at_sale INTEGER NOT NULL,
+              unit_price_minor INTEGER NOT NULL,
+              discount_percent REAL NOT NULL,
+              discount_minor INTEGER NOT NULL,
+              tax_percent REAL NOT NULL,
+              tax_minor INTEGER NOT NULL,
+              subtotal_minor INTEGER NOT NULL,
+              cost_minor INTEGER NOT NULL,
+              margin_minor INTEGER NOT NULL,
+              margin_percent REAL NOT NULL,
+              total_minor INTEGER NOT NULL,
+              FOREIGN KEY (sale_id) REFERENCES sales(id),
+              FOREIGN KEY (product_id) REFERENCES products(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS receivables (
+              id TEXT PRIMARY KEY,
+              customer_id TEXT NOT NULL,
+              customer_name TEXT NOT NULL,
+              sale_id TEXT NOT NULL,
+              amount_minor INTEGER NOT NULL,
+              original_amount_minor INTEGER NOT NULL,
+              paid_amount_minor INTEGER NOT NULL,
+              balance_minor INTEGER NOT NULL,
+              due_at TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (customer_id) REFERENCES customers(id),
+              FOREIGN KEY (sale_id) REFERENCES sales(id)
+            );
+
             CREATE TABLE IF NOT EXISTS purchases (
               id TEXT PRIMARY KEY,
               supplier_id TEXT NOT NULL,
@@ -1121,6 +1618,9 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
 
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-pagos-proveedores');
+
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-ventas-iniciales');
             ",
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
@@ -1139,6 +1639,9 @@ fn main() {
             save_product,
             list_customers,
             save_customer,
+            list_sales,
+            list_receivables,
+            save_sale,
             list_suppliers,
             save_supplier,
             list_purchases,

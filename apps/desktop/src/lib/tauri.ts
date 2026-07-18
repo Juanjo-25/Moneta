@@ -3,6 +3,8 @@ import type {
   CustomerRecord,
   ProductRecord,
   PurchaseRecord,
+  ReceivableRecord,
+  SaleRecord,
   SupplierPayableRecord,
   SupplierPaymentRecord,
   SupplierRecord
@@ -133,6 +135,41 @@ export async function saveNativeCustomer(customer: CustomerRecord): Promise<bool
   }
 
   await invoke<void>("save_customer", { customer });
+
+  return true;
+}
+
+export async function loadNativeSales(): Promise<SaleRecord[] | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<SaleRecord[]>("list_sales");
+}
+
+export async function loadNativeReceivables(): Promise<ReceivableRecord[] | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<ReceivableRecord[]>("list_receivables");
+}
+
+export async function saveNativeSale(input: {
+  sale: SaleRecord;
+  receivable: ReceivableRecord | null;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_sale", input);
 
   return true;
 }
