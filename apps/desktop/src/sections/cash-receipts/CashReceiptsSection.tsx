@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { Fragment, useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -264,6 +264,8 @@ function CashReceiptsTable({
   onVoidReceipt: (receiptId: string) => Promise<void>;
   receiptActionError: string | null;
 }) {
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+
   if (customerReceipts.length === 0) {
     return (
       <EmptyState
@@ -291,30 +293,132 @@ function CashReceiptsTable({
           ]}
         />
         <tbody>
-          {customerReceipts.map((receipt) => (
-            <tr key={receipt.id}>
-              <td>{receipt.number}</td>
-              <td>{receipt.receivedAt}</td>
-              <td>{receipt.customerName}</td>
-              <td>{receipt.saleId}</td>
-              <td>{receipt.concept}</td>
-              <td>{receipt.active ? "Activo" : `Anulado ${receipt.voidedAtLabel}`}</td>
-              <td>{formatCurrency(receipt.amountMinor)}</td>
-              <td>
-                {receipt.active ? (
-                  <SecondaryActionButton
-                    onClick={() => void onVoidReceipt(receipt.id)}
-                    variant="compact"
-                  >
-                    Anular
-                  </SecondaryActionButton>
+          {customerReceipts.map((receipt) => {
+            const isSelected = selectedReceiptId === receipt.id;
+
+            return (
+              <Fragment key={receipt.id}>
+                <tr>
+                  <td>{receipt.number}</td>
+                  <td>{receipt.receivedAt}</td>
+                  <td>{receipt.customerName}</td>
+                  <td>{receipt.saleId}</td>
+                  <td>{receipt.concept}</td>
+                  <td>
+                    {receipt.active ? "Activo" : `Anulado ${receipt.voidedAtLabel}`}
+                  </td>
+                  <td>{formatCurrency(receipt.amountMinor)}</td>
+                  <td>
+                    <SecondaryActionButton
+                      onClick={() =>
+                        setSelectedReceiptId(isSelected ? null : receipt.id)
+                      }
+                      variant="compact"
+                    >
+                      Detalle
+                    </SecondaryActionButton>
+                    {receipt.active ? (
+                      <SecondaryActionButton
+                        onClick={() => void onVoidReceipt(receipt.id)}
+                        variant="compact"
+                      >
+                        Anular
+                      </SecondaryActionButton>
+                    ) : null}
+                  </td>
+                </tr>
+                {isSelected ? (
+                  <tr className="cash-receipt-detail-row">
+                    <td colSpan={8}>
+                      <CashReceiptDetailPanel
+                        formatCurrency={formatCurrency}
+                        onClose={() => setSelectedReceiptId(null)}
+                        receipt={receipt}
+                      />
+                    </td>
+                  </tr>
                 ) : null}
-              </td>
-            </tr>
-          ))}
+              </Fragment>
+            );
+          })}
         </tbody>
       </DataTable>
     </>
+  );
+}
+
+function CashReceiptDetailPanel({
+  formatCurrency,
+  onClose,
+  receipt
+}: {
+  formatCurrency: (minor: number) => string;
+  onClose: () => void;
+  receipt: CustomerReceiptRecord;
+}) {
+  const balanceAfterReceipt = Math.max(
+    receipt.receivableBalanceMinorBefore - receipt.amountMinor,
+    0
+  );
+
+  return (
+    <section
+      aria-label={`Detalle historico ${receipt.number}`}
+      className="cash-receipt-detail"
+    >
+      <div className="credit-note-review-heading">
+        <div>
+          <span>Detalle historico</span>
+          <strong>{receipt.number}</strong>
+        </div>
+        <div className="credit-note-review-actions">
+          <SecondaryActionButton onClick={onClose} variant="compact">
+            Cerrar
+          </SecondaryActionButton>
+        </div>
+      </div>
+
+      <div className="credit-note-impact-grid">
+        <div>
+          <span>Estado</span>
+          <strong>{receipt.active ? "Activo" : "Anulado"}</strong>
+          <small>{receipt.active ? receipt.receivedAtLabel : receipt.voidedAtLabel}</small>
+        </div>
+        <div>
+          <span>Cliente</span>
+          <strong>{receipt.customerName}</strong>
+          <small>{receipt.saleId}</small>
+        </div>
+        <div>
+          <span>Valor recibido</span>
+          <strong>{formatCurrency(receipt.amountMinor)}</strong>
+          <small>{receipt.receivedAt}</small>
+        </div>
+        <div>
+          <span>Cartera antes</span>
+          <strong>{formatCurrency(receipt.receivableBalanceMinorBefore)}</strong>
+          <small>Pagado antes {formatCurrency(receipt.receivablePaidAmountMinorBefore)}</small>
+        </div>
+        <div>
+          <span>Cartera despues</span>
+          <strong>
+            {receipt.active
+              ? formatCurrency(balanceAfterReceipt)
+              : formatCurrency(receipt.receivableBalanceMinorBefore)}
+          </strong>
+          <small>
+            {receipt.active
+              ? "Saldo aplicado por el recibo."
+              : "Saldo restaurado por anulacion."}
+          </small>
+        </div>
+        <div>
+          <span>Concepto</span>
+          <strong>{receipt.concept}</strong>
+          <small>{receipt.receivableDueAt || "Sin vencimiento"}</small>
+        </div>
+      </div>
+    </section>
   );
 }
 

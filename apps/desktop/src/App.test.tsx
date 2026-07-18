@@ -1088,6 +1088,12 @@ describe("App navigation", () => {
     expect(within(receiptsTable).getByText("RC-001")).toBeTruthy();
     expect(within(receiptsTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receiptsTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    await user.click(within(receiptsTable).getByRole("button", { name: "Detalle" }));
+    const receiptDetail = screen.getByLabelText("Detalle historico RC-001");
+    expect(within(receiptDetail).getByText("Cartera antes")).toBeTruthy();
+    expect(within(receiptDetail).getByText("Cartera despues")).toBeTruthy();
+    expect(within(receiptDetail).getByText("Saldo aplicado por el recibo.")).toBeTruthy();
+    await user.click(within(receiptDetail).getByRole("button", { name: "Cerrar" }));
     await user.click(within(receiptsTable).getByRole("button", { name: "Anular" }));
     expect(within(receiptsTable).getByText(/Anulado/)).toBeTruthy();
 
@@ -1193,13 +1199,18 @@ describe("App navigation", () => {
     ).toBeTruthy();
     expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*4\.500/)).toBeTruthy();
-    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
-    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Detalle" }));
+    const reviewPanel = screen.getByLabelText("Detalle historico NC-001");
     expect(within(reviewPanel).getByText("Entran 1 unidades")).toBeTruthy();
     expect(within(reviewPanel).getByText("Sin saldo por cobrar")).toBeTruthy();
     expect(within(reviewPanel).getByText("Arroz libra")).toBeTruthy();
     await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
     expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Detalle" }));
+    const historicalPanel = screen.getByLabelText("Detalle historico NC-001");
+    expect(within(historicalPanel).getByText("Confirmada")).toBeTruthy();
+    expect(within(historicalPanel).queryByRole("button", { name: "Confirmar nota" })).toBeNull();
+    await user.click(within(historicalPanel).getByRole("button", { name: "Cerrar" }));
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
@@ -1273,8 +1284,8 @@ describe("App navigation", () => {
     expect(within(creditNotesTable).getByText("Descuento")).toBeTruthy();
     expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*1\.000/)).toBeTruthy();
-    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
-    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Detalle" }));
+    const reviewPanel = screen.getByLabelText("Detalle historico NC-001");
     expect(within(reviewPanel).getAllByText("Sin movimiento")).toHaveLength(2);
     await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
     expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
@@ -1351,7 +1362,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
-    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
     await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
@@ -1386,7 +1397,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
-    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
     await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));

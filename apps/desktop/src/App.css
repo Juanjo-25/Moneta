@@ -1273,7 +1273,20 @@ button,
   background: var(--surface-soft);
 }
 
+.cash-receipt-detail-row td {
+  background: var(--surface-soft);
+}
+
 .credit-note-review {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  padding: 14px;
+}
+
+.cash-receipt-detail {
   display: grid;
   gap: 14px;
   border: 1px solid var(--border-default);
