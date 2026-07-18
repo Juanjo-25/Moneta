@@ -31,7 +31,7 @@ type CashReceiptsSectionProps = {
     amountMinor: number;
     concept: string;
     receivedAt: string;
-  }) => string | null;
+  }) => Promise<string | null>;
   parseNonNegativeInteger: (value: string) => number | null;
   receivables: ReceivableRecord[];
 };
@@ -72,7 +72,7 @@ export function CashReceiptsSection({
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
-  function submitReceipt(event: FormEvent<HTMLFormElement>) {
+  async function submitReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const amountMinor = parseNonNegativeInteger(form.amount);
@@ -96,7 +96,7 @@ export function CashReceiptsSection({
       return;
     }
 
-    const submitError = onRegisterCustomerReceipt({
+    const submitError = await onRegisterCustomerReceipt({
       amountMinor,
       concept: form.concept,
       receivableId: form.receivableId,

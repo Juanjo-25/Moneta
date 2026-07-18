@@ -18,6 +18,7 @@ import {
 import {
   checkNativeConnection,
   loadNativeCustomers,
+  loadNativeCustomerReceipts,
   loadNativeProducts,
   loadNativePurchases,
   loadNativeReceivables,
@@ -27,6 +28,7 @@ import {
   loadNativeSupplierPayments,
   loadNativeSuppliers,
   saveNativeCustomer,
+  saveNativeCustomerReceipt,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSale,
@@ -342,6 +344,7 @@ export function App() {
           storedCustomers,
           storedSales,
           storedReceivables,
+          storedCustomerReceipts,
           storedSuppliers,
           storedPurchases,
           storedSupplierPayables,
@@ -352,6 +355,7 @@ export function App() {
           loadNativeCustomers(),
           loadNativeSales(),
           loadNativeReceivables(),
+          loadNativeCustomerReceipts(),
           loadNativeSuppliers(),
           loadNativePurchases(),
           loadNativeSupplierPayables(),
@@ -372,6 +376,9 @@ export function App() {
         }
         if (isMounted && storedReceivables) {
           setReceivables(storedReceivables);
+        }
+        if (isMounted && storedCustomerReceipts) {
+          setCustomerReceipts(storedCustomerReceipts);
         }
         if (isMounted && storedSuppliers) {
           setSuppliers(storedSuppliers);
@@ -1439,12 +1446,12 @@ export function App() {
     });
   }
 
-  function registerCustomerReceipt(input: {
+  async function registerCustomerReceipt(input: {
     receivableId: string;
     amountMinor: number;
     concept: string;
     receivedAt: string;
-  }): string | null {
+  }): Promise<string | null> {
     const selectedReceivable =
       receivables.find((receivable) => receivable.id === input.receivableId) ?? null;
 
@@ -1460,46 +1467,51 @@ export function App() {
 
     const receivedAtMs = parseLocalDate(input.receivedAt)?.getTime() ?? Date.now();
     const receivedAtDate = new Date(receivedAtMs);
+    const paidAmountMinor = selectedReceivable.paidAmountMinor + input.amountMinor;
+    const balanceMinor = Math.max(
+      selectedReceivable.originalAmountMinor - paidAmountMinor,
+      0
+    );
+    const receivable: ReceivableRecord = {
+      ...selectedReceivable,
+      amountMinor: balanceMinor,
+      balanceMinor,
+      paidAmountMinor,
+      status: getReceivableStatus(paidAmountMinor)
+    };
+    const receipt: CustomerReceiptRecord = {
+      amountMinor: input.amountMinor,
+      concept: input.concept.trim() || "Abono cartera cliente",
+      customerId: selectedReceivable.customerId,
+      customerName: selectedReceivable.customerName,
+      id: `cash-receipt-${receivedAtMs}`,
+      number: `RC-${String(customerReceipts.length + 1).padStart(3, "0")}`,
+      receivableId: selectedReceivable.id,
+      receivedAt: input.receivedAt,
+      receivedAtLabel: formatOccurredAtLabel(receivedAtDate),
+      receivedAtMs,
+      saleId: selectedReceivable.saleId
+    };
 
-    setCustomerReceipts((currentReceipts) => [
-      {
-        amountMinor: input.amountMinor,
-        concept: input.concept.trim() || "Abono cartera cliente",
-        customerId: selectedReceivable.customerId,
-        customerName: selectedReceivable.customerName,
-        id: `cash-receipt-${receivedAtMs}`,
-        number: `RC-${String(currentReceipts.length + 1).padStart(3, "0")}`,
-        receivableId: selectedReceivable.id,
-        receivedAt: input.receivedAt,
-        receivedAtLabel: formatOccurredAtLabel(receivedAtDate),
-        receivedAtMs,
-        saleId: selectedReceivable.saleId
-      },
-      ...currentReceipts
-    ]);
+    try {
+      await saveNativeCustomerReceipt({ receipt, receivable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el recibo de caja local."
+      });
+      return "No se pudo guardar el recibo de caja local.";
+    }
 
+    setCustomerReceipts((currentReceipts) => [receipt, ...currentReceipts]);
     setReceivables((currentReceivables) =>
       currentReceivables
-        .map((receivable) => {
-          if (receivable.id !== input.receivableId) {
-            return receivable;
-          }
-
-          const paidAmountMinor = receivable.paidAmountMinor + input.amountMinor;
-          const balanceMinor = Math.max(
-            receivable.originalAmountMinor - paidAmountMinor,
-            0
-          );
-
-          return {
-            ...receivable,
-            amountMinor: balanceMinor,
-            balanceMinor,
-            paidAmountMinor,
-            status: getReceivableStatus(paidAmountMinor)
-          };
-        })
-        .filter((receivable) => receivable.balanceMinor > 0)
+        .map((currentReceivable) =>
+          currentReceivable.id === input.receivableId
+            ? receivable
+            : currentReceivable
+        )
+        .filter((currentReceivable) => currentReceivable.balanceMinor > 0)
     );
 
     return null;

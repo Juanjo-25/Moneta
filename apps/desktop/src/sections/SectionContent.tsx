@@ -157,7 +157,7 @@ type SectionContentProps = {
     amountMinor: number;
     concept: string;
     receivedAt: string;
-  }) => string | null;
+  }) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus

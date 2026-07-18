@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  CustomerReceiptRecord,
   CustomerRecord,
   ProductRecord,
   PurchaseRecord,
@@ -159,6 +160,18 @@ export async function loadNativeReceivables(): Promise<ReceivableRecord[] | null
   return invoke<ReceivableRecord[]>("list_receivables");
 }
 
+export async function loadNativeCustomerReceipts(): Promise<
+  CustomerReceiptRecord[] | null
+> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<CustomerReceiptRecord[]>("list_customer_receipts");
+}
+
 export async function saveNativeSale(input: {
   sale: SaleRecord;
   receivable: ReceivableRecord | null;
@@ -170,6 +183,21 @@ export async function saveNativeSale(input: {
   }
 
   await invoke<void>("save_sale", input);
+
+  return true;
+}
+
+export async function saveNativeCustomerReceipt(input: {
+  receipt: CustomerReceiptRecord;
+  receivable: ReceivableRecord;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_customer_receipt", input);
 
   return true;
 }

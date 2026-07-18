@@ -128,6 +128,22 @@ struct ReceivableRecord {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct CustomerReceiptRecord {
+    id: String,
+    number: String,
+    receivable_id: String,
+    sale_id: String,
+    customer_id: String,
+    customer_name: String,
+    amount_minor: i64,
+    concept: String,
+    received_at: String,
+    received_at_ms: i64,
+    received_at_label: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SupplierRecord {
     id: String,
     active: bool,
@@ -231,6 +247,13 @@ struct SupplierPaymentPersistence {
 struct SalePersistence {
     sale: SaleRecord,
     receivable: Option<ReceivableRecord>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomerReceiptPersistence {
+    receipt: CustomerReceiptRecord,
+    receivable: ReceivableRecord,
 }
 
 #[tauri::command]
@@ -571,6 +594,7 @@ fn list_receivables(app: tauri::AppHandle) -> Result<Vec<ReceivableRecord>, Stri
               due_at,
               status
             FROM receivables
+            WHERE balance_minor > 0
             ORDER BY due_at ASC, id ASC
             ",
         )
@@ -597,6 +621,55 @@ fn list_receivables(app: tauri::AppHandle) -> Result<Vec<ReceivableRecord>, Stri
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| format!("No se pudo convertir la cartera por cobrar: {error}"))
+}
+
+#[tauri::command]
+fn list_customer_receipts(app: tauri::AppHandle) -> Result<Vec<CustomerReceiptRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              number,
+              receivable_id,
+              sale_id,
+              customer_id,
+              customer_name,
+              amount_minor,
+              concept,
+              received_at,
+              received_at_ms,
+              received_at_label
+            FROM customer_receipts
+            ORDER BY received_at_ms DESC, id DESC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de recibos de caja: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            Ok(CustomerReceiptRecord {
+                id: row.get(0)?,
+                number: row.get(1)?,
+                receivable_id: row.get(2)?,
+                sale_id: row.get(3)?,
+                customer_id: row.get(4)?,
+                customer_name: row.get(5)?,
+                amount_minor: row.get(6)?,
+                concept: row.get(7)?,
+                received_at: row.get(8)?,
+                received_at_ms: row.get(9)?,
+                received_at_label: row.get(10)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer los recibos de caja: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir los recibos de caja: {error}"))
 }
 
 #[tauri::command]
@@ -774,6 +847,88 @@ fn save_sale(app: tauri::AppHandle, input: SalePersistence) -> Result<(), String
     transaction
         .commit()
         .map_err(|error| format!("No se pudo confirmar la venta: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn save_customer_receipt(
+    app: tauri::AppHandle,
+    input: CustomerReceiptPersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion del recibo: {error}"))?;
+
+    transaction
+        .execute(
+            "
+            INSERT INTO customer_receipts (
+              id,
+              number,
+              receivable_id,
+              sale_id,
+              customer_id,
+              customer_name,
+              amount_minor,
+              concept,
+              received_at,
+              received_at_ms,
+              received_at_label
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ",
+            params![
+                &input.receipt.id,
+                &input.receipt.number,
+                &input.receipt.receivable_id,
+                &input.receipt.sale_id,
+                &input.receipt.customer_id,
+                &input.receipt.customer_name,
+                input.receipt.amount_minor,
+                &input.receipt.concept,
+                &input.receipt.received_at,
+                input.receipt.received_at_ms,
+                &input.receipt.received_at_label,
+            ],
+        )
+        .map_err(|error| format!("No se pudo guardar el recibo de caja: {error}"))?;
+
+    let affected = transaction
+        .execute(
+            "
+            UPDATE receivables
+            SET
+              amount_minor = ?1,
+              paid_amount_minor = ?2,
+              balance_minor = ?3,
+              status = ?4,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?5
+            ",
+            params![
+                input.receivable.amount_minor,
+                input.receivable.paid_amount_minor,
+                input.receivable.balance_minor,
+                &input.receivable.status,
+                &input.receivable.id,
+            ],
+        )
+        .map_err(|error| format!("No se pudo actualizar la cuenta por cobrar: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!(
+            "La cuenta por cobrar {} no existe en SQLite.",
+            input.receivable.sale_id
+        ));
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el recibo de caja: {error}"))?;
 
     Ok(())
 }
@@ -1530,6 +1685,24 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               FOREIGN KEY (sale_id) REFERENCES sales(id)
             );
 
+            CREATE TABLE IF NOT EXISTS customer_receipts (
+              id TEXT PRIMARY KEY,
+              number TEXT NOT NULL,
+              receivable_id TEXT NOT NULL,
+              sale_id TEXT NOT NULL,
+              customer_id TEXT NOT NULL,
+              customer_name TEXT NOT NULL,
+              amount_minor INTEGER NOT NULL,
+              concept TEXT NOT NULL,
+              received_at TEXT NOT NULL,
+              received_at_ms INTEGER NOT NULL,
+              received_at_label TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (receivable_id) REFERENCES receivables(id),
+              FOREIGN KEY (sale_id) REFERENCES sales(id),
+              FOREIGN KEY (customer_id) REFERENCES customers(id)
+            );
+
             CREATE TABLE IF NOT EXISTS purchases (
               id TEXT PRIMARY KEY,
               supplier_id TEXT NOT NULL,
@@ -1621,6 +1794,9 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
 
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-ventas-iniciales');
+
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-recibos-caja');
             ",
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
@@ -1641,7 +1817,9 @@ fn main() {
             save_customer,
             list_sales,
             list_receivables,
+            list_customer_receipts,
             save_sale,
+            save_customer_receipt,
             list_suppliers,
             save_supplier,
             list_purchases,

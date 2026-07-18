@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkNativeConnection,
   loadNativeCustomers,
+  loadNativeCustomerReceipts,
   loadNativeProducts,
   loadNativePurchases,
   loadNativeReceivables,
@@ -11,6 +12,7 @@ import {
   loadNativeSupplierPayments,
   loadNativeSuppliers,
   saveNativeCustomer,
+  saveNativeCustomerReceipt,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSale,
@@ -324,19 +326,46 @@ describe("native sale persistence", () => {
     saleId: "sale-1",
     status: "pending" as const
   };
+  const receipt = {
+    amountMinor: 4500,
+    concept: "Abono cartera cliente",
+    customerId: "customer-1",
+    customerName: "Ana Perez",
+    id: "cash-receipt-1",
+    number: "RC-001",
+    receivableId: "receivable-sale-1",
+    receivedAt: "2026-07-18",
+    receivedAtLabel: "18/07/26, 12:30",
+    receivedAtMs: 4,
+    saleId: "sale-1"
+  };
+  const updatedReceivable = {
+    ...receivable,
+    amountMinor: 4500,
+    balanceMinor: 4500,
+    paidAmountMinor: 4500,
+    status: "partial" as const
+  };
 
-  it("returns null sales and receivables and skips saves in web mode", async () => {
+  it("returns null sales, receivables and receipts and skips saves in web mode", async () => {
     setTauriInvoke();
 
     await expect(loadNativeSales()).resolves.toBeNull();
     await expect(loadNativeReceivables()).resolves.toBeNull();
+    await expect(loadNativeCustomerReceipts()).resolves.toBeNull();
     await expect(saveNativeSale({ receivable, sale })).resolves.toBe(false);
+    await expect(
+      saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
+    ).resolves.toBe(false);
   });
 
-  it("loads sales and receivables through Tauri", async () => {
+  it("loads sales, receivables and receipts through Tauri", async () => {
     const invoke = vi.fn().mockImplementation((command: string) => {
       if (command === "list_sales") {
         return Promise.resolve([sale]);
+      }
+      if (command === "list_customer_receipts") {
+        return Promise.resolve([receipt]);
       }
 
       return Promise.resolve([receivable]);
@@ -345,8 +374,10 @@ describe("native sale persistence", () => {
 
     await expect(loadNativeSales()).resolves.toEqual([sale]);
     await expect(loadNativeReceivables()).resolves.toEqual([receivable]);
+    await expect(loadNativeCustomerReceipts()).resolves.toEqual([receipt]);
     expect(invoke).toHaveBeenCalledWith("list_sales");
     expect(invoke).toHaveBeenCalledWith("list_receivables");
+    expect(invoke).toHaveBeenCalledWith("list_customer_receipts");
   });
 
   it("saves a sale through Tauri", async () => {
@@ -355,6 +386,19 @@ describe("native sale persistence", () => {
 
     await expect(saveNativeSale({ receivable, sale })).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_sale", { receivable, sale });
+  });
+
+  it("saves a customer receipt through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_customer_receipt", {
+      receipt,
+      receivable: updatedReceivable
+    });
   });
 });
 
