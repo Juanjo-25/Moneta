@@ -245,6 +245,7 @@ export function SalesSection({
   const totalMinor = saleLinesTotalMinor + draftLineTotalMinor;
   const nextInvoiceNumber = String(sales.length + 1).padStart(3, "0");
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
+  const configuredSellers = settings.sellers;
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -768,12 +769,21 @@ export function SalesSection({
                 value={form.dueAt}
               />
             ) : null}
-            <TextField
-              label="Vendedor"
-              onChange={(value) => updateField("seller", value)}
-              placeholder="Sin asignar"
-              value={form.seller}
-            />
+            {configuredSellers.length > 0 ? (
+              <SellerSelect
+                label="Vendedor"
+                onChange={(value) => updateField("seller", value)}
+                sellers={configuredSellers}
+                value={form.seller}
+              />
+            ) : (
+              <TextField
+                label="Vendedor"
+                onChange={(value) => updateField("seller", value)}
+                placeholder="Sin asignar"
+                value={form.seller}
+              />
+            )}
             <div className="field">
               <span>Forma de pago</span>
               <div aria-label="Estado de pago" className="payment-status-group" role="radiogroup">
@@ -946,7 +956,16 @@ export function SalesSection({
                 </select>
               </label>
               <TextField label="Prefijo de venta" onChange={(value) => updateEditField("prefix", value)} value={editForm.prefix} />
-              <TextField label="Vendedor de venta" onChange={(value) => updateEditField("seller", value)} value={editForm.seller} />
+              {configuredSellers.length > 0 ? (
+                <SellerSelect
+                  label="Vendedor de venta"
+                  onChange={(value) => updateEditField("seller", value)}
+                  sellers={configuredSellers}
+                  value={editForm.seller}
+                />
+              ) : (
+                <TextField label="Vendedor de venta" onChange={(value) => updateEditField("seller", value)} value={editForm.seller} />
+              )}
               <TextField label="Fecha de elaboracion de venta" onChange={(value) => updateEditField("issuedAt", value)} type="date" value={editForm.issuedAt} />
               <TextField label="Concepto de venta" onChange={(value) => updateEditField("concept", value)} value={editForm.concept} />
               <div className="field">
@@ -1176,6 +1195,34 @@ function calculateDocumentLine(input: {
 function formatDocumentNumber(prefix: string, number: string): string {
   const normalizedPrefix = prefix.trim().toUpperCase();
   return normalizedPrefix === "" ? number : `${normalizedPrefix}-${number}`;
+}
+
+type SellerSelectProps = {
+  label: string;
+  onChange: (value: string) => void;
+  sellers: string[];
+  value: string;
+};
+
+function SellerSelect({ label, onChange, sellers, value }: SellerSelectProps) {
+  const hasHistoricalSeller =
+    value.trim() !== "" &&
+    !sellers.some((seller) => seller.toLocaleLowerCase() === value.toLocaleLowerCase());
+
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select onChange={(event) => onChange(event.target.value)} value={value}>
+        <option value="">Sin asignar</option>
+        {hasHistoricalSeller ? <option value={value}>{value}</option> : null}
+        {sellers.map((seller) => (
+          <option key={seller} value={seller}>
+            {seller}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function getDocumentSequence(invoiceNumber: string): string {

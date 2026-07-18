@@ -196,7 +196,8 @@ const defaultSettings: AppSettings = {
       "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real.",
     observations: "Observaciones: factura generada desde Moneta para impresion.",
     title: "REMISION"
-  }
+  },
+  sellers: []
 };
 
 function formatOccurredAtLabel(date: Date): string {

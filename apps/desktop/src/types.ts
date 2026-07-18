@@ -288,4 +288,5 @@ export type InvoiceDesignSettings = {
 export type AppSettings = {
   company: CompanySettings;
   invoice: InvoiceDesignSettings;
+  sellers: string[];
 };

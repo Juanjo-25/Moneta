@@ -165,6 +165,81 @@ describe("App navigation", () => {
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
   });
 
+  it("manages sellers and uses them in sales and reports", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Laura Gomez");
+    await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Mario");
+    await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+
+    const sellersTable = screen.getByRole("table", { name: "Vendedores configurados" });
+    const marioRow = within(sellersTable).getByText("Mario").closest("tr");
+    const lauraRow = within(sellersTable).getByText("Laura Gomez").closest("tr");
+
+    if (!marioRow || !lauraRow) {
+      throw new Error("Configured seller rows were not rendered.");
+    }
+
+    await user.click(within(marioRow).getByRole("button", { name: "Editar" }));
+    await user.clear(screen.getByLabelText("Nombre vendedor"));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Mario Ruiz");
+    await user.click(screen.getByRole("button", { name: "Guardar vendedor" }));
+
+    const updatedSellersTable = screen.getByRole("table", {
+      name: "Vendedores configurados"
+    });
+    const updatedLauraRow = within(updatedSellersTable)
+      .getByText("Laura Gomez")
+      .closest("tr");
+
+    if (!updatedLauraRow) {
+      throw new Error("Seller row to delete was not rendered.");
+    }
+
+    await user.click(within(updatedLauraRow).getByRole("button", { name: "Eliminar" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(screen.getByLabelText("Vendedor"), "Mario Ruiz");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Mario Ruiz")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByRole("tablist", { name: "Tipos de rentabilidad" })).getByRole(
+        "tab",
+        { name: "Vendedores" }
+      )
+    );
+
+    expect(screen.getByLabelText("Grafico ventas por vendedor")).toBeTruthy();
+    expect(screen.getByText("Mario Ruiz")).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", { name: "Abrir detalle de ventas por vendedor" })
+    );
+    const sellerReportTable = screen.getByRole("table", {
+      name: "Detalle ventas por vendedor"
+    });
+    expect(within(sellerReportTable).getByText("Mario Ruiz")).toBeTruthy();
+  });
+
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
     const user = userEvent.setup();
 

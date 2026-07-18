@@ -4,6 +4,8 @@ import {
   type ChangeEvent,
   type FormEvent
 } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
@@ -28,12 +30,18 @@ export function SettingsSection({
   onSettingsChange
 }: SettingsSectionProps) {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
+  const [sellerName, setSellerName] = useState("");
+  const [sellerError, setSellerError] = useState<string | null>(null);
+  const [editingSellerIndex, setEditingSellerIndex] = useState<number | null>(null);
   const [savedMessageVisible, setSavedMessageVisible] = useState(false);
   const hasUnsavedChanges =
     JSON.stringify(draftSettings) !== JSON.stringify(settings);
 
   useEffect(() => {
     setDraftSettings(settings);
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
   }, [settings]);
 
   function updateCompany(field: keyof CompanySettings, value: string) {
@@ -56,6 +64,68 @@ export function SettingsSection({
       }
     }));
     setSavedMessageVisible(false);
+  }
+
+  function saveSeller() {
+    const normalizedSeller = sellerName.trim();
+
+    if (normalizedSeller === "") {
+      setSellerError("El nombre del vendedor es obligatorio.");
+      return;
+    }
+
+    const duplicate = draftSettings.sellers.some(
+      (seller, index) =>
+        index !== editingSellerIndex &&
+        seller.toLocaleLowerCase() === normalizedSeller.toLocaleLowerCase()
+    );
+
+    if (duplicate) {
+      setSellerError("Ya existe un vendedor con ese nombre.");
+      return;
+    }
+
+    setDraftSettings((currentSettings) => {
+      const sellers =
+        editingSellerIndex === null
+          ? [...currentSettings.sellers, normalizedSeller]
+          : currentSettings.sellers.map((seller, index) =>
+              index === editingSellerIndex ? normalizedSeller : seller
+            );
+
+      return {
+        ...currentSettings,
+        sellers
+      };
+    });
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
+    setSavedMessageVisible(false);
+  }
+
+  function editSeller(index: number) {
+    setSellerName(draftSettings.sellers[index] ?? "");
+    setSellerError(null);
+    setEditingSellerIndex(index);
+    setSavedMessageVisible(false);
+  }
+
+  function deleteSeller(index: number) {
+    setDraftSettings((currentSettings) => ({
+      ...currentSettings,
+      sellers: currentSettings.sellers.filter((_, sellerIndex) => sellerIndex !== index)
+    }));
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
+    setSavedMessageVisible(false);
+  }
+
+  function cancelSellerEdit() {
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
   }
 
   function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
@@ -188,6 +258,71 @@ export function SettingsSection({
               value={draftSettings.invoice.observations}
             />
           </label>
+        </div>
+      </section>
+
+      <section className="section-form-shell settings-form">
+        <div className="panel-header">
+          <div>
+            <h2>Vendedores</h2>
+            <span>Lista disponible al registrar o modificar ventas.</span>
+          </div>
+        </div>
+
+        <div className="settings-sellers-manager">
+          <TextField
+            error={sellerError ?? undefined}
+            label="Nombre vendedor"
+            onChange={(value) => {
+              setSellerName(value);
+              setSellerError(null);
+              setSavedMessageVisible(false);
+            }}
+            value={sellerName}
+          />
+          <FormActions>
+            {editingSellerIndex === null ? null : (
+              <SecondaryActionButton onClick={cancelSellerEdit} type="button">
+                Cancelar edicion
+              </SecondaryActionButton>
+            )}
+            <PrimaryActionButton onClick={saveSeller} type="button">
+              {editingSellerIndex === null ? "Agregar vendedor" : "Guardar vendedor"}
+            </PrimaryActionButton>
+          </FormActions>
+
+          {draftSettings.sellers.length > 0 ? (
+            <DataTable ariaLabel="Vendedores configurados">
+              <DataTableHeader labels={["Vendedor", "Acciones"]} />
+              <tbody>
+                {draftSettings.sellers.map((seller, index) => (
+                  <tr key={seller}>
+                    <td>{seller}</td>
+                    <td>
+                      <div className="settings-seller-actions">
+                        <SecondaryActionButton
+                          onClick={() => editSeller(index)}
+                          type="button"
+                        >
+                          Editar
+                        </SecondaryActionButton>
+                        <SecondaryActionButton
+                          onClick={() => deleteSeller(index)}
+                          type="button"
+                        >
+                          Eliminar
+                        </SecondaryActionButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+          ) : (
+            <p className="settings-sellers-empty">
+              Sin vendedores configurados. Ventas permite escribir el vendedor manualmente.
+            </p>
+          )}
         </div>
       </section>
 

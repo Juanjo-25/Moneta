@@ -59,9 +59,18 @@ type SaleMarginRow = {
   saleId: string;
 };
 
-type ReportDetailView = "product" | "customer" | "sales" | "sale" | null;
+type SellerMarginRow = {
+  costMinor: number;
+  marginMinor: number;
+  marginPercent: number;
+  revenueMinor: number;
+  saleCount: number;
+  sellerName: string;
+};
+
+type ReportDetailView = "product" | "customer" | "seller" | "sales" | "sale" | null;
 type ReportTab = "profitability" | "dso" | "cashflow" | "expenses" | "variance";
-type ProfitabilityTab = "overview" | "customer" | "product" | "sales";
+type ProfitabilityTab = "overview" | "customer" | "product" | "seller" | "sales";
 
 type DsoSummary = {
   activeReceivablesMinor: number;
@@ -364,36 +373,99 @@ function buildSaleMarginRows(
   sales: SaleRecord[],
   creditNotes: CreditNoteRecord[]
 ): SaleMarginRow[] {
-  return sales.map((sale) => {
-    const saleCreditNotes = creditNotes.filter(
-      (creditNote) => creditNote.saleId === sale.id
-    );
-    const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
-    const marginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
-    const creditedRevenueMinor = saleCreditNotes.reduce(
-      (sum, creditNote) => sum + creditNote.totalMinor,
-      0
-    );
-    const creditedCostMinor = saleCreditNotes.reduce(
-      (sum, creditNote) =>
-        sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
-      0
-    );
-    const netRevenueMinor = Math.max(sale.totalMinor - creditedRevenueMinor, 0);
-    const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
-    const netMarginMinor = netRevenueMinor - netCostMinor;
+  return sales
+    .map((sale) => {
+      const saleCreditNotes = creditNotes.filter(
+        (creditNote) => creditNote.saleId === sale.id
+      );
+      const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+      const creditedRevenueMinor = saleCreditNotes.reduce(
+        (sum, creditNote) => sum + creditNote.totalMinor,
+        0
+      );
+      const creditedCostMinor = saleCreditNotes.reduce(
+        (sum, creditNote) =>
+          sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+        0
+      );
+      const netRevenueMinor = Math.max(sale.totalMinor - creditedRevenueMinor, 0);
+      const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
+      const netMarginMinor = netRevenueMinor - netCostMinor;
 
-    return {
-      costMinor: netCostMinor,
-      customerName: sale.customerName,
-      marginMinor: netMarginMinor,
-      marginPercent: netRevenueMinor > 0 ? (netMarginMinor / netRevenueMinor) * 100 : 0,
-      occurredAtLabel: sale.occurredAtLabel,
-      paymentStatus: sale.paymentStatus,
-      revenueMinor: netRevenueMinor,
-      saleId: sale.id
+      return {
+        costMinor: netCostMinor,
+        customerName: sale.customerName,
+        marginMinor: netMarginMinor,
+        marginPercent:
+          netRevenueMinor > 0 ? (netMarginMinor / netRevenueMinor) * 100 : 0,
+        occurredAtLabel: sale.occurredAtLabel,
+        paymentStatus: sale.paymentStatus,
+        revenueMinor: netRevenueMinor,
+        saleId: sale.id
+      };
+    })
+    .sort((left, right) => right.marginMinor - left.marginMinor);
+}
+
+function buildSellerMarginRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): SellerMarginRow[] {
+  const salesById = new Map(sales.map((sale) => [sale.id, sale]));
+  const sellerMap = new Map<string, SellerMarginRow>();
+
+  sales.forEach((sale) => {
+    const sellerName = sale.seller.trim() || "Sin asignar";
+    const currentRow = sellerMap.get(sellerName) ?? {
+      costMinor: 0,
+      marginMinor: 0,
+      marginPercent: 0,
+      revenueMinor: 0,
+      saleCount: 0,
+      sellerName
     };
+
+    currentRow.revenueMinor += sale.totalMinor;
+    currentRow.costMinor += sale.lines.reduce(
+      (lineSum, line) => lineSum + line.costMinor,
+      0
+    );
+    currentRow.saleCount += 1;
+    sellerMap.set(sellerName, currentRow);
   });
+
+  creditNotes.forEach((creditNote) => {
+    const sale = salesById.get(creditNote.saleId);
+    const sellerName = sale?.seller.trim() || "Sin asignar";
+    const currentRow = sellerMap.get(sellerName);
+
+    if (!currentRow) {
+      return;
+    }
+
+    currentRow.revenueMinor = Math.max(
+      currentRow.revenueMinor - creditNote.totalMinor,
+      0
+    );
+    currentRow.costMinor = Math.max(
+      currentRow.costMinor -
+        creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+      0
+    );
+  });
+
+  return [...sellerMap.values()]
+    .map((row) => {
+      const marginMinor = row.revenueMinor - row.costMinor;
+
+      return {
+        ...row,
+        marginMinor,
+        marginPercent:
+          row.revenueMinor > 0 ? (marginMinor / row.revenueMinor) * 100 : 0
+      };
+    })
+    .sort((left, right) => right.revenueMinor - left.revenueMinor);
 }
 
 function buildDsoClientRows(input: {
@@ -922,9 +994,11 @@ export function ReportsSection({
   const summary = buildMarginSummary(sales, creditNotes);
   const productRows = buildProductMarginRows(sales, creditNotes);
   const customerRows = buildCustomerMarginRows(sales, creditNotes);
+  const sellerRows = buildSellerMarginRows(sales, creditNotes);
   const saleRows = buildSaleMarginRows(sales, creditNotes);
   const productMaxMargin = productRows[0]?.marginMinor ?? 0;
   const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
+  const sellerMaxRevenue = sellerRows[0]?.revenueMinor ?? 0;
   const saleMaxMargin = saleRows[0]?.marginMinor ?? 0;
   const selectedSale = selectedSaleId
     ? sales.find((sale) => sale.id === selectedSaleId) ?? null
@@ -963,6 +1037,7 @@ export function ReportsSection({
   const netMarginMinor = summary.marginMinor;
   const topCustomerRows = customerRows.slice(0, 10);
   const topProductRows = productRows.slice(0, 10);
+  const topSellerRows = sellerRows.slice(0, 10);
   const topSaleRows = saleRows.slice(0, 10);
 
   const reportTabs: Array<{ id: ReportTab; label: string; title: string }> = [
@@ -977,6 +1052,7 @@ export function ReportsSection({
     { id: "overview", label: "Dashboard general" },
     { id: "customer", label: "Clientes" },
     { id: "product", label: "Producto" },
+    { id: "seller", label: "Vendedores" },
     { id: "sales", label: "Ventas" }
   ];
 
@@ -1514,6 +1590,55 @@ export function ReportsSection({
     );
   }
 
+  if (detailView === "seller") {
+    return renderProfitabilityLayout(
+      <>
+        <ReportPrimaryInsightPanel
+          title="Ventas por vendedor"
+          description="Ingresos, utilidad y cantidad de ventas agrupadas por vendedor."
+          onBack={() => setDetailView(null)}
+        >
+          <div className="report-chart report-chart-detail" aria-label="Grafico detalle ventas por vendedor">
+            {sellerRows.map((row) => (
+              <div className="report-bar-row report-bar-row-detail" key={row.sellerName}>
+                <span>{row.sellerName}</span>
+                <div className="report-bar-track">
+                  <div
+                    className="report-bar-fill"
+                    style={{
+                      width: `${sellerMaxRevenue > 0 ? (row.revenueMinor / sellerMaxRevenue) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+                <strong>{formatCurrency(row.revenueMinor)}</strong>
+              </div>
+            ))}
+          </div>
+        </ReportPrimaryInsightPanel>
+        {renderReportSupportingContent(
+          <DataTable ariaLabel="Detalle ventas por vendedor">
+            <DataTableHeader
+              labels={["Vendedor", "Ventas", "Costo", "Utilidad", "% margen", "Cantidad"]}
+            />
+            <tbody>
+              {sellerRows.map((row) => (
+                <tr key={row.sellerName}>
+                  <td>{row.sellerName}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                  <td>{row.saleCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </>,
+      true
+    );
+  }
+
   if (detailView === "sales") {
     return renderProfitabilityLayout(
       <>
@@ -1673,6 +1798,27 @@ export function ReportsSection({
         onOpenDetail={() => setDetailView("product")}
         rows={rows}
         title="Margen por producto"
+      />
+    );
+  }
+
+  if (activeProfitabilityTab === "seller") {
+    const rows = topSellerRows.map((row) => ({
+      id: row.sellerName,
+      label: row.sellerName,
+      value: formatCurrency(row.revenueMinor),
+      widthPercent:
+        sellerMaxRevenue > 0 ? (row.revenueMinor / sellerMaxRevenue) * 100 : 0
+    }));
+
+    return renderProfitabilityLayout(
+      <ReportChartPreviewPanel
+        actionLabel="Abrir detalle de ventas por vendedor"
+        chartLabel="Grafico ventas por vendedor"
+        description="Vendedores ordenados por ventas registradas."
+        onOpenDetail={() => setDetailView("seller")}
+        rows={rows}
+        title="Ventas por vendedor"
       />
     );
   }
