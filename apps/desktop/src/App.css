@@ -876,6 +876,19 @@ button,
   padding: 18px;
 }
 
+.product-adjustment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.product-adjustment-preview strong {
+  color: var(--text-primary);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

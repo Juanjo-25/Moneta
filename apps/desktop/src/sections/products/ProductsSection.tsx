@@ -7,7 +7,11 @@ import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
-import type { ProductRecord } from "../../types";
+import type {
+  InventoryAdjustmentRecord,
+  InventoryAdjustmentType,
+  ProductRecord
+} from "../../types";
 
 type ProductFormState = {
   sku: string;
@@ -22,6 +26,15 @@ type ProductFormState = {
 type ProductFormErrors = Partial<Record<keyof ProductFormState, string>>;
 type ProductEditFormState = Omit<ProductFormState, "quantity">;
 type ProductEditFormErrors = Partial<Record<keyof ProductEditFormState, string>>;
+type InventoryAdjustmentFormState = {
+  productId: string;
+  adjustmentType: InventoryAdjustmentType;
+  quantity: string;
+  reason: string;
+};
+type InventoryAdjustmentFormErrors = Partial<
+  Record<keyof InventoryAdjustmentFormState, string>
+>;
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -35,13 +48,33 @@ const emptyProductForm: ProductFormState = {
 
 const productUnitOptions = ["Unidad", "Kg", "Libra", "Metro", "Caja", "Paquete"];
 
+const emptyInventoryAdjustmentForm: InventoryAdjustmentFormState = {
+  adjustmentType: "entry",
+  productId: "",
+  quantity: "",
+  reason: ""
+};
+
+const inventoryAdjustmentLabels: Record<InventoryAdjustmentType, string> = {
+  entry: "Entrada",
+  exit: "Salida",
+  set: "Conteo fisico"
+};
+
 type ProductsSectionProps = {
   formVisible: boolean;
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
+  inventoryAdjustments: InventoryAdjustmentRecord[];
   isLowStock: (product: ProductRecord) => boolean;
   onCloseForm: () => void;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onRegisterInventoryAdjustment: (input: {
+    productId: string;
+    adjustmentType: InventoryAdjustmentType;
+    quantity: number;
+    reason: string;
+  }) => Promise<string | null>;
   onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
@@ -51,9 +84,11 @@ export function ProductsSection({
   formVisible,
   formatCurrency,
   formatIntegerInput,
+  inventoryAdjustments,
   isLowStock,
   onCloseForm,
   onCreateProduct,
+  onRegisterInventoryAdjustment,
   onUpdateProduct,
   parseNonNegativeInteger,
   products
@@ -63,8 +98,26 @@ export function ProductsSection({
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ProductEditFormState | null>(null);
   const [editErrors, setEditErrors] = useState<ProductEditFormErrors>({});
+  const [adjustmentForm, setAdjustmentForm] = useState<InventoryAdjustmentFormState>(
+    emptyInventoryAdjustmentForm
+  );
+  const [adjustmentErrors, setAdjustmentErrors] =
+    useState<InventoryAdjustmentFormErrors>({});
+  const [adjustmentMessage, setAdjustmentMessage] = useState("");
   const editingProduct =
     products.find((product) => product.id === editingProductId) ?? null;
+  const activeProducts = products.filter((product) => product.active);
+  const selectedAdjustmentProduct =
+    products.find((product) => product.id === adjustmentForm.productId) ?? null;
+  const adjustmentQuantity = parseNonNegativeInteger(adjustmentForm.quantity);
+  const previewNextStock =
+    selectedAdjustmentProduct && adjustmentQuantity !== null
+      ? adjustmentForm.adjustmentType === "entry"
+        ? selectedAdjustmentProduct.stock + adjustmentQuantity
+        : adjustmentForm.adjustmentType === "exit"
+          ? selectedAdjustmentProduct.stock - adjustmentQuantity
+          : adjustmentQuantity
+      : null;
 
   function updateField(
     field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
@@ -97,6 +150,18 @@ export function ProductsSection({
       currentForm ? { ...currentForm, [field]: formatIntegerInput(value) } : currentForm
     );
     setEditErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function updateAdjustmentField(
+    field: keyof InventoryAdjustmentFormState,
+    value: string
+  ) {
+    setAdjustmentForm((currentForm) => ({ ...currentForm, [field]: value }));
+    setAdjustmentErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined
+    }));
+    setAdjustmentMessage("");
   }
 
   function validateEditForm(input: ProductEditFormState): {
@@ -244,6 +309,55 @@ export function ProductsSection({
     onCloseForm();
   }
 
+  async function submitInventoryAdjustment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: InventoryAdjustmentFormErrors = {};
+    const quantity = parseNonNegativeInteger(adjustmentForm.quantity);
+
+    if (adjustmentForm.productId === "") {
+      nextErrors.productId = "Selecciona un producto activo.";
+    }
+    if (quantity === null) {
+      nextErrors.quantity = "La cantidad debe ser cero o mayor.";
+    } else if (adjustmentForm.adjustmentType !== "set" && quantity <= 0) {
+      nextErrors.quantity = "La cantidad debe ser mayor a cero.";
+    }
+    if (adjustmentForm.reason.trim() === "") {
+      nextErrors.reason = "El motivo es obligatorio.";
+    }
+    if (
+      selectedAdjustmentProduct &&
+      quantity !== null &&
+      adjustmentForm.adjustmentType === "exit" &&
+      quantity > selectedAdjustmentProduct.stock
+    ) {
+      nextErrors.quantity = "La salida no puede superar el stock actual.";
+    }
+
+    setAdjustmentErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0 || quantity === null) {
+      return;
+    }
+
+    const error = await onRegisterInventoryAdjustment({
+      adjustmentType: adjustmentForm.adjustmentType,
+      productId: adjustmentForm.productId,
+      quantity,
+      reason: adjustmentForm.reason
+    });
+
+    if (error) {
+      setAdjustmentMessage(error);
+      return;
+    }
+
+    setAdjustmentForm(emptyInventoryAdjustmentForm);
+    setAdjustmentErrors({});
+    setAdjustmentMessage("");
+  }
+
   return (
     <section className="products-layout">
       {formVisible ? (
@@ -386,14 +500,95 @@ export function ProductsSection({
         </form>
       ) : null}
 
+      <form className="product-form section-form-shell" onSubmit={submitInventoryAdjustment}>
+        <div className="form-grid">
+          <label className="field" htmlFor="producto-ajuste-inventario">
+            <span>Producto a ajustar</span>
+            <select
+              aria-invalid={Boolean(adjustmentErrors.productId)}
+              id="producto-ajuste-inventario"
+              onChange={(event) =>
+                updateAdjustmentField("productId", event.target.value)
+              }
+              value={adjustmentForm.productId}
+            >
+              <option value="">Seleccionar producto</option>
+              {activeProducts.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+            {adjustmentErrors.productId ? (
+              <small>{adjustmentErrors.productId}</small>
+            ) : null}
+          </label>
+          <label className="field" htmlFor="tipo-ajuste-inventario">
+            <span>Tipo de ajuste</span>
+            <select
+              id="tipo-ajuste-inventario"
+              onChange={(event) =>
+                updateAdjustmentField(
+                  "adjustmentType",
+                  event.target.value as InventoryAdjustmentType
+                )
+              }
+              value={adjustmentForm.adjustmentType}
+            >
+              <option value="entry">Entrada</option>
+              <option value="exit">Salida</option>
+              <option value="set">Conteo fisico</option>
+            </select>
+          </label>
+          <TextField
+            error={adjustmentErrors.quantity}
+            inputMode="numeric"
+            label={adjustmentForm.adjustmentType === "set" ? "Nuevo stock" : "Cantidad"}
+            onChange={(value) => updateAdjustmentField("quantity", value)}
+            value={adjustmentForm.quantity}
+          />
+          <TextField
+            error={adjustmentErrors.reason}
+            label="Motivo"
+            onChange={(value) => updateAdjustmentField("reason", value)}
+            value={adjustmentForm.reason}
+          />
+        </div>
+        <div className="product-adjustment-preview">
+          <span>
+            Stock actual:{" "}
+            <strong>
+              {selectedAdjustmentProduct
+                ? `${selectedAdjustmentProduct.stock} ${selectedAdjustmentProduct.unit}`
+                : "-"}
+            </strong>
+          </span>
+          <span>
+            Stock despues:{" "}
+            <strong>
+              {previewNextStock === null || !selectedAdjustmentProduct
+                ? "-"
+                : `${Math.max(previewNextStock, 0)} ${selectedAdjustmentProduct.unit}`}
+            </strong>
+          </span>
+        </div>
+        {adjustmentMessage ? <p className="form-error">{adjustmentMessage}</p> : null}
+        <FormActions>
+          <PrimaryActionButton type="submit">Registrar ajuste</PrimaryActionButton>
+        </FormActions>
+      </form>
+
       {products.length > 0 ? (
-        <ProductTable
-          formatCurrency={formatCurrency}
-          isLowStock={isLowStock}
-          onEditProduct={startEditProduct}
-          onSetProductActive={setProductActive}
-          products={products}
-        />
+        <>
+          <ProductTable
+            formatCurrency={formatCurrency}
+            isLowStock={isLowStock}
+            onEditProduct={startEditProduct}
+            onSetProductActive={setProductActive}
+            products={products}
+          />
+          <InventoryAdjustmentTable adjustments={inventoryAdjustments} />
+        </>
       ) : (
         <EmptyState
           body="Crea productos para empezar a controlar inventario."
@@ -403,6 +598,61 @@ export function ProductsSection({
       )}
     </section>
   );
+}
+
+type InventoryAdjustmentTableProps = {
+  adjustments: InventoryAdjustmentRecord[];
+};
+
+function InventoryAdjustmentTable({ adjustments }: InventoryAdjustmentTableProps) {
+  if (adjustments.length === 0) {
+    return null;
+  }
+
+  return (
+    <DataTable ariaLabel="Ajustes de inventario">
+      <DataTableHeader
+        labels={[
+          "Fecha",
+          "Producto",
+          "Tipo",
+          "Cantidad",
+          "Stock anterior",
+          "Stock nuevo",
+          "Motivo"
+        ]}
+      />
+      <tbody>
+        {adjustments.slice(0, 12).map((adjustment) => (
+          <tr key={adjustment.id}>
+            <td>{adjustment.occurredAtLabel}</td>
+            <td>{adjustment.productName}</td>
+            <td>{inventoryAdjustmentLabels[adjustment.adjustmentType]}</td>
+            <td>
+              {formatInventoryAdjustmentQuantity(adjustment)} {adjustment.unit}
+            </td>
+            <td>{adjustment.previousStock}</td>
+            <td>{adjustment.nextStock}</td>
+            <td>{adjustment.reason}</td>
+          </tr>
+        ))}
+      </tbody>
+    </DataTable>
+  );
+}
+
+function formatInventoryAdjustmentQuantity(
+  adjustment: InventoryAdjustmentRecord
+): string {
+  if (adjustment.adjustmentType === "entry") {
+    return `+${adjustment.quantity}`;
+  }
+
+  if (adjustment.adjustmentType === "exit") {
+    return `-${adjustment.quantity}`;
+  }
+
+  return String(adjustment.quantity);
 }
 
 type ProductTableProps = {

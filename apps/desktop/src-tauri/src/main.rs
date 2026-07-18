@@ -56,6 +56,22 @@ struct ProductRecord {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct InventoryAdjustmentRecord {
+    id: String,
+    product_id: String,
+    product_name: String,
+    unit: String,
+    adjustment_type: String,
+    quantity: i64,
+    previous_stock: i64,
+    next_stock: i64,
+    reason: String,
+    occurred_at_ms: i64,
+    occurred_at_label: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CustomerRecord {
     id: String,
     name: String,
@@ -499,6 +515,179 @@ fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), Str
             ),
         )
         .map_err(|error| format!("No se pudo guardar el producto: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn list_inventory_adjustments(
+    app: tauri::AppHandle,
+) -> Result<Vec<InventoryAdjustmentRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              product_id,
+              product_name,
+              unit,
+              adjustment_type,
+              quantity,
+              previous_stock,
+              next_stock,
+              reason,
+              occurred_at_ms,
+              occurred_at_label
+            FROM inventory_adjustments
+            ORDER BY occurred_at_ms DESC
+            ",
+        )
+        .map_err(|error| {
+            format!("No se pudo preparar la lectura de ajustes de inventario: {error}")
+        })?;
+
+    let rows = statement
+        .query_map([], |row| {
+            Ok(InventoryAdjustmentRecord {
+                id: row.get(0)?,
+                product_id: row.get(1)?,
+                product_name: row.get(2)?,
+                unit: row.get(3)?,
+                adjustment_type: row.get(4)?,
+                quantity: row.get(5)?,
+                previous_stock: row.get(6)?,
+                next_stock: row.get(7)?,
+                reason: row.get(8)?,
+                occurred_at_ms: row.get(9)?,
+                occurred_at_label: row.get(10)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer los ajustes de inventario: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir los ajustes de inventario: {error}"))
+}
+
+#[tauri::command]
+fn save_inventory_adjustment(
+    app: tauri::AppHandle,
+    adjustment: InventoryAdjustmentRecord,
+    product: ProductRecord,
+) -> Result<(), String> {
+    if adjustment.product_id != product.id {
+        return Err("El producto del ajuste no coincide.".to_string());
+    }
+
+    if adjustment.reason.trim().is_empty() {
+        return Err("El motivo del ajuste es obligatorio.".to_string());
+    }
+
+    if adjustment.next_stock < 0 {
+        return Err("El inventario no puede quedar negativo.".to_string());
+    }
+
+    if product.stock != adjustment.next_stock {
+        return Err("El stock final del producto no coincide con el ajuste.".to_string());
+    }
+
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar el ajuste de inventario: {error}"))?;
+
+    let stored_stock: Option<i64> = transaction
+        .query_row(
+            "SELECT stock FROM products WHERE id = ?1",
+            [&product.id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("No se pudo validar el producto del ajuste: {error}"))?;
+
+    match stored_stock {
+        Some(stock) if stock == adjustment.previous_stock => {}
+        Some(_) => {
+            return Err("El inventario cambio antes de guardar el ajuste.".to_string());
+        }
+        None => {
+            return Err("El producto del ajuste no existe.".to_string());
+        }
+    }
+
+    transaction
+        .execute(
+            "
+            INSERT INTO inventory_adjustments (
+              id,
+              product_id,
+              product_name,
+              unit,
+              adjustment_type,
+              quantity,
+              previous_stock,
+              next_stock,
+              reason,
+              occurred_at_ms,
+              occurred_at_label,
+              created_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, CURRENT_TIMESTAMP)
+            ",
+            (
+                &adjustment.id,
+                &adjustment.product_id,
+                &adjustment.product_name,
+                &adjustment.unit,
+                &adjustment.adjustment_type,
+                adjustment.quantity,
+                adjustment.previous_stock,
+                adjustment.next_stock,
+                &adjustment.reason,
+                adjustment.occurred_at_ms,
+                &adjustment.occurred_at_label,
+            ),
+        )
+        .map_err(|error| format!("No se pudo guardar el ajuste de inventario: {error}"))?;
+
+    transaction
+        .execute(
+            "
+            UPDATE products
+            SET
+              sku = ?2,
+              name = ?3,
+              unit = ?4,
+              cost_minor = ?5,
+              sale_price_minor = ?6,
+              minimum_stock = ?7,
+              stock = ?8,
+              active = ?9,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?1
+            ",
+            (
+                &product.id,
+                &product.sku,
+                &product.name,
+                &product.unit,
+                product.cost_minor,
+                product.sale_price_minor,
+                product.minimum_stock,
+                product.stock,
+                if product.active { 1 } else { 0 },
+            ),
+        )
+        .map_err(|error| format!("No se pudo actualizar el stock del producto: {error}"))?;
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el ajuste de inventario: {error}"))?;
 
     Ok(())
 }
@@ -2463,6 +2652,22 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS inventory_adjustments (
+              id TEXT PRIMARY KEY,
+              product_id TEXT NOT NULL,
+              product_name TEXT NOT NULL,
+              unit TEXT NOT NULL,
+              adjustment_type TEXT NOT NULL,
+              quantity INTEGER NOT NULL,
+              previous_stock INTEGER NOT NULL,
+              next_stock INTEGER NOT NULL,
+              reason TEXT NOT NULL,
+              occurred_at_ms INTEGER NOT NULL,
+              occurred_at_label TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (product_id) REFERENCES products(id)
+            );
+
             CREATE TABLE IF NOT EXISTS sales (
               id TEXT PRIMARY KEY,
               customer_json TEXT NOT NULL,
@@ -2694,6 +2899,9 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
 
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-notas-credito');
+
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-ajustes-inventario');
             ",
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
@@ -2803,6 +3011,8 @@ fn main() {
             save_app_settings,
             list_products,
             save_product,
+            list_inventory_adjustments,
+            save_inventory_adjustment,
             list_customers,
             save_customer,
             list_sales,

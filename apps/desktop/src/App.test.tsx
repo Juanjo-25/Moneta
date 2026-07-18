@@ -812,6 +812,59 @@ describe("App navigation", () => {
     expect(screen.queryByRole("option", { name: "Arroz premium" })).toBeNull();
   });
 
+  it("registers an inventory adjustment and keeps a movement history", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.selectOptions(
+      screen.getByLabelText("Producto a ajustar"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.type(screen.getByLabelText("Motivo"), "Merma bodega");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+      })
+    ).toBeTruthy();
+
+    const adjustmentsTable = screen.getByRole("table", {
+      name: "Ajustes de inventario"
+    });
+    expect(
+      within(adjustmentsTable).getByRole("row", {
+        name: /Arroz libra\s+Salida\s+-2 Unidad\s+4\s+2\s+Merma bodega/
+      })
+    ).toBeTruthy();
+  });
+
+  it("rejects inventory exits above current stock", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.selectOptions(
+      screen.getByLabelText("Producto a ajustar"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "5");
+    await user.type(screen.getByLabelText("Motivo"), "Salida mal digitada");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+
+    expect(screen.getByText("La salida no puede superar el stock actual.")).toBeTruthy();
+    expect(
+      screen.queryByRole("table", { name: "Ajustes de inventario" })
+    ).toBeNull();
+  });
+
   it("shows the product entry form only after clicking nuevo producto", async () => {
     const user = userEvent.setup();
 

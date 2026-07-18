@@ -3,6 +3,7 @@ import type {
   CustomerReceiptRecord,
   CustomerRecord,
   CreditNoteRecord,
+  InventoryAdjustmentRecord,
   ProductRecord,
   PurchaseRecord,
   ReceivableRecord,
@@ -115,6 +116,33 @@ export async function saveNativeProduct(product: ProductRecord): Promise<boolean
   }
 
   await invoke<void>("save_product", { product });
+
+  return true;
+}
+
+export async function loadNativeInventoryAdjustments(): Promise<
+  InventoryAdjustmentRecord[] | null
+> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<InventoryAdjustmentRecord[]>("list_inventory_adjustments");
+}
+
+export async function saveNativeInventoryAdjustment(input: {
+  adjustment: InventoryAdjustmentRecord;
+  product: ProductRecord;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_inventory_adjustment", input);
 
   return true;
 }

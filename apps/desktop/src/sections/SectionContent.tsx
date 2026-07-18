@@ -24,6 +24,8 @@ import type {
   CreditNoteStatus,
   CustomerRecord,
   CreditNoteRecord,
+  InventoryAdjustmentRecord,
+  InventoryAdjustmentType,
   ProductRecord,
   PurchaseExpenseCategory,
   PurchasePaymentStatus,
@@ -59,6 +61,7 @@ type SectionContentProps = {
   formatIntegerInput: (value: string) => string;
   formatPayableStatus: (status: SupplierPayableStatus) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
+  inventoryAdjustments: InventoryAdjustmentRecord[];
   isLowStock: (product: ProductRecord) => boolean;
   onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
@@ -159,6 +162,12 @@ type SectionContentProps = {
     concept: string;
     receivedAt: string;
   }) => Promise<string | null>;
+  onRegisterInventoryAdjustment: (input: {
+    productId: string;
+    adjustmentType: InventoryAdjustmentType;
+    quantity: number;
+    reason: string;
+  }) => Promise<string | null>;
   onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
@@ -208,6 +217,7 @@ export function SectionContent({
   formatIntegerInput,
   formatPayableStatus,
   getDueMetadata,
+  inventoryAdjustments,
   isLowStock,
   onCreateCustomer,
   onCreateProduct,
@@ -220,6 +230,7 @@ export function SectionContent({
   onRegisterPendingSale,
   onRegisterCreditNote,
   onRegisterCustomerReceipt,
+  onRegisterInventoryAdjustment,
   onVoidCustomerReceipt,
   onSetCreditNoteStatus,
   onUpdateSale,
@@ -252,9 +263,11 @@ export function SectionContent({
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
         formVisible={productFormVisible}
+        inventoryAdjustments={inventoryAdjustments}
         isLowStock={isLowStock}
         onCloseForm={onCloseProductForm}
         onCreateProduct={onCreateProduct}
+        onRegisterInventoryAdjustment={onRegisterInventoryAdjustment}
         onUpdateProduct={onUpdateProduct}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}

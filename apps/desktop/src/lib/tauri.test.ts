@@ -5,6 +5,7 @@ import {
   loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
+  loadNativeInventoryAdjustments,
   loadNativeProducts,
   loadNativePurchases,
   loadNativeReceivables,
@@ -17,6 +18,7 @@ import {
   saveNativeCustomerReceipt,
   saveNativeCreditNote,
   saveNativeCreditNoteStatus,
+  saveNativeInventoryAdjustment,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSale,
@@ -224,6 +226,67 @@ describe("native product persistence", () => {
 
     await expect(saveNativeProduct(product)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_product", { product });
+  });
+});
+
+describe("native inventory adjustment persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  const product = {
+    active: true,
+    costMinor: 3200,
+    id: "product-1",
+    minimumStock: 1,
+    name: "Arroz libra",
+    salePriceMinor: 4500,
+    sku: "ARZ-001",
+    stock: 7,
+    unit: "Unidad"
+  };
+  const adjustment = {
+    adjustmentType: "entry" as const,
+    id: "inventory-adjustment-1",
+    nextStock: 7,
+    occurredAtLabel: "18/07/26, 12:10",
+    occurredAtMs: 2,
+    previousStock: 4,
+    productId: "product-1",
+    productName: "Arroz libra",
+    quantity: 3,
+    reason: "Conteo bodega",
+    unit: "Unidad"
+  };
+
+  it("returns null adjustments and skips saves in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativeInventoryAdjustments()).resolves.toBeNull();
+    await expect(
+      saveNativeInventoryAdjustment({ adjustment, product })
+    ).resolves.toBe(false);
+  });
+
+  it("loads inventory adjustments through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue([adjustment]);
+    setTauriInvoke(invoke);
+
+    await expect(loadNativeInventoryAdjustments()).resolves.toEqual([adjustment]);
+    expect(invoke).toHaveBeenCalledWith("list_inventory_adjustments");
+  });
+
+  it("saves an inventory adjustment through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      saveNativeInventoryAdjustment({ adjustment, product })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_inventory_adjustment", {
+      adjustment,
+      product
+    });
   });
 });
 

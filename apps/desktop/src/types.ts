@@ -33,6 +33,22 @@ export type ProductRecord = {
   active: boolean;
 };
 
+export type InventoryAdjustmentType = "entry" | "exit" | "set";
+
+export type InventoryAdjustmentRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  adjustmentType: InventoryAdjustmentType;
+  quantity: number;
+  previousStock: number;
+  nextStock: number;
+  reason: string;
+  occurredAtMs: number;
+  occurredAtLabel: string;
+};
+
 export type CustomerRecord = {
   id: string;
   name: string;

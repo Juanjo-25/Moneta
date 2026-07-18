@@ -21,6 +21,7 @@ import {
   loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
+  loadNativeInventoryAdjustments,
   loadNativeProducts,
   loadNativePurchases,
   loadNativeReceivables,
@@ -33,6 +34,7 @@ import {
   saveNativeCustomerReceipt,
   saveNativeCreditNote,
   saveNativeCreditNoteStatus,
+  saveNativeInventoryAdjustment,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSale,
@@ -59,6 +61,8 @@ import type {
   CreditNoteRecord,
   CreditNoteStatus,
   CustomerReceiptRecord,
+  InventoryAdjustmentRecord,
+  InventoryAdjustmentType,
   ProductRecord,
   PurchaseExpenseCategory,
   PurchasePaymentStatus,
@@ -342,6 +346,9 @@ export function App() {
       message: "Modo web: Tauri no esta disponible."
     });
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [inventoryAdjustments, setInventoryAdjustments] = useState<
+    InventoryAdjustmentRecord[]
+  >([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
   const [sales, setSales] = useState<SaleRecord[]>([]);
@@ -379,6 +386,7 @@ export function App() {
         const [
           storedSettings,
           storedProducts,
+          storedInventoryAdjustments,
           storedCustomers,
           storedSales,
           storedReceivables,
@@ -391,6 +399,7 @@ export function App() {
         ] = await Promise.all([
           loadNativeSettings(),
           loadNativeProducts(),
+          loadNativeInventoryAdjustments(),
           loadNativeCustomers(),
           loadNativeSales(),
           loadNativeReceivables(),
@@ -407,6 +416,9 @@ export function App() {
         }
         if (isMounted && storedProducts) {
           setProducts(storedProducts);
+        }
+        if (isMounted && storedInventoryAdjustments) {
+          setInventoryAdjustments(storedInventoryAdjustments);
         }
         if (isMounted && storedCustomers) {
           setCustomers(storedCustomers);
@@ -561,6 +573,82 @@ export function App() {
 
   async function createProduct(product: ProductRecord): Promise<boolean> {
     return saveProductInSession(product);
+  }
+
+  async function registerInventoryAdjustment(input: {
+    productId: string;
+    adjustmentType: InventoryAdjustmentType;
+    quantity: number;
+    reason: string;
+  }): Promise<string | null> {
+    const product = products.find(
+      (currentProduct) => currentProduct.id === input.productId
+    );
+
+    if (!product || !product.active) {
+      return "Selecciona un producto activo para ajustar inventario.";
+    }
+
+    if (input.quantity < 0) {
+      return "La cantidad debe ser cero o mayor.";
+    }
+
+    if (input.adjustmentType !== "set" && input.quantity <= 0) {
+      return "La cantidad del ajuste debe ser mayor a cero.";
+    }
+
+    const nextStock =
+      input.adjustmentType === "entry"
+        ? product.stock + input.quantity
+        : input.adjustmentType === "exit"
+          ? product.stock - input.quantity
+          : input.quantity;
+
+    if (nextStock < 0) {
+      return "El inventario no puede quedar negativo.";
+    }
+
+    const occurredAtMs = Date.now();
+    const occurredAt = new Date(occurredAtMs);
+    const updatedProduct = { ...product, stock: nextStock };
+    const adjustment: InventoryAdjustmentRecord = {
+      adjustmentType: input.adjustmentType,
+      id: `inventory-adjustment-${occurredAtMs}`,
+      nextStock,
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      occurredAtMs,
+      previousStock: product.stock,
+      productId: product.id,
+      productName: product.name,
+      quantity: input.quantity,
+      reason: input.reason.trim(),
+      unit: product.unit
+    };
+
+    try {
+      await saveNativeInventoryAdjustment({
+        adjustment,
+        product: updatedProduct
+      });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el ajuste de inventario local."
+      });
+      return "No se pudo guardar el ajuste de inventario local.";
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.map((currentProduct) =>
+        currentProduct.id === product.id ? updatedProduct : currentProduct
+      )
+    );
+    setInventoryAdjustments((currentAdjustments) => [
+      adjustment,
+      ...currentAdjustments
+    ]);
+
+    return null;
   }
 
   async function createCustomer(
@@ -1959,6 +2047,7 @@ export function App() {
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
             getDueMetadata={getDueMetadata}
+            inventoryAdjustments={inventoryAdjustments}
             isLowStock={isLowStock}
             onCreateCustomer={createCustomer}
             onCreateProduct={createProduct}
@@ -1970,6 +2059,7 @@ export function App() {
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterCreditNote={registerCreditNoteInSession}
             onRegisterCustomerReceipt={registerCustomerReceipt}
+            onRegisterInventoryAdjustment={registerInventoryAdjustment}
             onVoidCustomerReceipt={voidCustomerReceipt}
             onSetCreditNoteStatus={setCreditNoteStatus}
             onUpdateSale={updateSaleInSession}
