@@ -16,9 +16,12 @@ import type {
 type SuppliersSectionProps = {
   formVisible: boolean;
   onCloseForm: () => void;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
-  onSetSupplierActive: (supplierId: string, active: boolean) => void;
-  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
+  onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
+  onSetSupplierActive: (supplierId: string, active: boolean) => Promise<boolean>;
+  onUpdateSupplier: (
+    supplierId: string,
+    input: SupplierFormState
+  ) => Promise<boolean>;
   renderPayablesTable: (input: {
     supplierPayables: SupplierPayableRecord[];
     tableLabel: string;
@@ -214,7 +217,7 @@ export function SuppliersSection({
     setErrors({});
   }
 
-  function submitSupplier(event: FormEvent<HTMLFormElement>) {
+  async function submitSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: SupplierFormErrors = {};
@@ -230,10 +233,20 @@ export function SuppliersSection({
     }
 
     if (editingSupplier) {
-      onUpdateSupplier(editingSupplier.id, form);
+      const updated = await onUpdateSupplier(editingSupplier.id, form);
+
+      if (!updated) {
+        return;
+      }
+
       setEditingSupplierId(null);
     } else {
-      onCreateSupplier(form);
+      const supplier = await onCreateSupplier(form);
+
+      if (!supplier) {
+        return;
+      }
+
       onCloseForm();
     }
 
@@ -347,7 +360,9 @@ export function SuppliersSection({
                     Editar proveedor {supplier.name}
                   </SecondaryActionButton>
                   <SecondaryActionButton
-                    onClick={() => onSetSupplierActive(supplier.id, !supplier.active)}
+                    onClick={() => {
+                      void onSetSupplierActive(supplier.id, !supplier.active);
+                    }}
                     variant="compact"
                   >
                     {supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"}

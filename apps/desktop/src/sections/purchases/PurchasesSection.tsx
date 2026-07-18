@@ -85,7 +85,7 @@ type PurchasesSectionProps = {
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -258,7 +258,7 @@ export function PurchasesSection({
     }));
   }
 
-  function submitSupplier() {
+  async function submitSupplier() {
     const nextErrors: SupplierFormErrors = {};
 
     if (supplierForm.name.trim() === "") {
@@ -271,7 +271,11 @@ export function PurchasesSection({
       return;
     }
 
-    const supplier = onCreateSupplier(supplierForm);
+    const supplier = await onCreateSupplier(supplierForm);
+
+    if (!supplier) {
+      return;
+    }
 
     setForm((currentForm) => ({ ...currentForm, supplierId: supplier.id }));
     setSupplierForm(emptySupplierForm);

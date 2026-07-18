@@ -387,6 +387,9 @@ describe("App navigation", () => {
       if (command === "list_customers") {
         return Promise.resolve([storedCustomer]);
       }
+      if (command === "list_suppliers") {
+        return Promise.resolve([]);
+      }
 
       return Promise.resolve(undefined);
     });
@@ -423,6 +426,86 @@ describe("App navigation", () => {
           customer: expect.objectContaining({
             active: false,
             id: "customer-stored"
+          })
+        })
+      )
+    );
+  });
+
+  it("loads and updates suppliers through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedSupplier = {
+      active: true,
+      address: "Calle 20",
+      city: "Medellin",
+      department: "Antioquia",
+      document: "900123",
+      email: "proveedor@correo.com",
+      id: "supplier-stored",
+      name: "Distribuidora Norte",
+      phone: "300"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([storedSupplier]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    expect(
+      await screen.findByRole("cell", { name: "Distribuidora Norte" })
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "Editar proveedor Distribuidora Norte" })
+    );
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Distribuidora Sur");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios proveedor" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_supplier",
+        expect.objectContaining({
+          supplier: expect.objectContaining({
+            id: "supplier-stored",
+            name: "Distribuidora Sur"
+          })
+        })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Desactivar proveedor" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_supplier",
+        expect.objectContaining({
+          supplier: expect.objectContaining({
+            active: false,
+            id: "supplier-stored"
           })
         })
       )

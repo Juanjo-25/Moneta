@@ -62,9 +62,12 @@ type SectionContentProps = {
   isLowStock: (product: ProductRecord) => boolean;
   onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
-  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
-  onSetSupplierActive: (supplierId: string, active: boolean) => void;
+  onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
+  onUpdateSupplier: (
+    supplierId: string,
+    input: SupplierFormState
+  ) => Promise<boolean>;
+  onSetSupplierActive: (supplierId: string, active: boolean) => Promise<boolean>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;

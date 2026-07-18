@@ -1,4 +1,9 @@
-import type { AppSettings, CustomerRecord, ProductRecord } from "../types";
+import type {
+  AppSettings,
+  CustomerRecord,
+  ProductRecord,
+  SupplierRecord
+} from "../types";
 
 type TauriCore = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -125,6 +130,28 @@ export async function saveNativeCustomer(customer: CustomerRecord): Promise<bool
   }
 
   await invoke<void>("save_customer", { customer });
+
+  return true;
+}
+
+export async function loadNativeSuppliers(): Promise<SupplierRecord[] | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<SupplierRecord[]>("list_suppliers");
+}
+
+export async function saveNativeSupplier(supplier: SupplierRecord): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_supplier", { supplier });
 
   return true;
 }

@@ -4,9 +4,11 @@ import {
   loadNativeCustomers,
   loadNativeProducts,
   loadNativeSettings,
+  loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeProduct,
-  saveNativeSettings
+  saveNativeSettings,
+  saveNativeSupplier
 } from "./tauri";
 
 function setTauriInvoke(
@@ -244,5 +246,46 @@ describe("native customer persistence", () => {
 
     await expect(saveNativeCustomer(customer)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_customer", { customer });
+  });
+});
+
+describe("native supplier persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  const supplier = {
+    active: true,
+    address: "Calle 2",
+    city: "Medellin",
+    department: "Antioquia",
+    document: "900123",
+    email: "proveedor@correo.com",
+    id: "supplier-1",
+    name: "Distribuidora Norte",
+    phone: "300"
+  };
+
+  it("returns null suppliers and skips saves in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativeSuppliers()).resolves.toBeNull();
+    await expect(saveNativeSupplier(supplier)).resolves.toBe(false);
+  });
+
+  it("loads suppliers through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue([supplier]);
+    setTauriInvoke(invoke);
+
+    await expect(loadNativeSuppliers()).resolves.toEqual([supplier]);
+    expect(invoke).toHaveBeenCalledWith("list_suppliers");
+  });
+
+  it("saves a supplier through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeSupplier(supplier)).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_supplier", { supplier });
   });
 });

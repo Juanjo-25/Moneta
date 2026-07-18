@@ -20,9 +20,11 @@ import {
   loadNativeCustomers,
   loadNativeProducts,
   loadNativeSettings,
+  loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeProduct,
   saveNativeSettings,
+  saveNativeSupplier,
   type NativeConnectionStatus
 } from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
@@ -326,11 +328,13 @@ export function App() {
       }
 
       try {
-        const [storedSettings, storedProducts, storedCustomers] = await Promise.all([
-          loadNativeSettings(),
-          loadNativeProducts(),
-          loadNativeCustomers()
-        ]);
+        const [storedSettings, storedProducts, storedCustomers, storedSuppliers] =
+          await Promise.all([
+            loadNativeSettings(),
+            loadNativeProducts(),
+            loadNativeCustomers(),
+            loadNativeSuppliers()
+          ]);
 
         if (isMounted && storedSettings) {
           setSettings(storedSettings);
@@ -340,6 +344,9 @@ export function App() {
         }
         if (isMounted && storedCustomers) {
           setCustomers(storedCustomers);
+        }
+        if (isMounted && storedSuppliers) {
+          setSuppliers(storedSuppliers);
         }
       } catch {
         if (isMounted) {
@@ -561,7 +568,9 @@ export function App() {
     return validateCustomerForm(input, { customers, currentCustomerId });
   }
 
-  function createSupplier(input: SupplierFormState): SupplierRecord {
+  async function createSupplier(
+    input: SupplierFormState
+  ): Promise<SupplierRecord | null> {
     const supplier = {
       active: true,
       address: input.address.trim(),
@@ -574,36 +583,88 @@ export function App() {
       phone: input.phone.trim()
     };
 
+    try {
+      await saveNativeSupplier(supplier);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el proveedor local."
+      });
+      return null;
+    }
+
     setSuppliers((currentSuppliers) => [...currentSuppliers, supplier]);
 
     return supplier;
   }
 
-  function updateSupplier(supplierId: string, input: SupplierFormState) {
+  async function updateSupplier(
+    supplierId: string,
+    input: SupplierFormState
+  ): Promise<boolean> {
+    const currentSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+
+    if (!currentSupplier) {
+      return false;
+    }
+
+    const updatedSupplier = {
+      ...currentSupplier,
+      address: input.address.trim(),
+      city: input.city.trim(),
+      department: input.department.trim() || "Antioquia",
+      document: input.document.trim(),
+      email: input.email.trim(),
+      name: input.name.trim(),
+      phone: input.phone.trim()
+    };
+
+    try {
+      await saveNativeSupplier(updatedSupplier);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el proveedor local."
+      });
+      return false;
+    }
+
     setSuppliers((currentSuppliers) =>
       currentSuppliers.map((supplier) =>
-        supplier.id === supplierId
-          ? {
-              ...supplier,
-              address: input.address.trim(),
-              city: input.city.trim(),
-              department: input.department.trim() || "Antioquia",
-              document: input.document.trim(),
-              email: input.email.trim(),
-              name: input.name.trim(),
-              phone: input.phone.trim()
-            }
-          : supplier
+        supplier.id === supplierId ? updatedSupplier : supplier
       )
     );
+    return true;
   }
 
-  function setSupplierActive(supplierId: string, active: boolean) {
+  async function setSupplierActive(
+    supplierId: string,
+    active: boolean
+  ): Promise<boolean> {
+    const currentSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+
+    if (!currentSupplier) {
+      return false;
+    }
+
+    const updatedSupplier = { ...currentSupplier, active };
+
+    try {
+      await saveNativeSupplier(updatedSupplier);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el estado del proveedor local."
+      });
+      return false;
+    }
+
     setSuppliers((currentSuppliers) =>
       currentSuppliers.map((supplier) =>
-        supplier.id === supplierId ? { ...supplier, active } : supplier
+        supplier.id === supplierId ? updatedSupplier : supplier
       )
     );
+    return true;
   }
 
   function registerPurchaseInSession(input: {

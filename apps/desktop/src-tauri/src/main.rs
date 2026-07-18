@@ -65,6 +65,20 @@ struct CustomerRecord {
     email: String,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupplierRecord {
+    id: String,
+    active: bool,
+    address: String,
+    city: String,
+    department: String,
+    document: String,
+    email: String,
+    name: String,
+    phone: String,
+}
+
 #[tauri::command]
 fn health_check() -> String {
     "Moneta Tauri conectado".to_string()
@@ -300,6 +314,94 @@ fn save_customer(app: tauri::AppHandle, customer: CustomerRecord) -> Result<(), 
     Ok(())
 }
 
+#[tauri::command]
+fn list_suppliers(app: tauri::AppHandle) -> Result<Vec<SupplierRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT id, active, address, city, department, document, email, name, phone
+            FROM suppliers
+            ORDER BY name COLLATE NOCASE ASC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de proveedores: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let active: i64 = row.get(1)?;
+
+            Ok(SupplierRecord {
+                id: row.get(0)?,
+                active: active == 1,
+                address: row.get(2)?,
+                city: row.get(3)?,
+                department: row.get(4)?,
+                document: row.get(5)?,
+                email: row.get(6)?,
+                name: row.get(7)?,
+                phone: row.get(8)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer los proveedores: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir los proveedores: {error}"))
+}
+
+#[tauri::command]
+fn save_supplier(app: tauri::AppHandle, supplier: SupplierRecord) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO suppliers (
+              id,
+              active,
+              address,
+              city,
+              department,
+              document,
+              email,
+              name,
+              phone,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              active = excluded.active,
+              address = excluded.address,
+              city = excluded.city,
+              department = excluded.department,
+              document = excluded.document,
+              email = excluded.email,
+              name = excluded.name,
+              phone = excluded.phone,
+              updated_at = CURRENT_TIMESTAMP
+            ",
+            (
+                &supplier.id,
+                if supplier.active { 1 } else { 0 },
+                &supplier.address,
+                &supplier.city,
+                &supplier.department,
+                &supplier.document,
+                &supplier.email,
+                &supplier.name,
+                &supplier.phone,
+            ),
+        )
+        .map_err(|error| format!("No se pudo guardar el proveedor: {error}"))?;
+
+    Ok(())
+}
+
 fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let data_dir = app
         .path()
@@ -399,7 +501,9 @@ fn main() {
             list_products,
             save_product,
             list_customers,
-            save_customer
+            save_customer,
+            list_suppliers,
+            save_supplier
         ])
         .run(tauri::generate_context!())
         .expect("error while running Moneta desktop app");
