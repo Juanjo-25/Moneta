@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkNativeConnection } from "./tauri";
+import {
+  checkNativeConnection,
+  loadNativeSettings,
+  saveNativeSettings
+} from "./tauri";
 
 function setTauriInvoke(
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -73,5 +77,89 @@ describe("checkNativeConnection", () => {
       kind: "error",
       message: "No se pudo conectar con la base de datos local."
     });
+  });
+});
+
+describe("native settings persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  it("returns null settings in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativeSettings()).resolves.toBeNull();
+    await expect(
+      saveNativeSettings({
+        company: {
+          address: "",
+          city: "",
+          document: "",
+          email: "",
+          logoDataUri: "",
+          name: "",
+          phone: ""
+        },
+        invoice: {
+          accentColor: "#475569",
+          legalNote: "",
+          observations: "",
+          title: "REMISION"
+        },
+        sellers: []
+      })
+    ).resolves.toBe(false);
+  });
+
+  it("loads settings through Tauri", async () => {
+    const storedSettings = {
+      company: {
+        address: "Calle 1",
+        city: "Medellin",
+        document: "900",
+        email: "contabilidad@empresa.com",
+        logoDataUri: "",
+        name: "Empresa",
+        phone: "300"
+      },
+      invoice: {
+        accentColor: "#0f766e",
+        legalNote: "Nota",
+        observations: "Observaciones",
+        title: "Factura"
+      },
+      sellers: ["Laura Gomez"]
+    };
+    const invoke = vi.fn().mockResolvedValue(storedSettings);
+    setTauriInvoke(invoke);
+
+    await expect(loadNativeSettings()).resolves.toEqual(storedSettings);
+    expect(invoke).toHaveBeenCalledWith("get_app_settings");
+  });
+
+  it("saves settings through Tauri", async () => {
+    const settings = {
+      company: {
+        address: "Calle 1",
+        city: "Medellin",
+        document: "900",
+        email: "contabilidad@empresa.com",
+        logoDataUri: "",
+        name: "Empresa",
+        phone: "300"
+      },
+      invoice: {
+        accentColor: "#0f766e",
+        legalNote: "Nota",
+        observations: "Observaciones",
+        title: "Factura"
+      },
+      sellers: ["Laura Gomez"]
+    };
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeSettings(settings)).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_app_settings", { settings });
   });
 });

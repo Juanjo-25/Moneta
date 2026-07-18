@@ -1,5 +1,5 @@
-use rusqlite::Connection;
-use serde::Serialize;
+use rusqlite::{Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
@@ -9,6 +9,35 @@ use tauri::Manager;
 struct DatabaseStatus {
     path: String,
     migration_count: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompanySettings {
+    name: String,
+    document: String,
+    address: String,
+    city: String,
+    email: String,
+    phone: String,
+    logo_data_uri: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InvoiceDesignSettings {
+    accent_color: String,
+    title: String,
+    legal_note: String,
+    observations: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppSettings {
+    company: CompanySettings,
+    invoice: InvoiceDesignSettings,
+    sellers: Vec<String>,
 }
 
 #[tauri::command]
@@ -32,6 +61,54 @@ fn database_status(app: tauri::AppHandle) -> Result<DatabaseStatus, String> {
         path: database_path.to_string_lossy().into_owned(),
         migration_count,
     })
+}
+
+#[tauri::command]
+fn get_app_settings(app: tauri::AppHandle) -> Result<Option<AppSettings>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let settings_json: Option<String> = connection
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'app_settings'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("No se pudo leer la configuracion: {error}"))?;
+
+    settings_json
+        .map(|value| {
+            serde_json::from_str(&value)
+                .map_err(|error| format!("La configuracion guardada no es valida: {error}"))
+        })
+        .transpose()
+}
+
+#[tauri::command]
+fn save_app_settings(app: tauri::AppHandle, settings: AppSettings) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let settings_json = serde_json::to_string(&settings)
+        .map_err(|error| format!("No se pudo serializar la configuracion: {error}"))?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO app_settings (key, value, updated_at)
+            VALUES ('app_settings', ?1, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+              value = excluded.value,
+              updated_at = CURRENT_TIMESTAMP
+            ",
+            [&settings_json],
+        )
+        .map_err(|error| format!("No se pudo guardar la configuracion: {error}"))?;
+
+    Ok(())
 }
 
 fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -105,8 +182,17 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS app_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-catalogos-iniciales');
+
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-configuracion-app');
             ",
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
@@ -116,7 +202,12 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![health_check, database_status])
+        .invoke_handler(tauri::generate_handler![
+            health_check,
+            database_status,
+            get_app_settings,
+            save_app_settings
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Moneta desktop app");
 }

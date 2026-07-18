@@ -1,3 +1,5 @@
+import type { AppSettings } from "../types";
+
 type TauriCore = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
 };
@@ -59,4 +61,26 @@ export async function checkNativeConnection(): Promise<NativeConnectionStatus> {
       message: "No se pudo conectar con la base de datos local."
     };
   }
+}
+
+export async function loadNativeSettings(): Promise<AppSettings | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<AppSettings | null>("get_app_settings");
+}
+
+export async function saveNativeSettings(settings: AppSettings): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_app_settings", { settings });
+
+  return true;
 }

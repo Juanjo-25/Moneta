@@ -17,6 +17,8 @@ import {
 } from "./lib/formatters";
 import {
   checkNativeConnection,
+  loadNativeSettings,
+  saveNativeSettings,
   type NativeConnectionStatus
 } from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
@@ -310,9 +312,28 @@ export function App() {
   useEffect(() => {
     let isMounted = true;
 
-    checkNativeConnection().then((status) => {
+    checkNativeConnection().then(async (status) => {
       if (isMounted) {
         setNativeConnectionStatus(status);
+      }
+
+      if (status.kind !== "connected") {
+        return;
+      }
+
+      try {
+        const storedSettings = await loadNativeSettings();
+
+        if (isMounted && storedSettings) {
+          setSettings(storedSettings);
+        }
+      } catch {
+        if (isMounted) {
+          setNativeConnectionStatus({
+            kind: "error",
+            message: "No se pudo cargar la configuracion local."
+          });
+        }
       }
     });
 
@@ -320,6 +341,11 @@ export function App() {
       isMounted = false;
     };
   }, []);
+
+  function updateSettings(nextSettings: AppSettings) {
+    setSettings(nextSettings);
+    void saveNativeSettings(nextSettings);
+  }
 
   const lowStockProducts = products.filter(isLowStock);
   const today = new Date();
@@ -1428,7 +1454,7 @@ export function App() {
             salesDraft={salesDraft}
             section={activeSection}
             onSalesDraftChange={setSalesDraft}
-            onSettingsChange={setSettings}
+            onSettingsChange={updateSettings}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}
             suppliers={suppliers}

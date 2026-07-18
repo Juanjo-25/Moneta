@@ -174,7 +174,7 @@ type SectionContentProps = {
   onCloseProductForm: () => void;
   onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
-  onSettingsChange: Dispatch<SetStateAction<AppSettings>>;
+  onSettingsChange: (settings: AppSettings) => void;
   parseNonNegativeInteger: (value: string) => number | null;
   productFormVisible: boolean;
   supplierFormVisible: boolean;
