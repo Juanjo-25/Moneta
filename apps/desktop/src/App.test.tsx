@@ -24,7 +24,7 @@ async function createProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
   await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
   await user.type(screen.getByLabelText("Producto"), "Arroz libra");
-  await user.type(screen.getByLabelText("Unidad"), "4");
+  await user.type(screen.getByLabelText("Cantidad inicial"), "4");
   await user.type(screen.getByLabelText("Costo"), "3200");
   await user.type(screen.getByLabelText("Precio venta"), "4500");
   await user.type(screen.getByLabelText("Stock minimo"), "1");
@@ -36,7 +36,7 @@ async function createSecondProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
   await user.type(screen.getByLabelText("Codigo"), "PNL-001");
   await user.type(screen.getByLabelText("Producto"), "Panela unidad");
-  await user.type(screen.getByLabelText("Unidad"), "3");
+  await user.type(screen.getByLabelText("Cantidad inicial"), "3");
   await user.type(screen.getByLabelText("Costo"), "2500");
   await user.type(screen.getByLabelText("Precio venta"), "3500");
   await user.type(screen.getByLabelText("Stock minimo"), "1");
@@ -306,7 +306,8 @@ describe("App navigation", () => {
       name: "Frijol kilo",
       salePriceMinor: 5200,
       sku: "FRJ-001",
-      stock: 6
+      stock: 6,
+      unit: "Kg"
     };
     const invoke = vi.fn().mockImplementation((command: string) => {
       if (command === "health_check") {
@@ -337,7 +338,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
     await user.type(screen.getByLabelText("Producto"), "Arroz libra");
-    await user.type(screen.getByLabelText("Unidad"), "4");
+    await user.type(screen.getByLabelText("Cantidad inicial"), "4");
     await user.type(screen.getByLabelText("Costo"), "3200");
     await user.type(screen.getByLabelText("Precio venta"), "4500");
     await user.type(screen.getByLabelText("Stock minimo"), "1");
@@ -350,7 +351,8 @@ describe("App navigation", () => {
           product: expect.objectContaining({
             name: "Arroz libra",
             sku: "ARZ-001",
-            stock: 4
+            stock: 4,
+            unit: "Unidad"
           })
         })
       )
@@ -442,7 +444,8 @@ describe("App navigation", () => {
       name: "Arroz libra",
       salePriceMinor: 4500,
       sku: "ARZ-001",
-      stock: 4
+      stock: 4,
+      unit: "Unidad"
     };
     const storedCustomer = {
       active: true,
@@ -624,7 +627,8 @@ describe("App navigation", () => {
       name: "Arroz libra",
       salePriceMinor: 4500,
       sku: "ARZ-001",
-      stock: 4
+      stock: 4,
+      unit: "Unidad"
     };
     const storedSupplier = {
       active: true,
@@ -742,7 +746,7 @@ describe("App navigation", () => {
     );
   });
 
-  it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
+  it("creates a product with unit and initial quantity, then updates dashboard metrics", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -751,7 +755,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
     await user.type(screen.getByLabelText("Producto"), "Arroz libra");
-    await user.type(screen.getByLabelText("Unidad"), "4");
+    await user.selectOptions(screen.getByLabelText("Unidad"), "Libra");
+    await user.type(screen.getByLabelText("Cantidad inicial"), "4");
     await user.type(screen.getByLabelText("Costo"), "3200");
     await user.type(screen.getByLabelText("Precio venta"), "4500");
     await user.type(screen.getByLabelText("Stock minimo"), "5");
@@ -760,6 +765,7 @@ describe("App navigation", () => {
     expect(screen.queryByLabelText("Stock inicial")).toBeNull();
     expect(screen.getByRole("cell", { name: "ARZ-001" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Arroz libra" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Libra" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: /\$\s*3\.200/ })).toBeTruthy();
     expect(screen.getByRole("cell", { name: /\$\s*4\.500/ })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "4" })).toBeTruthy();
@@ -1002,7 +1008,7 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+1\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+1\s+1/
       })
     ).toBeTruthy();
 
@@ -1241,7 +1247,7 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
       })
     ).toBeTruthy();
 
@@ -1254,7 +1260,7 @@ describe("App navigation", () => {
       within(screen.getByRole("table", { name: "Productos registrados" })).getByRole(
         "row",
         {
-          name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+          name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
         }
       )
     ).toBeTruthy();
@@ -1319,7 +1325,7 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
       })
     ).toBeTruthy();
 
@@ -1493,12 +1499,12 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
       })
     ).toBeTruthy();
     expect(
       within(productsTable).getByRole("row", {
-        name: /PNL-001\s+Panela unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+        name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
       })
     ).toBeTruthy();
   });
@@ -1536,12 +1542,12 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
       })
     ).toBeTruthy();
     expect(
       within(productsTable).getByRole("row", {
-        name: /PNL-001\s+Panela unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+        name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
       })
     ).toBeTruthy();
 
@@ -2662,7 +2668,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     await user.type(screen.getByLabelText("Codigo"), "PNL-001");
     await user.type(screen.getByLabelText("Producto"), "Panela unidad");
-    await user.type(screen.getByLabelText("Unidad"), "2");
+    await user.type(screen.getByLabelText("Cantidad inicial"), "2");
     await user.type(screen.getByLabelText("Costo"), "2500");
     await user.type(screen.getByLabelText("Precio venta"), "3500");
     await user.type(screen.getByLabelText("Stock minimo"), "1");

@@ -46,6 +46,7 @@ struct ProductRecord {
     id: String,
     sku: String,
     name: String,
+    unit: String,
     cost_minor: i64,
     sale_price_minor: i64,
     minimum_stock: i64,
@@ -423,7 +424,7 @@ fn list_products(app: tauri::AppHandle) -> Result<Vec<ProductRecord>, String> {
     let mut statement = connection
         .prepare(
             "
-            SELECT id, sku, name, cost_minor, sale_price_minor, minimum_stock, stock, active
+            SELECT id, sku, name, unit, cost_minor, sale_price_minor, minimum_stock, stock, active
             FROM products
             ORDER BY name COLLATE NOCASE ASC
             ",
@@ -432,16 +433,17 @@ fn list_products(app: tauri::AppHandle) -> Result<Vec<ProductRecord>, String> {
 
     let rows = statement
         .query_map([], |row| {
-            let active: i64 = row.get(7)?;
+            let active: i64 = row.get(8)?;
 
             Ok(ProductRecord {
                 id: row.get(0)?,
                 sku: row.get(1)?,
                 name: row.get(2)?,
-                cost_minor: row.get(3)?,
-                sale_price_minor: row.get(4)?,
-                minimum_stock: row.get(5)?,
-                stock: row.get(6)?,
+                unit: row.get(3)?,
+                cost_minor: row.get(4)?,
+                sale_price_minor: row.get(5)?,
+                minimum_stock: row.get(6)?,
+                stock: row.get(7)?,
                 active: active == 1,
             })
         })
@@ -464,6 +466,7 @@ fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), Str
               id,
               sku,
               name,
+              unit,
               cost_minor,
               sale_price_minor,
               minimum_stock,
@@ -471,10 +474,11 @@ fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), Str
               active,
               updated_at
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
               sku = excluded.sku,
               name = excluded.name,
+              unit = excluded.unit,
               cost_minor = excluded.cost_minor,
               sale_price_minor = excluded.sale_price_minor,
               minimum_stock = excluded.minimum_stock,
@@ -486,6 +490,7 @@ fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), Str
                 &product.id,
                 &product.sku,
                 &product.name,
+                &product.unit,
                 product.cost_minor,
                 product.sale_price_minor,
                 product.minimum_stock,
@@ -2416,6 +2421,7 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               id TEXT PRIMARY KEY,
               sku TEXT NOT NULL UNIQUE,
               name TEXT NOT NULL,
+              unit TEXT NOT NULL DEFAULT 'Unidad',
               cost_minor INTEGER NOT NULL DEFAULT 0,
               sale_price_minor INTEGER NOT NULL DEFAULT 0,
               minimum_stock INTEGER NOT NULL DEFAULT 0,
@@ -2692,6 +2698,12 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
 
+    ensure_column(
+        connection,
+        "products",
+        "unit",
+        "ALTER TABLE products ADD COLUMN unit TEXT NOT NULL DEFAULT 'Unidad'",
+    )?;
     ensure_column(
         connection,
         "customer_receipts",

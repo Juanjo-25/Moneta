@@ -273,6 +273,7 @@ export function SalesSection({
       currentForm.unitPrice.trim() === ""
         ? {
             ...currentForm,
+            unit: selectedProduct.unit,
             unitPrice: formatIntegerInput(String(selectedProduct.salePriceMinor))
           }
         : currentForm

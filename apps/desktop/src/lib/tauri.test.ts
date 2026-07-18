@@ -199,7 +199,8 @@ describe("native product persistence", () => {
     name: "Arroz libra",
     salePriceMinor: 4500,
     sku: "ARZ-001",
-    stock: 4
+    stock: 4,
+    unit: "Unidad"
   };
 
   it("returns null products and skips saves in web mode", async () => {

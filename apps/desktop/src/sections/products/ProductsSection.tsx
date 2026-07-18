@@ -11,6 +11,7 @@ import type { ProductRecord } from "../../types";
 type ProductFormState = {
   sku: string;
   name: string;
+  unit: string;
   quantity: string;
   cost: string;
   salePrice: string;
@@ -22,11 +23,14 @@ type ProductFormErrors = Partial<Record<keyof ProductFormState, string>>;
 const emptyProductForm: ProductFormState = {
   sku: "",
   name: "",
+  unit: "Unidad",
   quantity: "",
   cost: "",
   salePrice: "",
   minimumStock: ""
 };
+
+const productUnitOptions = ["Unidad", "Kg", "Libra", "Metro", "Caja", "Paquete"];
 
 type ProductsSectionProps = {
   formVisible: boolean;
@@ -53,7 +57,7 @@ export function ProductsSection({
   const [errors, setErrors] = useState<ProductFormErrors>({});
 
   function updateField(
-    field: "sku" | "name" | "quantity" | "minimumStock",
+    field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
     value: string
   ) {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
@@ -83,8 +87,11 @@ export function ProductsSection({
     if (form.name.trim() === "") {
       nextErrors.name = "El nombre es obligatorio.";
     }
+    if (form.unit.trim() === "") {
+      nextErrors.unit = "La unidad de medida es obligatoria.";
+    }
     if (quantity === null) {
-      nextErrors.quantity = "La unidad debe ser cero o mayor.";
+      nextErrors.quantity = "La cantidad inicial debe ser cero o mayor.";
     }
     if (cost === null) {
       nextErrors.cost = "El costo debe ser cero o mayor.";
@@ -110,7 +117,8 @@ export function ProductsSection({
       name: form.name.trim(),
       salePriceMinor: salePrice!,
       sku: form.sku.trim(),
-      stock: quantity!
+      stock: quantity!,
+      unit: form.unit
     });
 
     if (!created) {
@@ -138,10 +146,26 @@ export function ProductsSection({
               onChange={(value) => updateField("name", value)}
               value={form.name}
             />
+            <label className="field" htmlFor="unidad-medida-producto">
+              <span>Unidad</span>
+              <select
+                aria-invalid={Boolean(errors.unit)}
+                id="unidad-medida-producto"
+                onChange={(event) => updateField("unit", event.target.value)}
+                value={form.unit}
+              >
+                {productUnitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+              {errors.unit ? <small>{errors.unit}</small> : null}
+            </label>
             <TextField
               error={errors.quantity}
               inputMode="numeric"
-              label="Unidad"
+              label="Cantidad inicial"
               onChange={(value) => updateField("quantity", value)}
               value={form.quantity}
             />
@@ -207,6 +231,7 @@ function ProductTable({
         labels={[
           "Codigo",
           "Producto",
+          "Unidad",
           "Costo",
           "Precio venta",
           "Stock",
@@ -219,6 +244,7 @@ function ProductTable({
           <tr key={product.id}>
             <td>{product.sku}</td>
             <td>{product.name}</td>
+            <td>{product.unit}</td>
             <td>{formatCurrency(product.costMinor)}</td>
             <td>{formatCurrency(product.salePriceMinor)}</td>
             <td>{product.stock}</td>

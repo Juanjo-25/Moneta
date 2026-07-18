@@ -25,6 +25,7 @@ export type ProductRecord = {
   id: string;
   sku: string;
   name: string;
+  unit: string;
   costMinor: number;
   salePriceMinor: number;
   minimumStock: number;

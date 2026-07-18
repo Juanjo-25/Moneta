@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -68,6 +68,7 @@ type PurchaseFormErrors = {
 type PurchaseProductFormState = {
   sku: string;
   name: string;
+  unit: string;
   cost: string;
   salePrice: string;
   minimumStock: string;
@@ -147,8 +148,11 @@ const emptyPurchaseProductForm: PurchaseProductFormState = {
   minimumStock: "",
   name: "",
   salePrice: "",
-  sku: ""
+  sku: "",
+  unit: "Unidad"
 };
+
+const productUnitOptions = ["Unidad", "Kg", "Libra", "Metro", "Caja", "Paquete"];
 
 const expenseCategoryOptions: Array<{
   label: string;
@@ -216,6 +220,18 @@ export function PurchasesSection({
   const nextInvoiceNumber = String(purchases.length + 1).padStart(3, "0");
   const nextProductSku = String(products.length + 1).padStart(3, "0");
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+
+    setForm((currentForm) =>
+      currentForm.productId === selectedProduct.id
+        ? { ...currentForm, unit: selectedProduct.unit }
+        : currentForm
+    );
+  }, [selectedProduct]);
 
   function updateField(field: keyof PurchaseFormState, value: string) {
     setForm((currentForm) => ({
@@ -308,7 +324,8 @@ export function PurchasesSection({
       name: productForm.name.trim(),
       salePriceMinor: 0,
       sku: nextProductSku,
-      stock: 0
+      stock: 0,
+      unit: productForm.unit
     };
 
     const created = await onCreateProduct(product);
@@ -630,6 +647,20 @@ export function PurchasesSection({
               onChange={(value) => updateProductField("name", value)}
               value={productForm.name}
             />
+            <label className="field" htmlFor="unidad-producto-compra">
+              <span>Unidad producto</span>
+              <select
+                id="unidad-producto-compra"
+                onChange={(event) => updateProductField("unit", event.target.value)}
+                value={productForm.unit}
+              >
+                {productUnitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            </label>
             <TextField
               error={productErrors.minimumStock}
               inputMode="numeric"
