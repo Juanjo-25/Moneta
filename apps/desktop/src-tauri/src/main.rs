@@ -40,6 +40,19 @@ struct AppSettings {
     sellers: Vec<String>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductRecord {
+    id: String,
+    sku: String,
+    name: String,
+    cost_minor: i64,
+    sale_price_minor: i64,
+    minimum_stock: i64,
+    stock: i64,
+    active: bool,
+}
+
 #[tauri::command]
 fn health_check() -> String {
     "Moneta Tauri conectado".to_string()
@@ -107,6 +120,90 @@ fn save_app_settings(app: tauri::AppHandle, settings: AppSettings) -> Result<(),
             [&settings_json],
         )
         .map_err(|error| format!("No se pudo guardar la configuracion: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn list_products(app: tauri::AppHandle) -> Result<Vec<ProductRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT id, sku, name, cost_minor, sale_price_minor, minimum_stock, stock, active
+            FROM products
+            ORDER BY name COLLATE NOCASE ASC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de productos: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let active: i64 = row.get(7)?;
+
+            Ok(ProductRecord {
+                id: row.get(0)?,
+                sku: row.get(1)?,
+                name: row.get(2)?,
+                cost_minor: row.get(3)?,
+                sale_price_minor: row.get(4)?,
+                minimum_stock: row.get(5)?,
+                stock: row.get(6)?,
+                active: active == 1,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer los productos: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir los productos: {error}"))
+}
+
+#[tauri::command]
+fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO products (
+              id,
+              sku,
+              name,
+              cost_minor,
+              sale_price_minor,
+              minimum_stock,
+              stock,
+              active,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              sku = excluded.sku,
+              name = excluded.name,
+              cost_minor = excluded.cost_minor,
+              sale_price_minor = excluded.sale_price_minor,
+              minimum_stock = excluded.minimum_stock,
+              stock = excluded.stock,
+              active = excluded.active,
+              updated_at = CURRENT_TIMESTAMP
+            ",
+            (
+                &product.id,
+                &product.sku,
+                &product.name,
+                product.cost_minor,
+                product.sale_price_minor,
+                product.minimum_stock,
+                product.stock,
+                if product.active { 1 } else { 0 },
+            ),
+        )
+        .map_err(|error| format!("No se pudo guardar el producto: {error}"))?;
 
     Ok(())
 }
@@ -206,7 +303,9 @@ fn main() {
             health_check,
             database_status,
             get_app_settings,
-            save_app_settings
+            save_app_settings,
+            list_products,
+            save_product
         ])
         .run(tauri::generate_context!())
         .expect("error while running Moneta desktop app");

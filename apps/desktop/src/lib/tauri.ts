@@ -1,4 +1,4 @@
-import type { AppSettings } from "../types";
+import type { AppSettings, ProductRecord } from "../types";
 
 type TauriCore = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -81,6 +81,28 @@ export async function saveNativeSettings(settings: AppSettings): Promise<boolean
   }
 
   await invoke<void>("save_app_settings", { settings });
+
+  return true;
+}
+
+export async function loadNativeProducts(): Promise<ProductRecord[] | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<ProductRecord[]>("list_products");
+}
+
+export async function saveNativeProduct(product: ProductRecord): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_product", { product });
 
   return true;
 }

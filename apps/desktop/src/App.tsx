@@ -17,7 +17,9 @@ import {
 } from "./lib/formatters";
 import {
   checkNativeConnection,
+  loadNativeProducts,
   loadNativeSettings,
+  saveNativeProduct,
   saveNativeSettings,
   type NativeConnectionStatus
 } from "./lib/tauri";
@@ -322,16 +324,22 @@ export function App() {
       }
 
       try {
-        const storedSettings = await loadNativeSettings();
+        const [storedSettings, storedProducts] = await Promise.all([
+          loadNativeSettings(),
+          loadNativeProducts()
+        ]);
 
         if (isMounted && storedSettings) {
           setSettings(storedSettings);
+        }
+        if (isMounted && storedProducts) {
+          setProducts(storedProducts);
         }
       } catch {
         if (isMounted) {
           setNativeConnectionStatus({
             kind: "error",
-            message: "No se pudo cargar la configuracion local."
+            message: "No se pudieron cargar los datos locales."
           });
         }
       }
@@ -430,8 +438,19 @@ export function App() {
     openSection(activeSection.id);
   }
 
-  function createProduct(product: ProductRecord) {
+  async function createProduct(product: ProductRecord): Promise<boolean> {
+    try {
+      await saveNativeProduct(product);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el producto local."
+      });
+      return false;
+    }
+
     setProducts((currentProducts) => [...currentProducts, product]);
+    return true;
   }
 
   function createCustomer(input: CustomerFormState): CustomerRecord {

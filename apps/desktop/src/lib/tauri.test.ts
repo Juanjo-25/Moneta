@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkNativeConnection,
+  loadNativeProducts,
   loadNativeSettings,
+  saveNativeProduct,
   saveNativeSettings
 } from "./tauri";
 
@@ -161,5 +163,45 @@ describe("native settings persistence", () => {
 
     await expect(saveNativeSettings(settings)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_app_settings", { settings });
+  });
+});
+
+describe("native product persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  const product = {
+    active: true,
+    costMinor: 3200,
+    id: "product-1",
+    minimumStock: 1,
+    name: "Arroz libra",
+    salePriceMinor: 4500,
+    sku: "ARZ-001",
+    stock: 4
+  };
+
+  it("returns null products and skips saves in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativeProducts()).resolves.toBeNull();
+    await expect(saveNativeProduct(product)).resolves.toBe(false);
+  });
+
+  it("loads products through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue([product]);
+    setTauriInvoke(invoke);
+
+    await expect(loadNativeProducts()).resolves.toEqual([product]);
+    expect(invoke).toHaveBeenCalledWith("list_products");
+  });
+
+  it("saves a product through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeProduct(product)).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_product", { product });
   });
 });

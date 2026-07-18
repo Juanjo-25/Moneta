@@ -84,7 +84,7 @@ type PurchaseProductFormErrors = {
 type PurchasesSectionProps = {
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
-  onCreateProduct: (product: ProductRecord) => void;
+  onCreateProduct: (product: ProductRecord) => Promise<boolean>;
   onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
@@ -279,7 +279,7 @@ export function PurchasesSection({
     setSupplierFormVisible(false);
   }
 
-  function submitProduct() {
+  async function submitProduct() {
     const nextErrors: PurchaseProductFormErrors = {};
     const minimumStock = parseNonNegativeInteger(productForm.minimumStock);
 
@@ -307,7 +307,12 @@ export function PurchasesSection({
       stock: 0
     };
 
-    onCreateProduct(product);
+    const created = await onCreateProduct(product);
+
+    if (!created) {
+      return;
+    }
+
     setForm((currentForm) => ({ ...currentForm, productId: product.id }));
     setProductForm(emptyPurchaseProductForm);
     setProductErrors({});

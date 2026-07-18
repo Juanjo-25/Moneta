@@ -34,7 +34,7 @@ type ProductsSectionProps = {
   formatIntegerInput: (value: string) => string;
   isLowStock: (product: ProductRecord) => boolean;
   onCloseForm: () => void;
-  onCreateProduct: (product: ProductRecord) => void;
+  onCreateProduct: (product: ProductRecord) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
 };
@@ -68,7 +68,7 @@ export function ProductsSection({
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
-  function submitProduct(event: FormEvent<HTMLFormElement>) {
+  async function submitProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: ProductFormErrors = {};
@@ -102,7 +102,7 @@ export function ProductsSection({
       return;
     }
 
-    onCreateProduct({
+    const created = await onCreateProduct({
       active: true,
       costMinor: cost!,
       id: `product-${Date.now()}`,
@@ -112,6 +112,11 @@ export function ProductsSection({
       sku: form.sku.trim(),
       stock: quantity!
     });
+
+    if (!created) {
+      return;
+    }
+
     setForm(emptyProductForm);
     onCloseForm();
   }

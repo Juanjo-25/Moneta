@@ -296,6 +296,67 @@ describe("App navigation", () => {
     );
   });
 
+  it("loads and saves products through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 2800,
+      id: "product-stored",
+      minimumStock: 2,
+      name: "Frijol kilo",
+      salePriceMinor: 5200,
+      sku: "FRJ-001",
+      stock: 6
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    expect(await screen.findByRole("cell", { name: "FRJ-001" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
+    await user.type(screen.getByLabelText("Producto"), "Arroz libra");
+    await user.type(screen.getByLabelText("Unidad"), "4");
+    await user.type(screen.getByLabelText("Costo"), "3200");
+    await user.type(screen.getByLabelText("Precio venta"), "4500");
+    await user.type(screen.getByLabelText("Stock minimo"), "1");
+    await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_product",
+        expect.objectContaining({
+          product: expect.objectContaining({
+            name: "Arroz libra",
+            sku: "ARZ-001",
+            stock: 4
+          })
+        })
+      )
+    );
+  });
+
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
     const user = userEvent.setup();
 
