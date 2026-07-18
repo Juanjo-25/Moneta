@@ -15,6 +15,10 @@ import {
   formatIntegerInput,
   parseNonNegativeInteger
 } from "./lib/formatters";
+import {
+  checkNativeConnection,
+  type NativeConnectionStatus
+} from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
 import { DashboardContent } from "./sections/dashboard/DashboardContent";
 import {
@@ -275,6 +279,11 @@ function isLowStock(product: ProductRecord): boolean {
 }
 
 export function App() {
+  const [nativeConnectionStatus, setNativeConnectionStatus] =
+    useState<NativeConnectionStatus>({
+      kind: "web",
+      message: "Modo web: Tauri no esta disponible."
+    });
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
@@ -296,6 +305,20 @@ export function App() {
       navigationItems[0]!,
     [activeSectionId]
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    checkNativeConnection().then((status) => {
+      if (isMounted) {
+        setNativeConnectionStatus(status);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const lowStockProducts = products.filter(isLowStock);
   const today = new Date();
@@ -1330,6 +1353,13 @@ export function App() {
       </aside>
 
       <section className="workspace">
+        <div
+          className={`native-status native-status-${nativeConnectionStatus.kind}`}
+          role="status"
+        >
+          {nativeConnectionStatus.message}
+        </div>
+
         <SectionHeader
           action={activeSection.primaryAction ? (
             <PrimaryActionButton onClick={handlePrimaryAction}>

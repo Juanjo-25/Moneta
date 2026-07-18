@@ -153,8 +153,8 @@ type ExpenseSummary = {
 
 type ExpenseOriginRow = {
   amountMinor: number;
-  categoryLabel: string;
   count: number;
+  originLabel: string;
   participationPercent: number;
 };
 
@@ -870,14 +870,14 @@ function buildExpenseSummary(entries: ExpenseEntry[]): ExpenseSummary {
 }
 
 function buildExpenseOriginRows(entries: ExpenseEntry[]): ExpenseOriginRow[] {
-  const categoryMap = new Map<string, ExpenseOriginRow>();
+  const originMap = new Map<string, ExpenseOriginRow>();
   const totalExpenseMinor = entries.reduce((sum, entry) => sum + entry.amountMinor, 0);
 
   entries.forEach((entry) => {
-    const currentRow = categoryMap.get(entry.categoryLabel) ?? {
+    const currentRow = originMap.get(entry.originLabel) ?? {
       amountMinor: 0,
-      categoryLabel: entry.categoryLabel,
       count: 0,
+      originLabel: entry.originLabel,
       participationPercent: 0
     };
 
@@ -886,10 +886,10 @@ function buildExpenseOriginRows(entries: ExpenseEntry[]): ExpenseOriginRow[] {
     currentRow.participationPercent =
       totalExpenseMinor > 0 ? (currentRow.amountMinor / totalExpenseMinor) * 100 : 0;
 
-    categoryMap.set(entry.categoryLabel, currentRow);
+    originMap.set(entry.originLabel, currentRow);
   });
 
-  return [...categoryMap.values()].sort((left, right) => right.amountMinor - left.amountMinor);
+  return [...originMap.values()].sort((left, right) => right.amountMinor - left.amountMinor);
 }
 
 type ReportsSectionProps = {

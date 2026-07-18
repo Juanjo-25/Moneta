@@ -212,6 +212,32 @@ button,
   padding: 28px;
 }
 
+.native-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  color: var(--text-tertiary);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.native-status-connected {
+  border-color: #99f6e4;
+  background: #ecfdf5;
+  color: #0f766e;
+}
+
+.native-status-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .topbar {
   display: flex;
   align-items: flex-start;
