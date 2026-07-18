@@ -854,6 +854,30 @@ describe("App navigation", () => {
     expect(within(productsTable).getByRole("cell", { name: "2" })).toBeTruthy();
   });
 
+  it("filters the sales product selector by name before registering a sale", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Busqueda");
+    await user.type(screen.getByLabelText("NIT o C.C."), "101010");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.type(screen.getByLabelText("Producto buscable"), "pan");
+    const productDropdown = screen.getByRole("listbox");
+    expect(within(productDropdown).queryByRole("option", { name: "Arroz libra" })).toBeNull();
+    await user.click(within(productDropdown).getByRole("option", { name: "Panela unidad" }));
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Cliente Busqueda")).toBeTruthy();
+    expect(within(salesTable).getByText("Panela unidad")).toBeTruthy();
+  });
+
   it("shows sales charts on the dashboard from registered sales", async () => {
     const user = userEvent.setup();
 

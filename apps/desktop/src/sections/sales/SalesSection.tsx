@@ -211,6 +211,8 @@ export function SalesSection({
 }: SalesSectionProps) {
   const { form, saleLines } = salesDraft;
   const [errors, setErrors] = useState<SalesFormErrors>({});
+  const [productSearch, setProductSearch] = useState("");
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
   const [customerForm, setCustomerForm] =
     useState<CustomerFormState>(emptyCustomerForm);
@@ -228,6 +230,20 @@ export function SalesSection({
     customers.find((customer) => customer.id === form.customerId) ?? null;
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
+  const normalizedProductSearch = normalizeSearchText(productSearch);
+  const filteredProducts =
+    normalizedProductSearch === ""
+      ? products
+      : products.filter((product) =>
+          normalizeSearchText(`${product.name} ${product.sku}`).includes(
+            normalizedProductSearch
+          )
+        );
+  const visibleProducts =
+    selectedProduct &&
+    !filteredProducts.some((product) => product.id === selectedProduct.id)
+      ? [selectedProduct, ...filteredProducts]
+      : filteredProducts;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
   const unitPriceMinor = parseNonNegativeInteger(form.unitPrice) ?? 0;
   const discountPercent = parsePercentage(form.discountPercent);
@@ -297,6 +313,24 @@ export function SalesSection({
     value: string
   ) {
     updateField(field, value.replace(/[^0-9]/g, ""));
+  }
+
+  function selectProduct(product: ProductRecord) {
+    updateField("productId", product.id);
+    setProductSearch(product.name);
+    setProductDropdownOpen(false);
+  }
+
+  function updateProductSearch(value: string) {
+    setProductSearch(value);
+    setProductDropdownOpen(true);
+
+    if (
+      selectedProduct &&
+      normalizeSearchText(value) !== normalizeSearchText(selectedProduct.name)
+    ) {
+      updateField("productId", "");
+    }
   }
 
   function validateDraftLine(): {
@@ -386,6 +420,7 @@ export function SalesSection({
       discountPercent: "0",
       taxPercent: "0"
     }));
+    setProductSearch("");
     setErrors((currentErrors) => ({
       ...currentErrors,
       productId: undefined,
@@ -820,13 +855,74 @@ export function SalesSection({
             <span>Agrega los productos y sus valores antes de registrar la venta.</span>
           </div>
           <div className="sales-grid">
-          <label className="field" htmlFor="producto-venta">
+          <div className="field searchable-select">
             <span>Producto</span>
+            <div
+              className="searchable-select-control"
+              onBlur={() => window.setTimeout(() => setProductDropdownOpen(false), 120)}
+            >
+              <input
+                aria-autocomplete="list"
+                aria-controls="producto-venta-options"
+                aria-expanded={productDropdownOpen}
+                aria-invalid={Boolean(errors.productId)}
+                aria-label="Producto buscable"
+                id="producto-venta-buscable"
+                onChange={(event) => updateProductSearch(event.target.value)}
+                onFocus={() => setProductDropdownOpen(true)}
+                placeholder="Busca por nombre o codigo"
+                role="combobox"
+                type="text"
+                value={productSearch}
+              />
+              <button
+                aria-label="Abrir productos"
+                className="searchable-select-toggle"
+                onClick={() => setProductDropdownOpen((open) => !open)}
+                type="button"
+              >
+                ▾
+              </button>
+              {productDropdownOpen ? (
+                <div
+                  className="searchable-select-menu"
+                  id="producto-venta-options"
+                  role="listbox"
+                >
+                  {visibleProducts.length > 0 ? (
+                    visibleProducts.map((product) => (
+                      <button
+                        aria-label={product.name}
+                        aria-selected={form.productId === product.id}
+                        className="searchable-select-option"
+                        key={product.id}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectProduct(product)}
+                        role="option"
+                        type="button"
+                      >
+                        <strong>{product.name}</strong>
+                        <span>{product.sku} · Stock {product.stock}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="searchable-select-empty">
+                      Sin productos coincidentes
+                    </span>
+                  )}
+                </div>
+              ) : null}
+            </div>
             <select
-              aria-invalid={Boolean(errors.productId)}
-              id="producto-venta"
+              aria-label="Producto"
+              className="native-select-compat"
               onChange={(event) => {
+                const product =
+                  products.find((currentProduct) => currentProduct.id === event.target.value) ??
+                  null;
+
                 updateField("productId", event.target.value);
+                setProductSearch(product?.name ?? "");
               }}
               value={form.productId}
             >
@@ -837,8 +933,13 @@ export function SalesSection({
                 </option>
               ))}
             </select>
+            <small>
+              {visibleProducts.length === products.length
+                ? `${products.length} productos disponibles`
+                : `${visibleProducts.length} de ${products.length} productos`}
+            </small>
             {errors.productId ? <small>{errors.productId}</small> : null}
-          </label>
+          </div>
 
           <label className="field" htmlFor="unidad-venta">
             <span>Unidad</span>
@@ -1204,6 +1305,14 @@ function calculateDocumentLine(input: {
 function formatDocumentNumber(prefix: string, number: string): string {
   const normalizedPrefix = prefix.trim().toUpperCase();
   return normalizedPrefix === "" ? number : `${normalizedPrefix}-${number}`;
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .trim();
 }
 
 type SellerSelectProps = {
