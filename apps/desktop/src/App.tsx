@@ -19,10 +19,13 @@ import {
   checkNativeConnection,
   loadNativeCustomers,
   loadNativeProducts,
+  loadNativePurchases,
   loadNativeSettings,
+  loadNativeSupplierPayables,
   loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeProduct,
+  saveNativePurchase,
   saveNativeSettings,
   saveNativeSupplier,
   type NativeConnectionStatus
@@ -328,13 +331,21 @@ export function App() {
       }
 
       try {
-        const [storedSettings, storedProducts, storedCustomers, storedSuppliers] =
-          await Promise.all([
-            loadNativeSettings(),
-            loadNativeProducts(),
-            loadNativeCustomers(),
-            loadNativeSuppliers()
-          ]);
+        const [
+          storedSettings,
+          storedProducts,
+          storedCustomers,
+          storedSuppliers,
+          storedPurchases,
+          storedSupplierPayables
+        ] = await Promise.all([
+          loadNativeSettings(),
+          loadNativeProducts(),
+          loadNativeCustomers(),
+          loadNativeSuppliers(),
+          loadNativePurchases(),
+          loadNativeSupplierPayables()
+        ]);
 
         if (isMounted && storedSettings) {
           setSettings(storedSettings);
@@ -347,6 +358,12 @@ export function App() {
         }
         if (isMounted && storedSuppliers) {
           setSuppliers(storedSuppliers);
+        }
+        if (isMounted && storedPurchases) {
+          setPurchases(storedPurchases);
+        }
+        if (isMounted && storedSupplierPayables) {
+          setSupplierPayables(storedSupplierPayables);
         }
       } catch {
         if (isMounted) {
@@ -667,7 +684,7 @@ export function App() {
     return true;
   }
 
-  function registerPurchaseInSession(input: {
+  async function registerPurchaseInSession(input: {
     supplier: SupplierRecord;
     branch: string;
     prefix: string;
@@ -688,7 +705,7 @@ export function App() {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) {
+  }): Promise<boolean> {
     const occurredAt = new Date();
     const purchaseId = `purchase-${Date.now()}`;
     const lines = input.lines.map((line, index) => ({
@@ -708,6 +725,55 @@ export function App() {
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
     const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
     const firstLine = lines[0]!;
+    const purchase: PurchaseRecord = {
+      dueAt: input.dueAt,
+      branch: input.branch,
+      concept: input.concept,
+      currency: "COP",
+      expenseCategory: input.expenseCategory,
+      id: purchaseId,
+      invoiceNumber: input.invoiceNumber,
+      issuedAt: input.issuedAt,
+      lines,
+      occurredAtMs: occurredAt.getTime(),
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      paymentStatus: input.paymentStatus,
+      prefix: input.prefix,
+      productId: firstLine.productId,
+      productName:
+        lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+      quantity: totalQuantity,
+      supplierId: input.supplier.id,
+      supplierName: input.supplier.name,
+      totalMinor,
+      unitCostMinor: firstLine.unitCostMinor
+    };
+    const supplierPayable: SupplierPayableRecord | null =
+      input.paymentStatus === "pending"
+        ? {
+            balanceMinor: totalMinor,
+            dueAt: input.dueAt,
+            expenseCategory: input.expenseCategory,
+            id: `payable-${purchaseId}`,
+            invoiceNumber: input.invoiceNumber,
+            originalAmountMinor: totalMinor,
+            paidAmountMinor: 0,
+            purchaseId,
+            status: "pending",
+            supplierId: input.supplier.id,
+            supplierName: input.supplier.name
+          }
+        : null;
+
+    try {
+      await saveNativePurchase({ purchase, supplierPayable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la compra local."
+      });
+      return false;
+    }
 
     setProducts((currentProducts) =>
       currentProducts.map((product) => {
@@ -729,51 +795,13 @@ export function App() {
           : product;
       })
     );
-    setPurchases((currentPurchases) => [
-      {
-        dueAt: input.dueAt,
-        branch: input.branch,
-        concept: input.concept,
-        currency: "COP",
-        expenseCategory: input.expenseCategory,
-        id: purchaseId,
-        invoiceNumber: input.invoiceNumber,
-        issuedAt: input.issuedAt,
-        lines,
-        occurredAtMs: occurredAt.getTime(),
-        occurredAtLabel: formatOccurredAtLabel(occurredAt),
-        paymentStatus: input.paymentStatus,
-        prefix: input.prefix,
-        productId: firstLine.productId,
-        productName:
-          lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
-        quantity: totalQuantity,
-        supplierId: input.supplier.id,
-        supplierName: input.supplier.name,
-        totalMinor,
-        unitCostMinor: firstLine.unitCostMinor
-      },
-      ...currentPurchases
-    ]);
+    setPurchases((currentPurchases) => [purchase, ...currentPurchases]);
 
-    if (input.paymentStatus === "pending") {
-      setSupplierPayables((currentPayables) => [
-        {
-          balanceMinor: totalMinor,
-          dueAt: input.dueAt,
-          expenseCategory: input.expenseCategory,
-          id: `payable-${purchaseId}`,
-          invoiceNumber: input.invoiceNumber,
-          originalAmountMinor: totalMinor,
-          paidAmountMinor: 0,
-          purchaseId,
-          status: "pending",
-          supplierId: input.supplier.id,
-          supplierName: input.supplier.name
-        },
-        ...currentPayables
-      ]);
+    if (supplierPayable) {
+      setSupplierPayables((currentPayables) => [supplierPayable, ...currentPayables]);
     }
+
+    return true;
   }
 
   function registerSupplierPayment(input: { payableId: string; amountMinor: number }) {

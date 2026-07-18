@@ -512,6 +512,134 @@ describe("App navigation", () => {
     );
   });
 
+  it("loads and saves purchases through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 3200,
+      id: "product-stored",
+      minimumStock: 1,
+      name: "Arroz libra",
+      salePriceMinor: 4500,
+      sku: "ARZ-001",
+      stock: 4
+    };
+    const storedSupplier = {
+      active: true,
+      address: "Calle 20",
+      city: "Medellin",
+      department: "Antioquia",
+      document: "900123",
+      email: "proveedor@correo.com",
+      id: "supplier-stored",
+      name: "Distribuidora Norte",
+      phone: "300"
+    };
+    const storedPurchase = {
+      branch: "Principal",
+      concept: "Factura de compra",
+      currency: "COP" as const,
+      dueAt: "",
+      expenseCategory: "inventory" as const,
+      id: "purchase-stored",
+      invoiceNumber: "001",
+      issuedAt: "2026-07-01",
+      lines: [
+        {
+          discountMinor: 0,
+          discountPercent: 0,
+          id: "purchase-stored-line-0",
+          productId: "product-stored",
+          productName: "Arroz libra",
+          quantity: 1,
+          subtotalMinor: 3200,
+          taxMinor: 0,
+          taxPercent: 0,
+          totalMinor: 3200,
+          unit: "Unidad",
+          unitCostMinor: 3200
+        }
+      ],
+      occurredAtLabel: "01/07/26, 12:00",
+      occurredAtMs: 1,
+      paymentStatus: "paid" as const,
+      prefix: "",
+      productId: "product-stored",
+      productName: "Arroz libra",
+      quantity: 1,
+      supplierId: "supplier-stored",
+      supplierName: "Distribuidora Norte",
+      totalMinor: 3200,
+      unitCostMinor: 3200
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 3,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([storedSupplier]);
+      }
+      if (command === "list_purchases") {
+        return Promise.resolve([storedPurchase]);
+      }
+      if (command === "list_supplier_payables") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    expect(await screen.findByRole("cell", { name: "001" })).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Proveedor"), "supplier-stored");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-18");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-08-18");
+    await user.selectOptions(screen.getByLabelText("Producto"), "product-stored");
+    await user.type(screen.getByLabelText("Cantidad compra"), "2");
+    await user.type(screen.getByLabelText("Costo unitario"), "3300");
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_purchase",
+        expect.objectContaining({
+          purchase: expect.objectContaining({
+            invoiceNumber: "002",
+            paymentStatus: "pending",
+            quantity: 2,
+            supplierId: "supplier-stored",
+            totalMinor: 6600
+          }),
+          supplierPayable: expect.objectContaining({
+            balanceMinor: 6600,
+            invoiceNumber: "002",
+            status: "pending",
+            supplierId: "supplier-stored"
+          })
+        })
+      )
+    );
+  });
+
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
     const user = userEvent.setup();
 

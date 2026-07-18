@@ -3,10 +3,13 @@ import {
   checkNativeConnection,
   loadNativeCustomers,
   loadNativeProducts,
+  loadNativePurchases,
   loadNativeSettings,
+  loadNativeSupplierPayables,
   loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeProduct,
+  saveNativePurchase,
   saveNativeSettings,
   saveNativeSupplier
 } from "./tauri";
@@ -287,5 +290,101 @@ describe("native supplier persistence", () => {
 
     await expect(saveNativeSupplier(supplier)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_supplier", { supplier });
+  });
+});
+
+describe("native purchase persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  const purchase = {
+    branch: "Principal",
+    concept: "Factura de compra",
+    currency: "COP" as const,
+    dueAt: "2026-07-30",
+    expenseCategory: "inventory" as const,
+    id: "purchase-1",
+    invoiceNumber: "001",
+    issuedAt: "2026-07-18",
+    lines: [
+      {
+        discountMinor: 0,
+        discountPercent: 0,
+        id: "purchase-1-line-0",
+        productId: "product-1",
+        productName: "Arroz libra",
+        quantity: 2,
+        subtotalMinor: 6400,
+        taxMinor: 0,
+        taxPercent: 0,
+        totalMinor: 6400,
+        unit: "Unidad",
+        unitCostMinor: 3200
+      }
+    ],
+    occurredAtLabel: "18/07/26, 12:00",
+    occurredAtMs: 1,
+    paymentStatus: "pending" as const,
+    prefix: "",
+    productId: "product-1",
+    productName: "Arroz libra",
+    quantity: 2,
+    supplierId: "supplier-1",
+    supplierName: "Distribuidora Norte",
+    totalMinor: 6400,
+    unitCostMinor: 3200
+  };
+  const supplierPayable = {
+    balanceMinor: 6400,
+    dueAt: "2026-07-30",
+    expenseCategory: "inventory" as const,
+    id: "payable-purchase-1",
+    invoiceNumber: "001",
+    originalAmountMinor: 6400,
+    paidAmountMinor: 0,
+    purchaseId: "purchase-1",
+    status: "pending" as const,
+    supplierId: "supplier-1",
+    supplierName: "Distribuidora Norte"
+  };
+
+  it("returns null purchases and payables and skips saves in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativePurchases()).resolves.toBeNull();
+    await expect(loadNativeSupplierPayables()).resolves.toBeNull();
+    await expect(
+      saveNativePurchase({ purchase, supplierPayable })
+    ).resolves.toBe(false);
+  });
+
+  it("loads purchases and supplier payables through Tauri", async () => {
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "list_purchases") {
+        return Promise.resolve([purchase]);
+      }
+
+      return Promise.resolve([supplierPayable]);
+    });
+    setTauriInvoke(invoke);
+
+    await expect(loadNativePurchases()).resolves.toEqual([purchase]);
+    await expect(loadNativeSupplierPayables()).resolves.toEqual([supplierPayable]);
+    expect(invoke).toHaveBeenCalledWith("list_purchases");
+    expect(invoke).toHaveBeenCalledWith("list_supplier_payables");
+  });
+
+  it("saves a purchase through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      saveNativePurchase({ purchase, supplierPayable })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_purchase", {
+      purchase,
+      supplierPayable
+    });
   });
 });

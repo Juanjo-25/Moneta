@@ -89,7 +89,7 @@ type SectionContentProps = {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) => void;
+  }) => Promise<boolean>;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     branch: string;

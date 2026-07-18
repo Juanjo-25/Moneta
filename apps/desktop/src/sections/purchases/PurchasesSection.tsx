@@ -107,7 +107,7 @@ type PurchasesSectionProps = {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) => void;
+  }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
   purchases: PurchaseRecord[];
@@ -430,7 +430,7 @@ export function PurchasesSection({
     }));
   }
 
-  function submitPurchase(event: FormEvent<HTMLFormElement>) {
+  async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: PurchaseFormErrors = {};
@@ -501,7 +501,7 @@ export function PurchasesSection({
       return;
     }
 
-    onRegisterPurchase({
+    const registered = await onRegisterPurchase({
       branch: form.branch.trim() || "Principal",
       concept: form.concept.trim() || "Factura de compra",
       dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
@@ -523,6 +523,11 @@ export function PurchasesSection({
       prefix: form.prefix.trim(),
       supplier: selectedSupplier
     });
+
+    if (!registered) {
+      return;
+    }
+
     setErrors({});
     setPurchaseLines([]);
     setForm(emptyPurchaseForm);
