@@ -137,11 +137,32 @@ struct SupplierPayableRecord {
     status: String,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupplierPaymentRecord {
+    id: String,
+    payable_id: String,
+    purchase_id: String,
+    supplier_id: String,
+    supplier_name: String,
+    expense_category: String,
+    amount_minor: i64,
+    paid_at_ms: i64,
+    paid_at_label: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PurchasePersistence {
     purchase: PurchaseRecord,
     supplier_payable: Option<SupplierPayableRecord>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupplierPaymentPersistence {
+    payment: SupplierPaymentRecord,
+    supplier_payable: SupplierPayableRecord,
 }
 
 #[tauri::command]
@@ -590,6 +611,53 @@ fn list_supplier_payables(app: tauri::AppHandle) -> Result<Vec<SupplierPayableRe
 }
 
 #[tauri::command]
+fn list_supplier_payments(app: tauri::AppHandle) -> Result<Vec<SupplierPaymentRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              payable_id,
+              purchase_id,
+              supplier_id,
+              supplier_name,
+              expense_category,
+              amount_minor,
+              paid_at_ms,
+              paid_at_label
+            FROM supplier_payments
+            ORDER BY paid_at_ms DESC, id DESC
+            ",
+        )
+        .map_err(|error| {
+            format!("No se pudo preparar la lectura de pagos a proveedores: {error}")
+        })?;
+
+    let rows = statement
+        .query_map([], |row| {
+            Ok(SupplierPaymentRecord {
+                id: row.get(0)?,
+                payable_id: row.get(1)?,
+                purchase_id: row.get(2)?,
+                supplier_id: row.get(3)?,
+                supplier_name: row.get(4)?,
+                expense_category: row.get(5)?,
+                amount_minor: row.get(6)?,
+                paid_at_ms: row.get(7)?,
+                paid_at_label: row.get(8)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer los pagos a proveedores: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir los pagos a proveedores: {error}"))
+}
+
+#[tauri::command]
 fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<(), String> {
     let database_path = database_path(&app)?;
     let mut connection = open_database(&database_path)?;
@@ -758,6 +826,82 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
     transaction
         .commit()
         .map_err(|error| format!("No se pudo confirmar la compra: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn save_supplier_payment(
+    app: tauri::AppHandle,
+    input: SupplierPaymentPersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion del pago: {error}"))?;
+
+    transaction
+        .execute(
+            "
+            INSERT INTO supplier_payments (
+              id,
+              payable_id,
+              purchase_id,
+              supplier_id,
+              supplier_name,
+              expense_category,
+              amount_minor,
+              paid_at_ms,
+              paid_at_label
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ",
+            params![
+                &input.payment.id,
+                &input.payment.payable_id,
+                &input.payment.purchase_id,
+                &input.payment.supplier_id,
+                &input.payment.supplier_name,
+                &input.payment.expense_category,
+                input.payment.amount_minor,
+                input.payment.paid_at_ms,
+                &input.payment.paid_at_label,
+            ],
+        )
+        .map_err(|error| format!("No se pudo guardar el pago a proveedor: {error}"))?;
+
+    let affected = transaction
+        .execute(
+            "
+            UPDATE supplier_payables
+            SET
+              paid_amount_minor = ?1,
+              balance_minor = ?2,
+              status = ?3,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?4
+            ",
+            params![
+                input.supplier_payable.paid_amount_minor,
+                input.supplier_payable.balance_minor,
+                &input.supplier_payable.status,
+                &input.supplier_payable.id,
+            ],
+        )
+        .map_err(|error| format!("No se pudo actualizar la cuenta por pagar: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!(
+            "La cuenta por pagar {} no existe en SQLite.",
+            input.supplier_payable.invoice_number
+        ));
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el pago a proveedor: {error}"))?;
 
     Ok(())
 }
@@ -950,6 +1094,22 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               FOREIGN KEY (purchase_id) REFERENCES purchases(id)
             );
 
+            CREATE TABLE IF NOT EXISTS supplier_payments (
+              id TEXT PRIMARY KEY,
+              payable_id TEXT NOT NULL,
+              purchase_id TEXT NOT NULL,
+              supplier_id TEXT NOT NULL,
+              supplier_name TEXT NOT NULL,
+              expense_category TEXT NOT NULL,
+              amount_minor INTEGER NOT NULL,
+              paid_at_ms INTEGER NOT NULL,
+              paid_at_label TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (payable_id) REFERENCES supplier_payables(id),
+              FOREIGN KEY (purchase_id) REFERENCES purchases(id),
+              FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+            );
+
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-catalogos-iniciales');
 
@@ -958,6 +1118,9 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
 
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-compras-iniciales');
+
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-pagos-proveedores');
             ",
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
@@ -980,7 +1143,9 @@ fn main() {
             save_supplier,
             list_purchases,
             list_supplier_payables,
-            save_purchase
+            list_supplier_payments,
+            save_purchase,
+            save_supplier_payment
         ])
         .run(tauri::generate_context!())
         .expect("error while running Moneta desktop app");

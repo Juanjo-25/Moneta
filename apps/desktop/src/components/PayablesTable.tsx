@@ -27,7 +27,7 @@ type PayablesTableProps = {
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
-  }) => void;
+  }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   supplierPayables: SupplierPayableRecord[];
   tableLabel?: string;
@@ -64,7 +64,7 @@ export function PayablesTable({
     setErrors({});
   }
 
-  function submitPayment(event: FormEvent<HTMLFormElement>) {
+  async function submitPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const amount = parseNonNegativeInteger(form.amount);
@@ -81,10 +81,15 @@ export function PayablesTable({
       return;
     }
 
-    onRegisterSupplierPayment({
+    const saved = await onRegisterSupplierPayment({
       amountMinor: amount,
       payableId: selectedPayable.id
     });
+    if (!saved) {
+      setErrors({ amount: "No se pudo guardar el abono." });
+      return;
+    }
+
     setForm({ amount: "", payableId: "" });
     setErrors({});
   }

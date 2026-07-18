@@ -167,7 +167,7 @@ type SectionContentProps = {
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
-  }) => void;
+  }) => Promise<boolean>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined

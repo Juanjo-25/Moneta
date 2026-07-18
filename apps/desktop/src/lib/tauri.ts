@@ -4,6 +4,7 @@ import type {
   ProductRecord,
   PurchaseRecord,
   SupplierPayableRecord,
+  SupplierPaymentRecord,
   SupplierRecord
 } from "../types";
 
@@ -180,6 +181,18 @@ export async function loadNativeSupplierPayables(): Promise<
   return invoke<SupplierPayableRecord[]>("list_supplier_payables");
 }
 
+export async function loadNativeSupplierPayments(): Promise<
+  SupplierPaymentRecord[] | null
+> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<SupplierPaymentRecord[]>("list_supplier_payments");
+}
+
 export async function saveNativePurchase(input: {
   purchase: PurchaseRecord;
   supplierPayable: SupplierPayableRecord | null;
@@ -191,6 +204,21 @@ export async function saveNativePurchase(input: {
   }
 
   await invoke<void>("save_purchase", input);
+
+  return true;
+}
+
+export async function saveNativeSupplierPayment(input: {
+  payment: SupplierPaymentRecord;
+  supplierPayable: SupplierPayableRecord;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_supplier_payment", input);
 
   return true;
 }

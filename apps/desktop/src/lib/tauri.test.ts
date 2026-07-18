@@ -6,12 +6,14 @@ import {
   loadNativePurchases,
   loadNativeSettings,
   loadNativeSupplierPayables,
+  loadNativeSupplierPayments,
   loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSettings,
-  saveNativeSupplier
+  saveNativeSupplier,
+  saveNativeSupplierPayment
 } from "./tauri";
 
 function setTauriInvoke(
@@ -348,21 +350,48 @@ describe("native purchase persistence", () => {
     supplierId: "supplier-1",
     supplierName: "Distribuidora Norte"
   };
+  const supplierPayment = {
+    amountMinor: 3200,
+    expenseCategory: "inventory" as const,
+    id: "supplier-payment-1",
+    paidAtLabel: "18/07/26, 12:10",
+    paidAtMs: 2,
+    payableId: "payable-purchase-1",
+    purchaseId: "purchase-1",
+    supplierId: "supplier-1",
+    supplierName: "Distribuidora Norte"
+  };
+  const updatedSupplierPayable = {
+    ...supplierPayable,
+    balanceMinor: 3200,
+    paidAmountMinor: 3200,
+    status: "partial" as const
+  };
 
   it("returns null purchases and payables and skips saves in web mode", async () => {
     setTauriInvoke();
 
     await expect(loadNativePurchases()).resolves.toBeNull();
     await expect(loadNativeSupplierPayables()).resolves.toBeNull();
+    await expect(loadNativeSupplierPayments()).resolves.toBeNull();
     await expect(
       saveNativePurchase({ purchase, supplierPayable })
     ).resolves.toBe(false);
+    await expect(
+      saveNativeSupplierPayment({
+        payment: supplierPayment,
+        supplierPayable: updatedSupplierPayable
+      })
+    ).resolves.toBe(false);
   });
 
-  it("loads purchases and supplier payables through Tauri", async () => {
+  it("loads purchases, supplier payables and supplier payments through Tauri", async () => {
     const invoke = vi.fn().mockImplementation((command: string) => {
       if (command === "list_purchases") {
         return Promise.resolve([purchase]);
+      }
+      if (command === "list_supplier_payments") {
+        return Promise.resolve([supplierPayment]);
       }
 
       return Promise.resolve([supplierPayable]);
@@ -371,8 +400,10 @@ describe("native purchase persistence", () => {
 
     await expect(loadNativePurchases()).resolves.toEqual([purchase]);
     await expect(loadNativeSupplierPayables()).resolves.toEqual([supplierPayable]);
+    await expect(loadNativeSupplierPayments()).resolves.toEqual([supplierPayment]);
     expect(invoke).toHaveBeenCalledWith("list_purchases");
     expect(invoke).toHaveBeenCalledWith("list_supplier_payables");
+    expect(invoke).toHaveBeenCalledWith("list_supplier_payments");
   });
 
   it("saves a purchase through Tauri", async () => {
@@ -385,6 +416,22 @@ describe("native purchase persistence", () => {
     expect(invoke).toHaveBeenCalledWith("save_purchase", {
       purchase,
       supplierPayable
+    });
+  });
+
+  it("saves a supplier payment through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      saveNativeSupplierPayment({
+        payment: supplierPayment,
+        supplierPayable: updatedSupplierPayable
+      })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_supplier_payment", {
+      payment: supplierPayment,
+      supplierPayable: updatedSupplierPayable
     });
   });
 });

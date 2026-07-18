@@ -22,12 +22,14 @@ import {
   loadNativePurchases,
   loadNativeSettings,
   loadNativeSupplierPayables,
+  loadNativeSupplierPayments,
   loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSettings,
   saveNativeSupplier,
+  saveNativeSupplierPayment,
   type NativeConnectionStatus
 } from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
@@ -337,14 +339,16 @@ export function App() {
           storedCustomers,
           storedSuppliers,
           storedPurchases,
-          storedSupplierPayables
+          storedSupplierPayables,
+          storedSupplierPayments
         ] = await Promise.all([
           loadNativeSettings(),
           loadNativeProducts(),
           loadNativeCustomers(),
           loadNativeSuppliers(),
           loadNativePurchases(),
-          loadNativeSupplierPayables()
+          loadNativeSupplierPayables(),
+          loadNativeSupplierPayments()
         ]);
 
         if (isMounted && storedSettings) {
@@ -364,6 +368,9 @@ export function App() {
         }
         if (isMounted && storedSupplierPayables) {
           setSupplierPayables(storedSupplierPayables);
+        }
+        if (isMounted && storedSupplierPayments) {
+          setSupplierPayments(storedSupplierPayments);
         }
       } catch {
         if (isMounted) {
@@ -804,49 +811,66 @@ export function App() {
     return true;
   }
 
-  function registerSupplierPayment(input: { payableId: string; amountMinor: number }) {
+  async function registerSupplierPayment(input: {
+    payableId: string;
+    amountMinor: number;
+  }): Promise<boolean> {
     const selectedPayable =
       supplierPayables.find((payable) => payable.id === input.payableId) ?? null;
 
-    if (selectedPayable) {
-      const paidAt = new Date();
-
-      setSupplierPayments((currentPayments) => [
-        {
-          amountMinor: input.amountMinor,
-          expenseCategory: selectedPayable.expenseCategory,
-          id: `supplier-payment-${Date.now()}`,
-          paidAtLabel: formatOccurredAtLabel(paidAt),
-          paidAtMs: paidAt.getTime(),
-          payableId: selectedPayable.id,
-          purchaseId: selectedPayable.purchaseId,
-          supplierId: selectedPayable.supplierId,
-          supplierName: selectedPayable.supplierName
-        },
-        ...currentPayments
-      ]);
+    if (
+      !selectedPayable ||
+      input.amountMinor <= 0 ||
+      input.amountMinor > selectedPayable.balanceMinor
+    ) {
+      return false;
     }
 
-    setSupplierPayables((currentPayables) =>
-      currentPayables.map((payable) => {
-        if (payable.id !== input.payableId) {
-          return payable;
-        }
-
-        const paidAmountMinor = payable.paidAmountMinor + input.amountMinor;
-        const balanceMinor = Math.max(payable.originalAmountMinor - paidAmountMinor, 0);
-
-        return {
-          ...payable,
-          balanceMinor,
-          paidAmountMinor,
-          status: getSupplierPayableStatus({
-            originalAmountMinor: payable.originalAmountMinor,
-            paidAmountMinor
-          })
-        };
-      })
+    const paidAt = new Date();
+    const paidAmountMinor = selectedPayable.paidAmountMinor + input.amountMinor;
+    const balanceMinor = Math.max(
+      selectedPayable.originalAmountMinor - paidAmountMinor,
+      0
     );
+    const supplierPayable: SupplierPayableRecord = {
+      ...selectedPayable,
+      balanceMinor,
+      paidAmountMinor,
+      status: getSupplierPayableStatus({
+        originalAmountMinor: selectedPayable.originalAmountMinor,
+        paidAmountMinor
+      })
+    };
+    const payment: SupplierPaymentRecord = {
+      amountMinor: input.amountMinor,
+      expenseCategory: selectedPayable.expenseCategory,
+      id: `supplier-payment-${Date.now()}`,
+      paidAtLabel: formatOccurredAtLabel(paidAt),
+      paidAtMs: paidAt.getTime(),
+      payableId: selectedPayable.id,
+      purchaseId: selectedPayable.purchaseId,
+      supplierId: selectedPayable.supplierId,
+      supplierName: selectedPayable.supplierName
+    };
+
+    try {
+      await saveNativeSupplierPayment({ payment, supplierPayable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el pago a proveedor local."
+      });
+      return false;
+    }
+
+    setSupplierPayments((currentPayments) => [payment, ...currentPayments]);
+    setSupplierPayables((currentPayables) =>
+      currentPayables.map((payable) =>
+        payable.id === input.payableId ? supplierPayable : payable
+      )
+    );
+
+    return true;
   }
 
   function registerSaleInSession(input: {
