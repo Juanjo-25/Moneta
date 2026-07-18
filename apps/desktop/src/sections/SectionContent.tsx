@@ -151,7 +151,7 @@ type SectionContentProps = {
       saleLineId: string;
       quantity: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterCustomerReceipt: (input: {
     receivableId: string;
     amountMinor: number;
@@ -161,7 +161,7 @@ type SectionContentProps = {
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
-  ) => void;
+  ) => Promise<void>;
   onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
   onDeleteSale: (saleId: string) => void;
   onRegisterSupplierPayment: (input: {

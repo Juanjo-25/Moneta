@@ -144,6 +144,49 @@ struct CustomerReceiptRecord {
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct CreditNoteLineRecord {
+    id: String,
+    sale_line_id: String,
+    product_id: String,
+    product_name: String,
+    unit: String,
+    quantity: i64,
+    unit_price_minor: i64,
+    discount_percent: f64,
+    tax_percent: f64,
+    cost_minor: i64,
+    margin_minor: i64,
+    margin_percent: f64,
+    total_minor: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CreditNoteRecord {
+    adjustment_type: String,
+    confirmed_at_label: String,
+    confirmed_at_ms: i64,
+    id: String,
+    number: String,
+    sale_id: String,
+    invoice_number: String,
+    customer: CustomerRecord,
+    customer_id: String,
+    customer_name: String,
+    issued_at: String,
+    reason: String,
+    receivable_due_at: String,
+    status: String,
+    total_minor: i64,
+    lines: Vec<CreditNoteLineRecord>,
+    occurred_at_ms: i64,
+    occurred_at_label: String,
+    voided_at_label: String,
+    voided_at_ms: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SupplierRecord {
     id: String,
     active: bool,
@@ -254,6 +297,21 @@ struct SalePersistence {
 struct CustomerReceiptPersistence {
     receipt: CustomerReceiptRecord,
     receivable: ReceivableRecord,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreditNoteStatusPersistence {
+    credit_note: CreditNoteRecord,
+    receivable: Option<ReceivableRecord>,
+    product_stock_adjustments: Vec<ProductStockAdjustment>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductStockAdjustment {
+    product_id: String,
+    quantity_delta: i64,
 }
 
 #[tauri::command]
@@ -934,6 +992,311 @@ fn save_customer_receipt(
 }
 
 #[tauri::command]
+fn list_credit_notes(app: tauri::AppHandle) -> Result<Vec<CreditNoteRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              adjustment_type,
+              confirmed_at_label,
+              confirmed_at_ms,
+              id,
+              number,
+              sale_id,
+              invoice_number,
+              customer_json,
+              customer_id,
+              customer_name,
+              issued_at,
+              reason,
+              receivable_due_at,
+              status,
+              total_minor,
+              occurred_at_ms,
+              occurred_at_label,
+              voided_at_label,
+              voided_at_ms
+            FROM credit_notes
+            ORDER BY occurred_at_ms DESC, id DESC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de notas credito: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let customer_json: String = row.get(7)?;
+            let customer = serde_json::from_str(&customer_json).map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    7,
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })?;
+
+            Ok(CreditNoteRecord {
+                adjustment_type: row.get(0)?,
+                confirmed_at_label: row.get(1)?,
+                confirmed_at_ms: row.get(2)?,
+                id: row.get(3)?,
+                number: row.get(4)?,
+                sale_id: row.get(5)?,
+                invoice_number: row.get(6)?,
+                customer,
+                customer_id: row.get(8)?,
+                customer_name: row.get(9)?,
+                issued_at: row.get(10)?,
+                reason: row.get(11)?,
+                receivable_due_at: row.get(12)?,
+                status: row.get(13)?,
+                total_minor: row.get(14)?,
+                lines: Vec::new(),
+                occurred_at_ms: row.get(15)?,
+                occurred_at_label: row.get(16)?,
+                voided_at_label: row.get(17)?,
+                voided_at_ms: row.get(18)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer las notas credito: {error}"))?;
+
+    let mut credit_notes = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir las notas credito: {error}"))?;
+
+    for credit_note in &mut credit_notes {
+        credit_note.lines = list_credit_note_lines(&connection, &credit_note.id)?;
+    }
+
+    Ok(credit_notes)
+}
+
+#[tauri::command]
+fn save_credit_note(app: tauri::AppHandle, credit_note: CreditNoteRecord) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de nota credito: {error}"))?;
+    let customer_json = serde_json::to_string(&credit_note.customer)
+        .map_err(|error| format!("No se pudo serializar el cliente de la nota credito: {error}"))?;
+
+    transaction
+        .execute(
+            "
+            INSERT INTO credit_notes (
+              adjustment_type,
+              confirmed_at_label,
+              confirmed_at_ms,
+              id,
+              number,
+              sale_id,
+              invoice_number,
+              customer_json,
+              customer_id,
+              customer_name,
+              issued_at,
+              reason,
+              receivable_due_at,
+              status,
+              total_minor,
+              occurred_at_ms,
+              occurred_at_label,
+              voided_at_label,
+              voided_at_ms,
+              updated_at
+            )
+            VALUES (
+              ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+              ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
+              CURRENT_TIMESTAMP
+            )
+            ",
+            params![
+                &credit_note.adjustment_type,
+                &credit_note.confirmed_at_label,
+                credit_note.confirmed_at_ms,
+                &credit_note.id,
+                &credit_note.number,
+                &credit_note.sale_id,
+                &credit_note.invoice_number,
+                &customer_json,
+                &credit_note.customer_id,
+                &credit_note.customer_name,
+                &credit_note.issued_at,
+                &credit_note.reason,
+                &credit_note.receivable_due_at,
+                &credit_note.status,
+                credit_note.total_minor,
+                credit_note.occurred_at_ms,
+                &credit_note.occurred_at_label,
+                &credit_note.voided_at_label,
+                credit_note.voided_at_ms,
+            ],
+        )
+        .map_err(|error| format!("No se pudo guardar la nota credito: {error}"))?;
+
+    for line in &credit_note.lines {
+        transaction
+            .execute(
+                "
+                INSERT INTO credit_note_lines (
+                  id,
+                  credit_note_id,
+                  sale_line_id,
+                  product_id,
+                  product_name,
+                  unit,
+                  quantity,
+                  unit_price_minor,
+                  discount_percent,
+                  tax_percent,
+                  cost_minor,
+                  margin_minor,
+                  margin_percent,
+                  total_minor
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                ",
+                params![
+                    &line.id,
+                    &credit_note.id,
+                    &line.sale_line_id,
+                    &line.product_id,
+                    &line.product_name,
+                    &line.unit,
+                    line.quantity,
+                    line.unit_price_minor,
+                    line.discount_percent,
+                    line.tax_percent,
+                    line.cost_minor,
+                    line.margin_minor,
+                    line.margin_percent,
+                    line.total_minor,
+                ],
+            )
+            .map_err(|error| format!("No se pudo guardar una linea de nota credito: {error}"))?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la nota credito: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn save_credit_note_status(
+    app: tauri::AppHandle,
+    input: CreditNoteStatusPersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de estado: {error}"))?;
+
+    transaction
+        .execute(
+            "
+            UPDATE credit_notes
+            SET
+              status = ?1,
+              confirmed_at_label = ?2,
+              confirmed_at_ms = ?3,
+              voided_at_label = ?4,
+              voided_at_ms = ?5,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?6
+            ",
+            params![
+                &input.credit_note.status,
+                &input.credit_note.confirmed_at_label,
+                input.credit_note.confirmed_at_ms,
+                &input.credit_note.voided_at_label,
+                input.credit_note.voided_at_ms,
+                &input.credit_note.id,
+            ],
+        )
+        .map_err(|error| format!("No se pudo actualizar la nota credito: {error}"))?;
+
+    for adjustment in &input.product_stock_adjustments {
+        let affected = transaction
+            .execute(
+                "
+                UPDATE products
+                SET
+                  stock = stock + ?1,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?2 AND stock + ?1 >= 0
+                ",
+                params![adjustment.quantity_delta, &adjustment.product_id],
+            )
+            .map_err(|error| format!("No se pudo ajustar inventario: {error}"))?;
+
+        if affected == 0 {
+            return Err(format!(
+                "No se pudo ajustar inventario para el producto {}.",
+                adjustment.product_id
+            ));
+        }
+    }
+
+    if let Some(receivable) = &input.receivable {
+        transaction
+            .execute(
+                "
+                INSERT INTO receivables (
+                  id,
+                  customer_id,
+                  customer_name,
+                  sale_id,
+                  amount_minor,
+                  original_amount_minor,
+                  paid_amount_minor,
+                  balance_minor,
+                  due_at,
+                  status,
+                  updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CURRENT_TIMESTAMP)
+                ON CONFLICT(id) DO UPDATE SET
+                  amount_minor = excluded.amount_minor,
+                  original_amount_minor = excluded.original_amount_minor,
+                  paid_amount_minor = excluded.paid_amount_minor,
+                  balance_minor = excluded.balance_minor,
+                  due_at = excluded.due_at,
+                  status = excluded.status,
+                  updated_at = CURRENT_TIMESTAMP
+                ",
+                params![
+                    &receivable.id,
+                    &receivable.customer_id,
+                    &receivable.customer_name,
+                    &receivable.sale_id,
+                    receivable.amount_minor,
+                    receivable.original_amount_minor,
+                    receivable.paid_amount_minor,
+                    receivable.balance_minor,
+                    &receivable.due_at,
+                    &receivable.status,
+                ],
+            )
+            .map_err(|error| format!("No se pudo actualizar la cuenta por cobrar: {error}"))?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el estado de nota credito: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn list_suppliers(app: tauri::AppHandle) -> Result<Vec<SupplierRecord>, String> {
     let database_path = database_path(&app)?;
     let connection = open_database(&database_path)?;
@@ -1494,6 +1857,60 @@ fn list_sale_lines(connection: &Connection, sale_id: &str) -> Result<Vec<SaleLin
         .map_err(|error| format!("No se pudieron convertir las lineas de venta: {error}"))
 }
 
+fn list_credit_note_lines(
+    connection: &Connection,
+    credit_note_id: &str,
+) -> Result<Vec<CreditNoteLineRecord>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+              id,
+              sale_line_id,
+              product_id,
+              product_name,
+              unit,
+              quantity,
+              unit_price_minor,
+              discount_percent,
+              tax_percent,
+              cost_minor,
+              margin_minor,
+              margin_percent,
+              total_minor
+            FROM credit_note_lines
+            WHERE credit_note_id = ?1
+            ORDER BY id ASC
+            ",
+        )
+        .map_err(|error| {
+            format!("No se pudo preparar la lectura de lineas de nota credito: {error}")
+        })?;
+
+    let rows = statement
+        .query_map([credit_note_id], |row| {
+            Ok(CreditNoteLineRecord {
+                id: row.get(0)?,
+                sale_line_id: row.get(1)?,
+                product_id: row.get(2)?,
+                product_name: row.get(3)?,
+                unit: row.get(4)?,
+                quantity: row.get(5)?,
+                unit_price_minor: row.get(6)?,
+                discount_percent: row.get(7)?,
+                tax_percent: row.get(8)?,
+                cost_minor: row.get(9)?,
+                margin_minor: row.get(10)?,
+                margin_percent: row.get(11)?,
+                total_minor: row.get(12)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer las lineas de nota credito: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir las lineas de nota credito: {error}"))
+}
+
 fn list_purchase_lines(
     connection: &Connection,
     purchase_id: &str,
@@ -1703,6 +2120,51 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               FOREIGN KEY (customer_id) REFERENCES customers(id)
             );
 
+            CREATE TABLE IF NOT EXISTS credit_notes (
+              id TEXT PRIMARY KEY,
+              adjustment_type TEXT NOT NULL,
+              confirmed_at_label TEXT NOT NULL,
+              confirmed_at_ms INTEGER NOT NULL,
+              number TEXT NOT NULL,
+              sale_id TEXT NOT NULL,
+              invoice_number TEXT NOT NULL,
+              customer_json TEXT NOT NULL,
+              customer_id TEXT NOT NULL,
+              customer_name TEXT NOT NULL,
+              issued_at TEXT NOT NULL,
+              reason TEXT NOT NULL,
+              receivable_due_at TEXT NOT NULL,
+              status TEXT NOT NULL,
+              total_minor INTEGER NOT NULL,
+              occurred_at_ms INTEGER NOT NULL,
+              occurred_at_label TEXT NOT NULL,
+              voided_at_label TEXT NOT NULL,
+              voided_at_ms INTEGER NOT NULL,
+              created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (sale_id) REFERENCES sales(id),
+              FOREIGN KEY (customer_id) REFERENCES customers(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS credit_note_lines (
+              id TEXT PRIMARY KEY,
+              credit_note_id TEXT NOT NULL,
+              sale_line_id TEXT NOT NULL,
+              product_id TEXT NOT NULL,
+              product_name TEXT NOT NULL,
+              unit TEXT NOT NULL,
+              quantity INTEGER NOT NULL,
+              unit_price_minor INTEGER NOT NULL,
+              discount_percent REAL NOT NULL,
+              tax_percent REAL NOT NULL,
+              cost_minor INTEGER NOT NULL,
+              margin_minor INTEGER NOT NULL,
+              margin_percent REAL NOT NULL,
+              total_minor INTEGER NOT NULL,
+              FOREIGN KEY (credit_note_id) REFERENCES credit_notes(id),
+              FOREIGN KEY (product_id) REFERENCES products(id)
+            );
+
             CREATE TABLE IF NOT EXISTS purchases (
               id TEXT PRIMARY KEY,
               supplier_id TEXT NOT NULL,
@@ -1797,6 +2259,9 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
 
             INSERT OR IGNORE INTO moneta_migrations (id)
             VALUES ('2026-07-18-recibos-caja');
+
+            INSERT OR IGNORE INTO moneta_migrations (id)
+            VALUES ('2026-07-18-notas-credito');
             ",
         )
         .map_err(|error| format!("No se pudieron preparar las tablas iniciales: {error}"))?;
@@ -1820,6 +2285,9 @@ fn main() {
             list_customer_receipts,
             save_sale,
             save_customer_receipt,
+            list_credit_notes,
+            save_credit_note,
+            save_credit_note_status,
             list_suppliers,
             save_supplier,
             list_purchases,

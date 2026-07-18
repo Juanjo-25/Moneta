@@ -17,6 +17,7 @@ import {
 } from "./lib/formatters";
 import {
   checkNativeConnection,
+  loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
   loadNativeProducts,
@@ -29,6 +30,8 @@ import {
   loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeCustomerReceipt,
+  saveNativeCreditNote,
+  saveNativeCreditNoteStatus,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSale,
@@ -345,6 +348,7 @@ export function App() {
           storedSales,
           storedReceivables,
           storedCustomerReceipts,
+          storedCreditNotes,
           storedSuppliers,
           storedPurchases,
           storedSupplierPayables,
@@ -356,6 +360,7 @@ export function App() {
           loadNativeSales(),
           loadNativeReceivables(),
           loadNativeCustomerReceipts(),
+          loadNativeCreditNotes(),
           loadNativeSuppliers(),
           loadNativePurchases(),
           loadNativeSupplierPayables(),
@@ -379,6 +384,9 @@ export function App() {
         }
         if (isMounted && storedCustomerReceipts) {
           setCustomerReceipts(storedCustomerReceipts);
+        }
+        if (isMounted && storedCreditNotes) {
+          setCreditNotes(storedCreditNotes);
         }
         if (isMounted && storedSuppliers) {
           setSuppliers(storedSuppliers);
@@ -1208,7 +1216,7 @@ export function App() {
     );
   }
 
-  function registerCreditNoteInSession(input: {
+  async function registerCreditNoteInSession(input: {
     sale: SaleRecord;
     adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
@@ -1218,7 +1226,7 @@ export function App() {
       saleLineId: string;
       quantity: number;
     }>;
-  }): string | null {
+  }): Promise<string | null> {
     const creditedQuantityByLine = creditNotes.reduce((totals, creditNote) => {
       if (creditNote.saleId !== input.sale.id || creditNote.status === "void") {
         return totals;
@@ -1302,36 +1310,44 @@ export function App() {
       unitPriceMinor: saleLine.unitPriceMinor
     }));
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
+    const creditNote: CreditNoteRecord = {
+      adjustmentType: input.adjustmentType,
+      confirmedAtLabel: "",
+      confirmedAtMs: 0,
+      customer: input.sale.customer,
+      customerId: input.sale.customerId,
+      customerName: input.sale.customerName,
+      id: creditNoteId,
+      invoiceNumber: input.sale.invoiceNumber,
+      issuedAt: input.issuedAt,
+      lines,
+      number: `NC-${String(creditNotes.length + 1).padStart(3, "0")}`,
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      occurredAtMs,
+      receivableDueAt:
+        receivables.find((receivable) => receivable.saleId === input.sale.id)?.dueAt ??
+        "",
+      reason:
+        input.reason.trim() ||
+        "Devolución de parte de los bienes; no aceptación de partes del servicio",
+      saleId: input.sale.id,
+      status: "draft",
+      totalMinor,
+      voidedAtLabel: "",
+      voidedAtMs: 0
+    };
 
-    setCreditNotes((currentCreditNotes) => [
-      {
-        adjustmentType: input.adjustmentType,
-        confirmedAtLabel: "",
-        confirmedAtMs: 0,
-        customer: input.sale.customer,
-        customerId: input.sale.customerId,
-        customerName: input.sale.customerName,
-        id: creditNoteId,
-        invoiceNumber: input.sale.invoiceNumber,
-        issuedAt: input.issuedAt,
-        lines,
-        number: `NC-${String(currentCreditNotes.length + 1).padStart(3, "0")}`,
-        occurredAtLabel: formatOccurredAtLabel(occurredAt),
-        occurredAtMs,
-        receivableDueAt:
-          receivables.find((receivable) => receivable.saleId === input.sale.id)?.dueAt ??
-          "",
-        reason:
-          input.reason.trim() ||
-          "Devolución de parte de los bienes; no aceptación de partes del servicio",
-        saleId: input.sale.id,
-        status: "draft",
-        totalMinor,
-        voidedAtLabel: "",
-        voidedAtMs: 0
-      },
-      ...currentCreditNotes
-    ]);
+    try {
+      await saveNativeCreditNote(creditNote);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la nota credito local."
+      });
+      return "No se pudo guardar la nota credito local.";
+    }
+
+    setCreditNotes((currentCreditNotes) => [creditNote, ...currentCreditNotes]);
 
     return null;
   }
@@ -1446,6 +1462,97 @@ export function App() {
     });
   }
 
+  function getCreditNoteProductStockAdjustments(
+    creditNote: CreditNoteRecord,
+    direction: "apply" | "reverse"
+  ): Array<{ productId: string; quantityDelta: number }> {
+    if (creditNote.adjustmentType !== "return") {
+      return [];
+    }
+
+    const multiplier = direction === "apply" ? 1 : -1;
+    const quantityByProduct = creditNote.lines.reduce((totals, line) => {
+      totals.set(line.productId, (totals.get(line.productId) ?? 0) + line.quantity);
+      return totals;
+    }, new Map<string, number>());
+
+    return Array.from(quantityByProduct.entries())
+      .filter(([, quantity]) => quantity > 0)
+      .map(([productId, quantity]) => ({
+        productId,
+        quantityDelta: quantity * multiplier
+      }));
+  }
+
+  function getAppliedCreditNoteReceivable(
+    creditNote: CreditNoteRecord
+  ): ReceivableRecord | null {
+    const receivable =
+      receivables.find((currentReceivable) => currentReceivable.saleId === creditNote.saleId) ??
+      null;
+
+    if (!receivable) {
+      return null;
+    }
+
+    const originalAmountMinor = Math.max(
+      receivable.originalAmountMinor - creditNote.totalMinor,
+      0
+    );
+    const balanceMinor = Math.max(
+      originalAmountMinor - receivable.paidAmountMinor,
+      0
+    );
+
+    return {
+      ...receivable,
+      amountMinor: balanceMinor,
+      balanceMinor,
+      originalAmountMinor,
+      status: getReceivableStatus(receivable.paidAmountMinor)
+    };
+  }
+
+  function getReversedCreditNoteReceivable(
+    creditNote: CreditNoteRecord
+  ): ReceivableRecord | null {
+    const sale = sales.find((currentSale) => currentSale.id === creditNote.saleId);
+
+    if (sale?.paymentStatus !== "pending") {
+      return null;
+    }
+
+    const receivable =
+      receivables.find((currentReceivable) => currentReceivable.saleId === creditNote.saleId) ??
+      null;
+
+    if (!receivable) {
+      return {
+        amountMinor: creditNote.totalMinor,
+        balanceMinor: creditNote.totalMinor,
+        customerId: creditNote.customerId,
+        customerName: creditNote.customerName,
+        dueAt: creditNote.receivableDueAt,
+        id: `receivable-${creditNote.saleId}`,
+        originalAmountMinor: creditNote.totalMinor,
+        paidAmountMinor: 0,
+        saleId: creditNote.saleId,
+        status: "pending"
+      };
+    }
+
+    const originalAmountMinor = receivable.originalAmountMinor + creditNote.totalMinor;
+    const balanceMinor = Math.max(originalAmountMinor - receivable.paidAmountMinor, 0);
+
+    return {
+      ...receivable,
+      amountMinor: balanceMinor,
+      balanceMinor,
+      originalAmountMinor,
+      status: getReceivableStatus(receivable.paidAmountMinor)
+    };
+  }
+
   async function registerCustomerReceipt(input: {
     receivableId: string;
     amountMinor: number;
@@ -1517,7 +1624,10 @@ export function App() {
     return null;
   }
 
-  function setCreditNoteStatus(creditNoteId: string, status: CreditNoteStatus) {
+  async function setCreditNoteStatus(
+    creditNoteId: string,
+    status: CreditNoteStatus
+  ): Promise<void> {
     const selectedCreditNote =
       creditNotes.find((creditNote) => creditNote.id === creditNoteId) ?? null;
 
@@ -1528,34 +1638,76 @@ export function App() {
     const occurredAt = new Date();
 
     if (status === "confirmed" && selectedCreditNote.status === "draft") {
+      const updatedCreditNote: CreditNoteRecord = {
+        ...selectedCreditNote,
+        confirmedAtLabel: formatOccurredAtLabel(occurredAt),
+        confirmedAtMs: occurredAt.getTime(),
+        status: "confirmed"
+      };
+      const receivable = getAppliedCreditNoteReceivable(selectedCreditNote);
+      const productStockAdjustments = getCreditNoteProductStockAdjustments(
+        selectedCreditNote,
+        "apply"
+      );
+
+      try {
+        await saveNativeCreditNoteStatus({
+          creditNote: updatedCreditNote,
+          productStockAdjustments,
+          receivable
+        });
+      } catch {
+        setNativeConnectionStatus({
+          kind: "error",
+          message: "No se pudo confirmar la nota credito local."
+        });
+        return;
+      }
+
       applyCreditNoteEffects(selectedCreditNote);
       setCreditNotes((currentCreditNotes) =>
-        currentCreditNotes.map((creditNote) =>
-          creditNote.id === creditNoteId
-            ? {
-                ...creditNote,
-                confirmedAtLabel: formatOccurredAtLabel(occurredAt),
-                confirmedAtMs: occurredAt.getTime(),
-                status: "confirmed"
-              }
-            : creditNote
+        currentCreditNotes.map((currentCreditNote) =>
+          currentCreditNote.id === creditNoteId
+            ? updatedCreditNote
+            : currentCreditNote
         )
       );
       return;
     }
 
     if (status === "void" && selectedCreditNote.status === "confirmed") {
+      const updatedCreditNote: CreditNoteRecord = {
+        ...selectedCreditNote,
+        status: "void",
+        voidedAtLabel: formatOccurredAtLabel(occurredAt),
+        voidedAtMs: occurredAt.getTime()
+      };
+      const receivable = getReversedCreditNoteReceivable(selectedCreditNote);
+      const productStockAdjustments = getCreditNoteProductStockAdjustments(
+        selectedCreditNote,
+        "reverse"
+      );
+
+      try {
+        await saveNativeCreditNoteStatus({
+          creditNote: updatedCreditNote,
+          productStockAdjustments,
+          receivable
+        });
+      } catch {
+        setNativeConnectionStatus({
+          kind: "error",
+          message: "No se pudo anular la nota credito local."
+        });
+        return;
+      }
+
       reverseCreditNoteEffects(selectedCreditNote);
       setCreditNotes((currentCreditNotes) =>
-        currentCreditNotes.map((creditNote) =>
-          creditNote.id === creditNoteId
-            ? {
-                ...creditNote,
-                status: "void",
-                voidedAtLabel: formatOccurredAtLabel(occurredAt),
-                voidedAtMs: occurredAt.getTime()
-              }
-            : creditNote
+        currentCreditNotes.map((currentCreditNote) =>
+          currentCreditNote.id === creditNoteId
+            ? updatedCreditNote
+            : currentCreditNote
         )
       );
     }

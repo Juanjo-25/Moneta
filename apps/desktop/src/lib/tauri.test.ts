@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkNativeConnection,
+  loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
   loadNativeProducts,
@@ -13,6 +14,8 @@ import {
   loadNativeSuppliers,
   saveNativeCustomer,
   saveNativeCustomerReceipt,
+  saveNativeCreditNote,
+  saveNativeCreditNoteStatus,
   saveNativeProduct,
   saveNativePurchase,
   saveNativeSale,
@@ -346,6 +349,50 @@ describe("native sale persistence", () => {
     paidAmountMinor: 4500,
     status: "partial" as const
   };
+  const creditNote = {
+    adjustmentType: "return" as const,
+    confirmedAtLabel: "",
+    confirmedAtMs: 0,
+    customer,
+    customerId: "customer-1",
+    customerName: "Ana Perez",
+    id: "credit-note-1",
+    invoiceNumber: "001",
+    issuedAt: "2026-07-18",
+    lines: [
+      {
+        costMinor: 3200,
+        discountPercent: 0,
+        id: "credit-note-1-line-0",
+        marginMinor: 1300,
+        marginPercent: 28.89,
+        productId: "product-1",
+        productName: "Arroz libra",
+        quantity: 1,
+        saleLineId: "sale-1-line-0",
+        taxPercent: 0,
+        totalMinor: 4500,
+        unit: "Unidad",
+        unitPriceMinor: 4500
+      }
+    ],
+    number: "NC-001",
+    occurredAtLabel: "18/07/26, 12:40",
+    occurredAtMs: 5,
+    reason: "Devolucion",
+    receivableDueAt: "2026-08-18",
+    saleId: "sale-1",
+    status: "draft" as const,
+    totalMinor: 4500,
+    voidedAtLabel: "",
+    voidedAtMs: 0
+  };
+  const confirmedCreditNote = {
+    ...creditNote,
+    confirmedAtLabel: "18/07/26, 12:45",
+    confirmedAtMs: 6,
+    status: "confirmed" as const
+  };
 
   it("returns null sales, receivables and receipts and skips saves in web mode", async () => {
     setTauriInvoke();
@@ -353,19 +400,31 @@ describe("native sale persistence", () => {
     await expect(loadNativeSales()).resolves.toBeNull();
     await expect(loadNativeReceivables()).resolves.toBeNull();
     await expect(loadNativeCustomerReceipts()).resolves.toBeNull();
+    await expect(loadNativeCreditNotes()).resolves.toBeNull();
     await expect(saveNativeSale({ receivable, sale })).resolves.toBe(false);
     await expect(
       saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
     ).resolves.toBe(false);
+    await expect(saveNativeCreditNote(creditNote)).resolves.toBe(false);
+    await expect(
+      saveNativeCreditNoteStatus({
+        creditNote: confirmedCreditNote,
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable
+      })
+    ).resolves.toBe(false);
   });
 
-  it("loads sales, receivables and receipts through Tauri", async () => {
+  it("loads sales, receivables, receipts and credit notes through Tauri", async () => {
     const invoke = vi.fn().mockImplementation((command: string) => {
       if (command === "list_sales") {
         return Promise.resolve([sale]);
       }
       if (command === "list_customer_receipts") {
         return Promise.resolve([receipt]);
+      }
+      if (command === "list_credit_notes") {
+        return Promise.resolve([creditNote]);
       }
 
       return Promise.resolve([receivable]);
@@ -375,9 +434,11 @@ describe("native sale persistence", () => {
     await expect(loadNativeSales()).resolves.toEqual([sale]);
     await expect(loadNativeReceivables()).resolves.toEqual([receivable]);
     await expect(loadNativeCustomerReceipts()).resolves.toEqual([receipt]);
+    await expect(loadNativeCreditNotes()).resolves.toEqual([creditNote]);
     expect(invoke).toHaveBeenCalledWith("list_sales");
     expect(invoke).toHaveBeenCalledWith("list_receivables");
     expect(invoke).toHaveBeenCalledWith("list_customer_receipts");
+    expect(invoke).toHaveBeenCalledWith("list_credit_notes");
   });
 
   it("saves a sale through Tauri", async () => {
@@ -397,6 +458,32 @@ describe("native sale persistence", () => {
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_customer_receipt", {
       receipt,
+      receivable: updatedReceivable
+    });
+  });
+
+  it("saves a credit note through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeCreditNote(creditNote)).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_credit_note", { creditNote });
+  });
+
+  it("saves a credit note status through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      saveNativeCreditNoteStatus({
+        creditNote: confirmedCreditNote,
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable
+      })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_credit_note_status", {
+      creditNote: confirmedCreditNote,
+      productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
       receivable: updatedReceivable
     });
   });

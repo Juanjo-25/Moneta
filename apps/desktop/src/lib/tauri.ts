@@ -2,6 +2,7 @@ import type {
   AppSettings,
   CustomerReceiptRecord,
   CustomerRecord,
+  CreditNoteRecord,
   ProductRecord,
   PurchaseRecord,
   ReceivableRecord,
@@ -198,6 +199,49 @@ export async function saveNativeCustomerReceipt(input: {
   }
 
   await invoke<void>("save_customer_receipt", input);
+
+  return true;
+}
+
+export async function loadNativeCreditNotes(): Promise<CreditNoteRecord[] | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<CreditNoteRecord[]>("list_credit_notes");
+}
+
+export async function saveNativeCreditNote(
+  creditNote: CreditNoteRecord
+): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_credit_note", { creditNote });
+
+  return true;
+}
+
+export async function saveNativeCreditNoteStatus(input: {
+  creditNote: CreditNoteRecord;
+  receivable: ReceivableRecord | null;
+  productStockAdjustments: Array<{
+    productId: string;
+    quantityDelta: number;
+  }>;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("save_credit_note_status", input);
 
   return true;
 }

@@ -35,11 +35,11 @@ type CreditNotesSectionProps = {
       saleLineId: string;
       quantity: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
-  ) => void;
+  ) => Promise<void>;
   parseNonNegativeInteger: (value: string) => number | null;
   sales: SaleRecord[];
 };
@@ -197,7 +197,7 @@ export function CreditNotesSection({
     }));
   }
 
-  function submitCreditNote(event: FormEvent<HTMLFormElement>) {
+  async function submitCreditNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: CreditNoteFormErrors = {};
@@ -234,7 +234,7 @@ export function CreditNotesSection({
       return;
     }
 
-    const submitError = onRegisterCreditNote({
+    const submitError = await onRegisterCreditNote({
       adjustmentType: form.adjustmentType,
       issuedAt: form.issuedAt.trim(),
       lines: selectedCreditLines.map(({ amountMinor, line, quantity }) => ({
@@ -516,8 +516,8 @@ export function CreditNotesSection({
                           creditNote={creditNote}
                           formatCurrency={formatCurrency}
                           onCancel={() => setReviewCreditNoteId(null)}
-                          onConfirm={() => {
-                            onSetCreditNoteStatus(creditNote.id, "confirmed");
+                          onConfirm={async () => {
+                            await onSetCreditNoteStatus(creditNote.id, "confirmed");
                             setReviewCreditNoteId(null);
                           }}
                           salePaymentStatus={relatedSale?.paymentStatus ?? "paid"}
