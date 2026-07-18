@@ -357,6 +357,78 @@ describe("App navigation", () => {
     );
   });
 
+  it("loads and updates customers through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedCustomer = {
+      active: true,
+      address: "Calle 10",
+      city: "Medellin",
+      document: "123456789",
+      email: "ana@correo.com",
+      id: "customer-stored",
+      name: "Ana Perez"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([storedCustomer]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    expect(await screen.findByRole("cell", { name: "Ana Perez" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Editar cliente" }));
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez Mayorista");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_customer",
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            id: "customer-stored",
+            name: "Ana Perez Mayorista"
+          })
+        })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_customer",
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            active: false,
+            id: "customer-stored"
+          })
+        })
+      )
+    );
+  });
+
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
     const user = userEvent.setup();
 

@@ -53,6 +53,18 @@ struct ProductRecord {
     active: bool,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomerRecord {
+    id: String,
+    name: String,
+    document: String,
+    address: String,
+    active: bool,
+    city: String,
+    email: String,
+}
+
 #[tauri::command]
 fn health_check() -> String {
     "Moneta Tauri conectado".to_string()
@@ -208,6 +220,86 @@ fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), Str
     Ok(())
 }
 
+#[tauri::command]
+fn list_customers(app: tauri::AppHandle) -> Result<Vec<CustomerRecord>, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT id, name, document, address, active, city, email
+            FROM customers
+            ORDER BY name COLLATE NOCASE ASC
+            ",
+        )
+        .map_err(|error| format!("No se pudo preparar la lectura de clientes: {error}"))?;
+
+    let rows = statement
+        .query_map([], |row| {
+            let active: i64 = row.get(4)?;
+
+            Ok(CustomerRecord {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                document: row.get(2)?,
+                address: row.get(3)?,
+                active: active == 1,
+                city: row.get(5)?,
+                email: row.get(6)?,
+            })
+        })
+        .map_err(|error| format!("No se pudieron leer los clientes: {error}"))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("No se pudieron convertir los clientes: {error}"))
+}
+
+#[tauri::command]
+fn save_customer(app: tauri::AppHandle, customer: CustomerRecord) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO customers (
+              id,
+              name,
+              document,
+              address,
+              active,
+              city,
+              email,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              name = excluded.name,
+              document = excluded.document,
+              address = excluded.address,
+              active = excluded.active,
+              city = excluded.city,
+              email = excluded.email,
+              updated_at = CURRENT_TIMESTAMP
+            ",
+            (
+                &customer.id,
+                &customer.name,
+                &customer.document,
+                &customer.address,
+                if customer.active { 1 } else { 0 },
+                &customer.city,
+                &customer.email,
+            ),
+        )
+        .map_err(|error| format!("No se pudo guardar el cliente: {error}"))?;
+
+    Ok(())
+}
+
 fn database_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let data_dir = app
         .path()
@@ -305,7 +397,9 @@ fn main() {
             get_app_settings,
             save_app_settings,
             list_products,
-            save_product
+            save_product,
+            list_customers,
+            save_customer
         ])
         .run(tauri::generate_context!())
         .expect("error while running Moneta desktop app");

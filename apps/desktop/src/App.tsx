@@ -17,8 +17,10 @@ import {
 } from "./lib/formatters";
 import {
   checkNativeConnection,
+  loadNativeCustomers,
   loadNativeProducts,
   loadNativeSettings,
+  saveNativeCustomer,
   saveNativeProduct,
   saveNativeSettings,
   type NativeConnectionStatus
@@ -324,9 +326,10 @@ export function App() {
       }
 
       try {
-        const [storedSettings, storedProducts] = await Promise.all([
+        const [storedSettings, storedProducts, storedCustomers] = await Promise.all([
           loadNativeSettings(),
-          loadNativeProducts()
+          loadNativeProducts(),
+          loadNativeCustomers()
         ]);
 
         if (isMounted && storedSettings) {
@@ -334,6 +337,9 @@ export function App() {
         }
         if (isMounted && storedProducts) {
           setProducts(storedProducts);
+        }
+        if (isMounted && storedCustomers) {
+          setCustomers(storedCustomers);
         }
       } catch {
         if (isMounted) {
@@ -453,7 +459,9 @@ export function App() {
     return true;
   }
 
-  function createCustomer(input: CustomerFormState): CustomerRecord {
+  async function createCustomer(
+    input: CustomerFormState
+  ): Promise<CustomerRecord | null> {
     const customer = {
       address: input.address.trim(),
       active: true,
@@ -464,34 +472,86 @@ export function App() {
       name: input.name.trim()
     };
 
+    try {
+      await saveNativeCustomer(customer);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el cliente local."
+      });
+      return null;
+    }
+
     setCustomers((currentCustomers) => [...currentCustomers, customer]);
 
     return customer;
   }
 
-  function updateCustomer(customerId: string, input: CustomerFormState) {
+  async function updateCustomer(
+    customerId: string,
+    input: CustomerFormState
+  ): Promise<boolean> {
+    const currentCustomer = customers.find((customer) => customer.id === customerId);
+
+    if (!currentCustomer) {
+      return false;
+    }
+
+    const updatedCustomer = {
+      ...currentCustomer,
+      address: input.address.trim(),
+      city: input.city.trim(),
+      document: input.document.trim(),
+      email: input.email.trim(),
+      name: input.name.trim()
+    };
+
+    try {
+      await saveNativeCustomer(updatedCustomer);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el cliente local."
+      });
+      return false;
+    }
+
     setCustomers((currentCustomers) =>
       currentCustomers.map((customer) =>
-        customer.id === customerId
-          ? {
-              ...customer,
-              address: input.address.trim(),
-              city: input.city.trim(),
-              document: input.document.trim(),
-              email: input.email.trim(),
-              name: input.name.trim()
-            }
-          : customer
+        customer.id === customerId ? updatedCustomer : customer
       )
     );
+    return true;
   }
 
-  function setCustomerActive(customerId: string, active: boolean) {
+  async function setCustomerActive(
+    customerId: string,
+    active: boolean
+  ): Promise<boolean> {
+    const currentCustomer = customers.find((customer) => customer.id === customerId);
+
+    if (!currentCustomer) {
+      return false;
+    }
+
+    const updatedCustomer = { ...currentCustomer, active };
+
+    try {
+      await saveNativeCustomer(updatedCustomer);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el estado del cliente local."
+      });
+      return false;
+    }
+
     setCustomers((currentCustomers) =>
       currentCustomers.map((customer) =>
-        customer.id === customerId ? { ...customer, active } : customer
+        customer.id === customerId ? updatedCustomer : customer
       )
     );
+    return true;
   }
 
   function validateCustomer(

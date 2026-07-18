@@ -60,7 +60,7 @@ type SectionContentProps = {
   formatPayableStatus: (status: SupplierPayableStatus) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
   isLowStock: (product: ProductRecord) => boolean;
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
   onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
   onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
@@ -169,8 +169,11 @@ type SectionContentProps = {
     input: CustomerFormState,
     currentCustomerId?: string | undefined
   ) => CustomerFormErrors;
-  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
-  onSetCustomerActive: (customerId: string, active: boolean) => void;
+  onUpdateCustomer: (
+    customerId: string,
+    input: CustomerFormState
+  ) => Promise<boolean>;
+  onSetCustomerActive: (customerId: string, active: boolean) => Promise<boolean>;
   onCloseProductForm: () => void;
   onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;

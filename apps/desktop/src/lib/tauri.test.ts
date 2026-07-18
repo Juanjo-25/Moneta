@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkNativeConnection,
+  loadNativeCustomers,
   loadNativeProducts,
   loadNativeSettings,
+  saveNativeCustomer,
   saveNativeProduct,
   saveNativeSettings
 } from "./tauri";
@@ -203,5 +205,44 @@ describe("native product persistence", () => {
 
     await expect(saveNativeProduct(product)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_product", { product });
+  });
+});
+
+describe("native customer persistence", () => {
+  afterEach(() => {
+    setTauriInvoke();
+  });
+
+  const customer = {
+    active: true,
+    address: "Calle 1",
+    city: "Medellin",
+    document: "123456789",
+    email: "cliente@correo.com",
+    id: "customer-1",
+    name: "Ana Perez"
+  };
+
+  it("returns null customers and skips saves in web mode", async () => {
+    setTauriInvoke();
+
+    await expect(loadNativeCustomers()).resolves.toBeNull();
+    await expect(saveNativeCustomer(customer)).resolves.toBe(false);
+  });
+
+  it("loads customers through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue([customer]);
+    setTauriInvoke(invoke);
+
+    await expect(loadNativeCustomers()).resolves.toEqual([customer]);
+    expect(invoke).toHaveBeenCalledWith("list_customers");
+  });
+
+  it("saves a customer through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeCustomer(customer)).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_customer", { customer });
   });
 });

@@ -124,7 +124,7 @@ type SalesSectionProps = {
   customers: CustomerRecord[];
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -505,7 +505,7 @@ export function SalesSection({
     setCustomerErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
-  function submitCustomer() {
+  async function submitCustomer() {
     const nextErrors = onValidateCustomer(customerForm);
 
     setCustomerErrors(nextErrors);
@@ -514,7 +514,11 @@ export function SalesSection({
       return;
     }
 
-    const customer = onCreateCustomer(customerForm);
+    const customer = await onCreateCustomer(customerForm);
+
+    if (!customer) {
+      return;
+    }
 
     setForm((currentForm) => ({ ...currentForm, customerId: customer.id }));
     setCustomerForm(emptyCustomerForm);
