@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { generateInvoicePdf } from "./invoice-pdf";
 
@@ -9,6 +9,15 @@ vi.mock("./invoice-pdf", () => ({
 }));
 
 const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
+
+function setTauriInvoke(
+  invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
+) {
+  Object.defineProperty(window, "__TAURI__", {
+    configurable: true,
+    value: invoke ? { core: { invoke } } : undefined
+  });
+}
 
 async function createProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Productos" }));
@@ -90,6 +99,10 @@ describe("App navigation", () => {
       dataUri: "data:application/pdf;base64,invoice-pdf",
       fileName: "factura-FE-sale-1.pdf"
     });
+  });
+
+  afterEach(() => {
+    setTauriInvoke();
   });
 
   it("switches active section from the sidebar", async () => {
@@ -238,6 +251,49 @@ describe("App navigation", () => {
       name: "Detalle ventas por vendedor"
     });
     expect(within(sellerReportTable).getByText("Mario Ruiz")).toBeTruthy();
+  });
+
+  it("saves configuration changes through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_app_settings")
+    );
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Laura Gomez");
+    await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_app_settings",
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            sellers: ["Laura Gomez"]
+          })
+        })
+      )
+    );
   });
 
   it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
