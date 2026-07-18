@@ -188,6 +188,43 @@ export async function saveNativeSale(input: {
   return true;
 }
 
+export async function updateNativeSale(input: {
+  sale: SaleRecord;
+  receivable: ReceivableRecord | null;
+  productStockAdjustments: Array<{
+    productId: string;
+    quantityDelta: number;
+  }>;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("update_sale", input);
+
+  return true;
+}
+
+export async function deleteNativeSale(input: {
+  saleId: string;
+  productStockAdjustments: Array<{
+    productId: string;
+    quantityDelta: number;
+  }>;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("delete_sale", input);
+
+  return true;
+}
+
 export async function saveNativeCustomerReceipt(input: {
   receipt: CustomerReceiptRecord;
   receivable: ReceivableRecord;

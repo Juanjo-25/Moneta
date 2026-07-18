@@ -294,6 +294,21 @@ struct SalePersistence {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SaleUpdatePersistence {
+    sale: SaleRecord,
+    receivable: Option<ReceivableRecord>,
+    product_stock_adjustments: Vec<ProductStockAdjustment>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaleDeletePersistence {
+    sale_id: String,
+    product_stock_adjustments: Vec<ProductStockAdjustment>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CustomerReceiptPersistence {
     receipt: CustomerReceiptRecord,
     receivable: ReceivableRecord,
@@ -905,6 +920,228 @@ fn save_sale(app: tauri::AppHandle, input: SalePersistence) -> Result<(), String
     transaction
         .commit()
         .map_err(|error| format!("No se pudo confirmar la venta: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn update_sale(app: tauri::AppHandle, input: SaleUpdatePersistence) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de edicion: {error}"))?;
+
+    ensure_sale_has_no_dependent_documents(&transaction, &input.sale.id)?;
+
+    let customer_json = serde_json::to_string(&input.sale.customer)
+        .map_err(|error| format!("No se pudo serializar el cliente de la venta: {error}"))?;
+
+    let affected = transaction
+        .execute(
+            "
+            UPDATE sales
+            SET
+              customer_json = ?1,
+              customer_id = ?2,
+              customer_name = ?3,
+              branch = ?4,
+              prefix = ?5,
+              invoice_number = ?6,
+              seller = ?7,
+              currency = ?8,
+              concept = ?9,
+              issued_at = ?10,
+              product_id = ?11,
+              product_name = ?12,
+              quantity = ?13,
+              unit_price_minor = ?14,
+              total_minor = ?15,
+              payment_status = ?16,
+              occurred_at_ms = ?17,
+              occurred_at_label = ?18,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?19
+            ",
+            params![
+                &customer_json,
+                &input.sale.customer_id,
+                &input.sale.customer_name,
+                &input.sale.branch,
+                &input.sale.prefix,
+                &input.sale.invoice_number,
+                &input.sale.seller,
+                &input.sale.currency,
+                &input.sale.concept,
+                &input.sale.issued_at,
+                &input.sale.product_id,
+                &input.sale.product_name,
+                input.sale.quantity,
+                input.sale.unit_price_minor,
+                input.sale.total_minor,
+                &input.sale.payment_status,
+                input.sale.occurred_at_ms,
+                &input.sale.occurred_at_label,
+                &input.sale.id,
+            ],
+        )
+        .map_err(|error| format!("No se pudo actualizar la venta: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!("La venta {} no existe en SQLite.", input.sale.id));
+    }
+
+    transaction
+        .execute(
+            "DELETE FROM sale_lines WHERE sale_id = ?1",
+            [&input.sale.id],
+        )
+        .map_err(|error| format!("No se pudieron reemplazar las lineas de venta: {error}"))?;
+
+    for line in &input.sale.lines {
+        transaction
+            .execute(
+                "
+                INSERT INTO sale_lines (
+                  id,
+                  sale_id,
+                  product_id,
+                  product_name,
+                  unit,
+                  quantity,
+                  unit_cost_minor_at_sale,
+                  unit_price_minor,
+                  discount_percent,
+                  discount_minor,
+                  tax_percent,
+                  tax_minor,
+                  subtotal_minor,
+                  cost_minor,
+                  margin_minor,
+                  margin_percent,
+                  total_minor
+                )
+                VALUES (
+                  ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+                  ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
+                )
+                ",
+                params![
+                    &line.id,
+                    &input.sale.id,
+                    &line.product_id,
+                    &line.product_name,
+                    &line.unit,
+                    line.quantity,
+                    line.unit_cost_minor_at_sale,
+                    line.unit_price_minor,
+                    line.discount_percent,
+                    line.discount_minor,
+                    line.tax_percent,
+                    line.tax_minor,
+                    line.subtotal_minor,
+                    line.cost_minor,
+                    line.margin_minor,
+                    line.margin_percent,
+                    line.total_minor,
+                ],
+            )
+            .map_err(|error| format!("No se pudo guardar una linea de venta: {error}"))?;
+    }
+
+    for adjustment in &input.product_stock_adjustments {
+        apply_product_stock_adjustment(&transaction, adjustment)?;
+    }
+
+    transaction
+        .execute(
+            "DELETE FROM receivables WHERE sale_id = ?1",
+            [&input.sale.id],
+        )
+        .map_err(|error| format!("No se pudo reemplazar la cuenta por cobrar: {error}"))?;
+
+    if let Some(receivable) = &input.receivable {
+        transaction
+            .execute(
+                "
+                INSERT INTO receivables (
+                  id,
+                  customer_id,
+                  customer_name,
+                  sale_id,
+                  amount_minor,
+                  original_amount_minor,
+                  paid_amount_minor,
+                  balance_minor,
+                  due_at,
+                  status,
+                  updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CURRENT_TIMESTAMP)
+                ",
+                params![
+                    &receivable.id,
+                    &receivable.customer_id,
+                    &receivable.customer_name,
+                    &receivable.sale_id,
+                    receivable.amount_minor,
+                    receivable.original_amount_minor,
+                    receivable.paid_amount_minor,
+                    receivable.balance_minor,
+                    &receivable.due_at,
+                    &receivable.status,
+                ],
+            )
+            .map_err(|error| format!("No se pudo guardar la cuenta por cobrar: {error}"))?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la edicion de venta: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_sale(app: tauri::AppHandle, input: SaleDeletePersistence) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de eliminacion: {error}"))?;
+
+    ensure_sale_has_no_dependent_documents(&transaction, &input.sale_id)?;
+
+    for adjustment in &input.product_stock_adjustments {
+        apply_product_stock_adjustment(&transaction, adjustment)?;
+    }
+
+    transaction
+        .execute(
+            "DELETE FROM receivables WHERE sale_id = ?1",
+            [&input.sale_id],
+        )
+        .map_err(|error| format!("No se pudo eliminar la cuenta por cobrar: {error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM sale_lines WHERE sale_id = ?1",
+            [&input.sale_id],
+        )
+        .map_err(|error| format!("No se pudieron eliminar las lineas de venta: {error}"))?;
+
+    let affected = transaction
+        .execute("DELETE FROM sales WHERE id = ?1", [&input.sale_id])
+        .map_err(|error| format!("No se pudo eliminar la venta: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!("La venta {} no existe en SQLite.", input.sale_id));
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la eliminacion de venta: {error}"))?;
 
     Ok(())
 }
@@ -1857,6 +2094,61 @@ fn list_sale_lines(connection: &Connection, sale_id: &str) -> Result<Vec<SaleLin
         .map_err(|error| format!("No se pudieron convertir las lineas de venta: {error}"))
 }
 
+fn ensure_sale_has_no_dependent_documents(
+    connection: &Connection,
+    sale_id: &str,
+) -> Result<(), String> {
+    let receipt_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM customer_receipts WHERE sale_id = ?1",
+            [sale_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudieron validar recibos de caja: {error}"))?;
+    let credit_note_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM credit_notes WHERE sale_id = ?1",
+            [sale_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudieron validar notas credito: {error}"))?;
+
+    if receipt_count > 0 || credit_note_count > 0 {
+        return Err(
+            "La venta tiene recibos o notas credito asociados y no se puede modificar.".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+fn apply_product_stock_adjustment(
+    connection: &Connection,
+    adjustment: &ProductStockAdjustment,
+) -> Result<(), String> {
+    let affected = connection
+        .execute(
+            "
+            UPDATE products
+            SET
+              stock = stock + ?1,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?2 AND stock + ?1 >= 0
+            ",
+            params![adjustment.quantity_delta, &adjustment.product_id],
+        )
+        .map_err(|error| format!("No se pudo ajustar inventario: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!(
+            "No se pudo ajustar inventario para el producto {}.",
+            adjustment.product_id
+        ));
+    }
+
+    Ok(())
+}
+
 fn list_credit_note_lines(
     connection: &Connection,
     credit_note_id: &str,
@@ -2284,6 +2576,8 @@ fn main() {
             list_receivables,
             list_customer_receipts,
             save_sale,
+            update_sale,
+            delete_sale,
             save_customer_receipt,
             list_credit_notes,
             save_credit_note,

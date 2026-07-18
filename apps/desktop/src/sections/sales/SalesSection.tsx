@@ -176,8 +176,8 @@ type SalesSectionProps = {
       totalMinor: number;
     }>;
   }) => Promise<string | null>;
-  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
-  onDeleteSale: (saleId: string) => void;
+  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => Promise<string | null>;
+  onDeleteSale: (saleId: string) => Promise<string | null>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -629,7 +629,7 @@ export function SalesSection({
     setEditError(null);
   }
 
-  function submitSaleEdit(event: FormEvent<HTMLFormElement>) {
+  async function submitSaleEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!editingSale || !editForm) {
@@ -688,7 +688,7 @@ export function SalesSection({
       totalMinor,
       unitPriceMinor: firstLine.unitPriceMinor
     };
-    const updateError = onUpdateSale({
+    const updateError = await onUpdateSale({
       dueAt: editForm.paymentStatus === "pending" ? editForm.dueAt.trim() : "",
       sale: updatedSale
     });
@@ -704,8 +704,13 @@ export function SalesSection({
     setEditError(null);
   }
 
-  function removeSale(saleId: string) {
-    onDeleteSale(saleId);
+  async function removeSale(saleId: string) {
+    const deleteError = await onDeleteSale(saleId);
+
+    if (deleteError) {
+      setEditError(deleteError);
+      return;
+    }
 
     if (editingSale?.id === saleId) {
       setEditingSale(null);

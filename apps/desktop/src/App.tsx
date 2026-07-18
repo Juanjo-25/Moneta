@@ -17,6 +17,7 @@ import {
 } from "./lib/formatters";
 import {
   checkNativeConnection,
+  deleteNativeSale,
   loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
@@ -38,6 +39,7 @@ import {
   saveNativeSettings,
   saveNativeSupplier,
   saveNativeSupplierPayment,
+  updateNativeSale,
   type NativeConnectionStatus
 } from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
@@ -294,6 +296,38 @@ function getSupplierPayableStatus(input: {
 
 function getReceivableStatus(paidAmountMinor: number): ReceivableRecord["status"] {
   return paidAmountMinor > 0 ? "partial" : "pending";
+}
+
+function getSaleQuantityByProduct(sale: SaleRecord): Map<string, number> {
+  return sale.lines.reduce((total, line) => {
+    total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
+    return total;
+  }, new Map<string, number>());
+}
+
+function getSaleStockAdjustments(input: {
+  previousSale: SaleRecord | null;
+  nextSale: SaleRecord | null;
+}): Array<{ productId: string; quantityDelta: number }> {
+  const previousQuantityByProduct = input.previousSale
+    ? getSaleQuantityByProduct(input.previousSale)
+    : new Map<string, number>();
+  const nextQuantityByProduct = input.nextSale
+    ? getSaleQuantityByProduct(input.nextSale)
+    : new Map<string, number>();
+  const productIds = new Set([
+    ...previousQuantityByProduct.keys(),
+    ...nextQuantityByProduct.keys()
+  ]);
+
+  return Array.from(productIds)
+    .map((productId) => ({
+      productId,
+      quantityDelta:
+        (previousQuantityByProduct.get(productId) ?? 0) -
+        (nextQuantityByProduct.get(productId) ?? 0)
+    }))
+    .filter((adjustment) => adjustment.quantityDelta !== 0);
 }
 
 function isLowStock(product: ProductRecord): boolean {
@@ -1109,24 +1143,24 @@ export function App() {
     });
   }
 
-  function updateSaleInSession(input: {
+  async function updateSaleInSession(input: {
     sale: SaleRecord;
     dueAt: string;
-  }): string | null {
+  }): Promise<string | null> {
     const previousSale = sales.find((sale) => sale.id === input.sale.id);
 
     if (!previousSale) {
       return "La venta que intentas modificar ya no existe.";
     }
+    if (
+      customerReceipts.some((receipt) => receipt.saleId === input.sale.id) ||
+      creditNotes.some((creditNote) => creditNote.saleId === input.sale.id)
+    ) {
+      return "La venta tiene recibos o notas credito asociados y no se puede modificar.";
+    }
 
-    const previousQuantityByProduct = previousSale.lines.reduce((total, line) => {
-      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
-      return total;
-    }, new Map<string, number>());
-    const nextQuantityByProduct = input.sale.lines.reduce((total, line) => {
-      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
-      return total;
-    }, new Map<string, number>());
+    const previousQuantityByProduct = getSaleQuantityByProduct(previousSale);
+    const nextQuantityByProduct = getSaleQuantityByProduct(input.sale);
     const invalidProduct = input.sale.lines.some(
       (line) => !products.some((product) => product.id === line.productId)
     );
@@ -1141,6 +1175,40 @@ export function App() {
     }
     if (insufficientProduct) {
       return "No hay inventario suficiente para guardar los cambios.";
+    }
+
+    const receivable: ReceivableRecord | null =
+      input.sale.paymentStatus === "pending"
+        ? {
+            amountMinor: input.sale.totalMinor,
+            balanceMinor: input.sale.totalMinor,
+            customerId: input.sale.customerId,
+            customerName: input.sale.customerName,
+            dueAt: input.dueAt,
+            id: `receivable-${input.sale.id}`,
+            originalAmountMinor: input.sale.totalMinor,
+            paidAmountMinor: 0,
+            saleId: input.sale.id,
+            status: "pending"
+          }
+        : null;
+    const productStockAdjustments = getSaleStockAdjustments({
+      nextSale: input.sale,
+      previousSale
+    });
+
+    try {
+      await updateNativeSale({
+        productStockAdjustments,
+        receivable,
+        sale: input.sale
+      });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la edicion de venta local."
+      });
+      return "No se pudo guardar la edicion de venta local.";
     }
 
     setProducts((currentProducts) =>
@@ -1164,39 +1232,40 @@ export function App() {
         (receivable) => receivable.saleId !== input.sale.id
       );
 
-      return input.sale.paymentStatus === "pending"
-        ? [
-            {
-              amountMinor: input.sale.totalMinor,
-              balanceMinor: input.sale.totalMinor,
-              customerId: input.sale.customerId,
-              customerName: input.sale.customerName,
-              dueAt: input.dueAt,
-              id: `receivable-${input.sale.id}`,
-              originalAmountMinor: input.sale.totalMinor,
-              paidAmountMinor: 0,
-              saleId: input.sale.id,
-              status: "pending"
-            },
-            ...remaining
-          ]
-        : remaining;
+      return receivable ? [receivable, ...remaining] : remaining;
     });
 
     return null;
   }
 
-  function deleteSaleInSession(saleId: string) {
+  async function deleteSaleInSession(saleId: string): Promise<string | null> {
     const sale = sales.find((currentSale) => currentSale.id === saleId);
 
     if (!sale) {
-      return;
+      return null;
+    }
+    if (
+      customerReceipts.some((receipt) => receipt.saleId === saleId) ||
+      creditNotes.some((creditNote) => creditNote.saleId === saleId)
+    ) {
+      return "La venta tiene recibos o notas credito asociados y no se puede eliminar.";
     }
 
-    const soldQuantityByProduct = sale.lines.reduce((total, line) => {
-      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
-      return total;
-    }, new Map<string, number>());
+    const soldQuantityByProduct = getSaleQuantityByProduct(sale);
+    const productStockAdjustments = getSaleStockAdjustments({
+      nextSale: null,
+      previousSale: sale
+    });
+
+    try {
+      await deleteNativeSale({ productStockAdjustments, saleId });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo eliminar la venta local."
+      });
+      return "No se pudo eliminar la venta local.";
+    }
 
     setProducts((currentProducts) =>
       currentProducts.map((product) => ({
@@ -1214,6 +1283,8 @@ export function App() {
     setCreditNotes((currentCreditNotes) =>
       currentCreditNotes.filter((creditNote) => creditNote.saleId !== saleId)
     );
+
+    return null;
   }
 
   async function registerCreditNoteInSession(input: {

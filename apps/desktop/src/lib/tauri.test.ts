@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkNativeConnection,
+  deleteNativeSale,
   loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
@@ -21,7 +22,8 @@ import {
   saveNativeSale,
   saveNativeSettings,
   saveNativeSupplier,
-  saveNativeSupplierPayment
+  saveNativeSupplierPayment,
+  updateNativeSale
 } from "./tauri";
 
 function setTauriInvoke(
@@ -403,6 +405,19 @@ describe("native sale persistence", () => {
     await expect(loadNativeCreditNotes()).resolves.toBeNull();
     await expect(saveNativeSale({ receivable, sale })).resolves.toBe(false);
     await expect(
+      updateNativeSale({
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable,
+        sale
+      })
+    ).resolves.toBe(false);
+    await expect(
+      deleteNativeSale({
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 2 }],
+        saleId: "sale-1"
+      })
+    ).resolves.toBe(false);
+    await expect(
       saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
     ).resolves.toBe(false);
     await expect(saveNativeCreditNote(creditNote)).resolves.toBe(false);
@@ -447,6 +462,40 @@ describe("native sale persistence", () => {
 
     await expect(saveNativeSale({ receivable, sale })).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_sale", { receivable, sale });
+  });
+
+  it("updates a sale through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      updateNativeSale({
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable,
+        sale
+      })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("update_sale", {
+      productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+      receivable: updatedReceivable,
+      sale
+    });
+  });
+
+  it("deletes a sale through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      deleteNativeSale({
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 2 }],
+        saleId: "sale-1"
+      })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("delete_sale", {
+      productStockAdjustments: [{ productId: "product-1", quantityDelta: 2 }],
+      saleId: "sale-1"
+    });
   });
 
   it("saves a customer receipt through Tauri", async () => {
