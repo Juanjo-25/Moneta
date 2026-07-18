@@ -62,6 +62,7 @@ type SectionContentProps = {
   isLowStock: (product: ProductRecord) => boolean;
   onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
   onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
   onUpdateSupplier: (
     supplierId: string,
@@ -210,6 +211,7 @@ export function SectionContent({
   isLowStock,
   onCreateCustomer,
   onCreateProduct,
+  onUpdateProduct,
   onCreateSupplier,
   onUpdateSupplier,
   onSetSupplierActive,
@@ -253,6 +255,7 @@ export function SectionContent({
         isLowStock={isLowStock}
         onCloseForm={onCloseProductForm}
         onCreateProduct={onCreateProduct}
+        onUpdateProduct={onUpdateProduct}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
       />

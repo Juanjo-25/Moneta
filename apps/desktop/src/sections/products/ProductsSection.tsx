@@ -4,6 +4,7 @@ import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
 import type { ProductRecord } from "../../types";
@@ -19,6 +20,8 @@ type ProductFormState = {
 };
 
 type ProductFormErrors = Partial<Record<keyof ProductFormState, string>>;
+type ProductEditFormState = Omit<ProductFormState, "quantity">;
+type ProductEditFormErrors = Partial<Record<keyof ProductEditFormState, string>>;
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -39,6 +42,7 @@ type ProductsSectionProps = {
   isLowStock: (product: ProductRecord) => boolean;
   onCloseForm: () => void;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
 };
@@ -50,11 +54,17 @@ export function ProductsSection({
   isLowStock,
   onCloseForm,
   onCreateProduct,
+  onUpdateProduct,
   parseNonNegativeInteger,
   products
 }: ProductsSectionProps) {
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [errors, setErrors] = useState<ProductFormErrors>({});
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<ProductEditFormState | null>(null);
+  const [editErrors, setEditErrors] = useState<ProductEditFormErrors>({});
+  const editingProduct =
+    products.find((product) => product.id === editingProductId) ?? null;
 
   function updateField(
     field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
@@ -70,6 +80,111 @@ export function ProductsSection({
       [field]: formatIntegerInput(value)
     }));
     setErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function updateEditField(
+    field: "sku" | "name" | "unit" | "minimumStock",
+    value: string
+  ) {
+    setEditForm((currentForm) =>
+      currentForm ? { ...currentForm, [field]: value } : currentForm
+    );
+    setEditErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function updateEditMoneyField(field: "cost" | "salePrice", value: string) {
+    setEditForm((currentForm) =>
+      currentForm ? { ...currentForm, [field]: formatIntegerInput(value) } : currentForm
+    );
+    setEditErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
+  }
+
+  function validateEditForm(input: ProductEditFormState): {
+    cost: number | null;
+    errors: ProductEditFormErrors;
+    minimumStock: number | null;
+    salePrice: number | null;
+  } {
+    const nextErrors: ProductEditFormErrors = {};
+    const cost = parseNonNegativeInteger(input.cost);
+    const salePrice = parseNonNegativeInteger(input.salePrice);
+    const minimumStock = parseNonNegativeInteger(input.minimumStock);
+
+    if (input.sku.trim() === "") {
+      nextErrors.sku = "El codigo es obligatorio.";
+    }
+    if (input.name.trim() === "") {
+      nextErrors.name = "El nombre es obligatorio.";
+    }
+    if (input.unit.trim() === "") {
+      nextErrors.unit = "La unidad de medida es obligatoria.";
+    }
+    if (cost === null) {
+      nextErrors.cost = "El costo debe ser cero o mayor.";
+    }
+    if (salePrice === null) {
+      nextErrors.salePrice = "El precio de venta debe ser cero o mayor.";
+    }
+    if (minimumStock === null) {
+      nextErrors.minimumStock = "El stock minimo debe ser cero o mayor.";
+    }
+
+    return { cost, errors: nextErrors, minimumStock, salePrice };
+  }
+
+  function startEditProduct(product: ProductRecord) {
+    setEditingProductId(product.id);
+    setEditForm({
+      cost: formatIntegerInput(String(product.costMinor)),
+      minimumStock: String(product.minimumStock),
+      name: product.name,
+      salePrice: formatIntegerInput(String(product.salePriceMinor)),
+      sku: product.sku,
+      unit: product.unit
+    });
+    setEditErrors({});
+  }
+
+  async function submitEditProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingProduct || !editForm) {
+      return;
+    }
+
+    const validation = validateEditForm(editForm);
+    setEditErrors(validation.errors);
+
+    if (
+      Object.keys(validation.errors).length > 0 ||
+      validation.cost === null ||
+      validation.salePrice === null ||
+      validation.minimumStock === null
+    ) {
+      return;
+    }
+
+    const saved = await onUpdateProduct({
+      ...editingProduct,
+      costMinor: validation.cost,
+      minimumStock: validation.minimumStock,
+      name: editForm.name.trim(),
+      salePriceMinor: validation.salePrice,
+      sku: editForm.sku.trim(),
+      unit: editForm.unit
+    });
+
+    if (!saved) {
+      return;
+    }
+
+    setEditingProductId(null);
+    setEditForm(null);
+    setEditErrors({});
+  }
+
+  async function setProductActive(product: ProductRecord, active: boolean) {
+    await onUpdateProduct({ ...product, active });
   }
 
   async function submitProduct(event: FormEvent<HTMLFormElement>) {
@@ -197,10 +312,86 @@ export function ProductsSection({
         </form>
       ) : null}
 
+      {editingProduct && editForm ? (
+        <form className="product-form section-form-shell" onSubmit={submitEditProduct}>
+          <div className="form-grid">
+            <TextField
+              error={editErrors.sku}
+              label="Codigo"
+              onChange={(value) => updateEditField("sku", value)}
+              value={editForm.sku}
+            />
+            <TextField
+              error={editErrors.name}
+              label="Producto"
+              onChange={(value) => updateEditField("name", value)}
+              value={editForm.name}
+            />
+            <label className="field" htmlFor="unidad-edicion-producto">
+              <span>Unidad</span>
+              <select
+                aria-invalid={Boolean(editErrors.unit)}
+                id="unidad-edicion-producto"
+                onChange={(event) => updateEditField("unit", event.target.value)}
+                value={editForm.unit}
+              >
+                {productUnitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+              {editErrors.unit ? <small>{editErrors.unit}</small> : null}
+            </label>
+            <TextField
+              label="Stock actual"
+              onChange={() => undefined}
+              readOnly
+              value={String(editingProduct.stock)}
+            />
+            <TextField
+              error={editErrors.cost}
+              inputMode="numeric"
+              label="Costo"
+              onChange={(value) => updateEditMoneyField("cost", value)}
+              value={editForm.cost}
+            />
+            <TextField
+              error={editErrors.salePrice}
+              inputMode="numeric"
+              label="Precio venta"
+              onChange={(value) => updateEditMoneyField("salePrice", value)}
+              value={editForm.salePrice}
+            />
+            <TextField
+              error={editErrors.minimumStock}
+              inputMode="numeric"
+              label="Stock minimo"
+              onChange={(value) => updateEditField("minimumStock", value)}
+              value={editForm.minimumStock}
+            />
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => {
+                setEditingProductId(null);
+                setEditForm(null);
+                setEditErrors({});
+              }}
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton type="submit">Guardar cambios</PrimaryActionButton>
+          </FormActions>
+        </form>
+      ) : null}
+
       {products.length > 0 ? (
         <ProductTable
           formatCurrency={formatCurrency}
           isLowStock={isLowStock}
+          onEditProduct={startEditProduct}
+          onSetProductActive={setProductActive}
           products={products}
         />
       ) : (
@@ -217,12 +408,16 @@ export function ProductsSection({
 type ProductTableProps = {
   formatCurrency: (minor: number) => string;
   isLowStock: (product: ProductRecord) => boolean;
+  onEditProduct: (product: ProductRecord) => void;
+  onSetProductActive: (product: ProductRecord, active: boolean) => void;
   products: ProductRecord[];
 };
 
 function ProductTable({
   formatCurrency,
   isLowStock,
+  onEditProduct,
+  onSetProductActive,
   products
 }: ProductTableProps) {
   return (
@@ -236,7 +431,8 @@ function ProductTable({
           "Precio venta",
           "Stock",
           "Minimo",
-          "Estado"
+          "Estado",
+          "Acciones"
         ]}
       />
       <tbody>
@@ -250,9 +446,29 @@ function ProductTable({
             <td>{product.stock}</td>
             <td>{product.minimumStock}</td>
             <td>
-              <StatusBadge tone={isLowStock(product) ? "warning" : "ok"}>
-                {isLowStock(product) ? "Bajo stock" : "Disponible"}
+              <StatusBadge
+                tone={!product.active ? "inactive" : isLowStock(product) ? "warning" : "ok"}
+              >
+                {!product.active
+                  ? "Inactivo"
+                  : isLowStock(product)
+                    ? "Bajo stock"
+                    : "Disponible"}
               </StatusBadge>
+            </td>
+            <td>
+              <SecondaryActionButton
+                onClick={() => onEditProduct(product)}
+                variant="compact"
+              >
+                Editar
+              </SecondaryActionButton>
+              <SecondaryActionButton
+                onClick={() => onSetProductActive(product, !product.active)}
+                variant="compact"
+              >
+                {product.active ? "Inactivar" : "Reactivar"}
+              </SecondaryActionButton>
             </td>
           </tr>
         ))}

@@ -200,6 +200,7 @@ export function PurchasesSection({
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
   const activeSuppliers = suppliers.filter((supplier) => supplier.active);
+  const activeProducts = products.filter((product) => product.active);
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
@@ -581,7 +582,7 @@ export function PurchasesSection({
               value={form.productId}
             >
               <option value="">Selecciona un producto</option>
-              {products.map((product) => (
+              {activeProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>

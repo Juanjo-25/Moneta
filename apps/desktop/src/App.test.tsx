@@ -779,6 +779,39 @@ describe("App navigation", () => {
     expect(screen.getByText("Arroz libra")).toBeTruthy();
   });
 
+  it("edits and inactivates a product without offering it in new sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.clear(screen.getByLabelText("Producto"));
+    await user.type(screen.getByLabelText("Producto"), "Arroz premium");
+    await user.selectOptions(screen.getByLabelText("Unidad"), "Kg");
+    await user.clear(screen.getByLabelText("Costo"));
+    await user.type(screen.getByLabelText("Costo"), "3500");
+    await user.clear(screen.getByLabelText("Precio venta"));
+    await user.type(screen.getByLabelText("Precio venta"), "5200");
+    await user.clear(screen.getByLabelText("Stock minimo"));
+    await user.type(screen.getByLabelText("Stock minimo"), "2");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz premium\s+Kg\s+\$\s*3\.500\s+\$\s*5\.200\s+4\s+2/
+      })
+    ).toBeTruthy();
+
+    await user.click(within(productsTable).getByRole("button", { name: "Inactivar" }));
+    expect(within(productsTable).getByText("Inactivo")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.queryByRole("option", { name: "Arroz premium" })).toBeNull();
+  });
+
   it("shows the product entry form only after clicking nuevo producto", async () => {
     const user = userEvent.setup();
 

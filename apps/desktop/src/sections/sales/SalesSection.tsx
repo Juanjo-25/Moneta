@@ -230,11 +230,12 @@ export function SalesSection({
     customers.find((customer) => customer.id === form.customerId) ?? null;
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
+  const activeProducts = products.filter((product) => product.active);
   const normalizedProductSearch = normalizeSearchText(productSearch);
   const filteredProducts =
     normalizedProductSearch === ""
-      ? products
-      : products.filter((product) =>
+      ? activeProducts
+      : activeProducts.filter((product) =>
           normalizeSearchText(`${product.name} ${product.sku}`).includes(
             normalizedProductSearch
           )
@@ -919,7 +920,7 @@ export function SalesSection({
               className="native-select-compat"
               onChange={(event) => {
                 const product =
-                  products.find((currentProduct) => currentProduct.id === event.target.value) ??
+                  activeProducts.find((currentProduct) => currentProduct.id === event.target.value) ??
                   null;
 
                 updateField("productId", event.target.value);
@@ -928,16 +929,16 @@ export function SalesSection({
               value={form.productId}
             >
               <option value="">Selecciona un producto</option>
-              {products.map((product) => (
+              {activeProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>
               ))}
             </select>
             <small>
-              {visibleProducts.length === products.length
-                ? `${products.length} productos disponibles`
-                : `${visibleProducts.length} de ${products.length} productos`}
+              {visibleProducts.length === activeProducts.length
+                ? `${activeProducts.length} productos disponibles`
+                : `${visibleProducts.length} de ${activeProducts.length} productos`}
             </small>
             {errors.productId ? <small>{errors.productId}</small> : null}
           </div>

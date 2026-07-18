@@ -332,7 +332,7 @@ function getSaleStockAdjustments(input: {
 }
 
 function isLowStock(product: ProductRecord): boolean {
-  return product.stock <= product.minimumStock;
+  return product.active && product.stock <= product.minimumStock;
 }
 
 export function App() {
@@ -538,7 +538,7 @@ export function App() {
     openSection(activeSection.id);
   }
 
-  async function createProduct(product: ProductRecord): Promise<boolean> {
+  async function saveProductInSession(product: ProductRecord): Promise<boolean> {
     try {
       await saveNativeProduct(product);
     } catch {
@@ -549,8 +549,18 @@ export function App() {
       return false;
     }
 
-    setProducts((currentProducts) => [...currentProducts, product]);
+    setProducts((currentProducts) =>
+      currentProducts.some((currentProduct) => currentProduct.id === product.id)
+        ? currentProducts.map((currentProduct) =>
+            currentProduct.id === product.id ? product : currentProduct
+          )
+        : [...currentProducts, product]
+    );
     return true;
+  }
+
+  async function createProduct(product: ProductRecord): Promise<boolean> {
+    return saveProductInSession(product);
   }
 
   async function createCustomer(
@@ -1970,6 +1980,7 @@ export function App() {
             onSetCustomerActive={setCustomerActive}
             onCloseProductForm={() => setProductFormVisible(false)}
             onCloseSupplierForm={() => setSupplierFormVisible(false)}
+            onUpdateProduct={saveProductInSession}
             parseNonNegativeInteger={parseNonNegativeInteger}
             productFormVisible={productFormVisible}
             supplierFormVisible={supplierFormVisible}
