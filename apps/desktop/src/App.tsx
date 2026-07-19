@@ -339,6 +339,21 @@ function isLowStock(product: ProductRecord): boolean {
   return product.active && product.stock <= product.minimumStock;
 }
 
+function formatNativePersistenceError(
+  fallbackMessage: string,
+  error: unknown
+): string {
+  if (typeof error === "string" && error.trim() !== "") {
+    return `${fallbackMessage} ${error}`;
+  }
+
+  if (error instanceof Error && error.message.trim() !== "") {
+    return `${fallbackMessage} ${error.message}`;
+  }
+
+  return fallbackMessage;
+}
+
 export function App() {
   const [nativeConnectionStatus, setNativeConnectionStatus] =
     useState<NativeConnectionStatus>({
@@ -1141,12 +1156,16 @@ export function App() {
 
     try {
       await saveNativeSale({ receivable, sale });
-    } catch {
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo guardar la venta local.",
+        error
+      );
       setNativeConnectionStatus({
         kind: "error",
-        message: "No se pudo guardar la venta local."
+        message
       });
-      return "No se pudo guardar la venta local.";
+      return message;
     }
 
     setProducts((currentProducts) =>

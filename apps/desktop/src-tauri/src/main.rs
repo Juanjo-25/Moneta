@@ -981,6 +981,41 @@ fn save_sale(app: tauri::AppHandle, input: SalePersistence) -> Result<(), String
     transaction
         .execute(
             "
+            INSERT INTO customers (
+              id,
+              name,
+              document,
+              address,
+              active,
+              city,
+              email,
+              updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              name = excluded.name,
+              document = excluded.document,
+              address = excluded.address,
+              active = excluded.active,
+              city = excluded.city,
+              email = excluded.email,
+              updated_at = CURRENT_TIMESTAMP
+            ",
+            (
+                &input.sale.customer.id,
+                &input.sale.customer.name,
+                &input.sale.customer.document,
+                &input.sale.customer.address,
+                if input.sale.customer.active { 1 } else { 0 },
+                &input.sale.customer.city,
+                &input.sale.customer.email,
+            ),
+        )
+        .map_err(|error| format!("No se pudo asegurar el cliente de la venta: {error}"))?;
+
+    transaction
+        .execute(
+            "
             INSERT INTO sales (
               id,
               customer_json,
@@ -1097,10 +1132,27 @@ fn save_sale(app: tauri::AppHandle, input: SalePersistence) -> Result<(), String
             .map_err(|error| format!("No se pudo descontar inventario: {error}"))?;
 
         if affected == 0 {
-            return Err(format!(
-                "No hay inventario suficiente para {} en SQLite.",
-                line.product_name
-            ));
+            let current_stock = transaction
+                .query_row(
+                    "SELECT stock FROM products WHERE id = ?1",
+                    [&line.product_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .map_err(|error| {
+                    format!("No se pudo validar el inventario de {}: {error}", line.product_name)
+                })?;
+
+            return match current_stock {
+                Some(stock) => Err(format!(
+                    "No hay inventario suficiente para {}. Disponible: {}, solicitado: {}.",
+                    line.product_name, stock, line.quantity
+                )),
+                None => Err(format!(
+                    "El producto {} no existe en la base de datos local.",
+                    line.product_name
+                )),
+            };
         }
     }
 
