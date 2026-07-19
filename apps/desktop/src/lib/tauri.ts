@@ -138,7 +138,7 @@ export async function saveNativeInventoryAdjustment(input: {
     return false;
   }
 
-  await invoke<void>("save_inventory_adjustment", input);
+  await invoke<void>("save_inventory_adjustment", { input });
 
   return true;
 }
@@ -207,7 +207,7 @@ export async function saveNativeSale(input: {
     return false;
   }
 
-  await invoke<void>("save_sale", input);
+  await invoke<void>("save_sale", { input });
 
   return true;
 }
@@ -226,7 +226,7 @@ export async function updateNativeSale(input: {
     return false;
   }
 
-  await invoke<void>("update_sale", input);
+  await invoke<void>("update_sale", { input });
 
   return true;
 }
@@ -244,7 +244,7 @@ export async function deleteNativeSale(input: {
     return false;
   }
 
-  await invoke<void>("delete_sale", input);
+  await invoke<void>("delete_sale", { input });
 
   return true;
 }
@@ -259,7 +259,7 @@ export async function saveNativeCustomerReceipt(input: {
     return false;
   }
 
-  await invoke<void>("save_customer_receipt", input);
+  await invoke<void>("save_customer_receipt", { input });
 
   return true;
 }
@@ -274,7 +274,7 @@ export async function voidNativeCustomerReceipt(input: {
     return false;
   }
 
-  await invoke<void>("void_customer_receipt", input);
+  await invoke<void>("void_customer_receipt", { input });
 
   return true;
 }
@@ -317,7 +317,7 @@ export async function saveNativeCreditNoteStatus(input: {
     return false;
   }
 
-  await invoke<void>("save_credit_note_status", input);
+  await invoke<void>("save_credit_note_status", { input });
 
   return true;
 }
@@ -388,7 +388,7 @@ export async function saveNativePurchase(input: {
     return false;
   }
 
-  await invoke<void>("save_purchase", input);
+  await invoke<void>("save_purchase", { input });
 
   return true;
 }
@@ -403,7 +403,7 @@ export async function saveNativeSupplierPayment(input: {
     return false;
   }
 
-  await invoke<void>("save_supplier_payment", input);
+  await invoke<void>("save_supplier_payment", { input });
 
   return true;
 }

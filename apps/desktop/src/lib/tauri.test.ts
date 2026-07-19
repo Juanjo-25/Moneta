@@ -284,8 +284,10 @@ describe("native inventory adjustment persistence", () => {
       saveNativeInventoryAdjustment({ adjustment, product })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_inventory_adjustment", {
-      adjustment,
-      product
+      input: {
+        adjustment,
+        product
+      }
     });
   });
 });
@@ -536,7 +538,9 @@ describe("native sale persistence", () => {
     setTauriInvoke(invoke);
 
     await expect(saveNativeSale({ receivable, sale })).resolves.toBe(true);
-    expect(invoke).toHaveBeenCalledWith("save_sale", { receivable, sale });
+    expect(invoke).toHaveBeenCalledWith("save_sale", {
+      input: { receivable, sale }
+    });
   });
 
   it("updates a sale through Tauri", async () => {
@@ -551,9 +555,11 @@ describe("native sale persistence", () => {
       })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("update_sale", {
-      productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
-      receivable: updatedReceivable,
-      sale
+      input: {
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable,
+        sale
+      }
     });
   });
 
@@ -568,8 +574,10 @@ describe("native sale persistence", () => {
       })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("delete_sale", {
-      productStockAdjustments: [{ productId: "product-1", quantityDelta: 2 }],
-      saleId: "sale-1"
+      input: {
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 2 }],
+        saleId: "sale-1"
+      }
     });
   });
 
@@ -581,8 +589,10 @@ describe("native sale persistence", () => {
       saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_customer_receipt", {
-      receipt,
-      receivable: updatedReceivable
+      input: {
+        receipt,
+        receivable: updatedReceivable
+      }
     });
   });
 
@@ -600,8 +610,10 @@ describe("native sale persistence", () => {
       voidNativeCustomerReceipt({ receipt: voidedReceipt, receivable })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("void_customer_receipt", {
-      receipt: voidedReceipt,
-      receivable
+      input: {
+        receipt: voidedReceipt,
+        receivable
+      }
     });
   });
 
@@ -625,9 +637,11 @@ describe("native sale persistence", () => {
       })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_credit_note_status", {
-      creditNote: confirmedCreditNote,
-      productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
-      receivable: updatedReceivable
+      input: {
+        creditNote: confirmedCreditNote,
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable
+      }
     });
   });
 });
@@ -792,8 +806,10 @@ describe("native purchase persistence", () => {
       saveNativePurchase({ purchase, supplierPayable })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_purchase", {
-      purchase,
-      supplierPayable
+      input: {
+        purchase,
+        supplierPayable
+      }
     });
   });
 
@@ -808,8 +824,10 @@ describe("native purchase persistence", () => {
       })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_supplier_payment", {
-      payment: supplierPayment,
-      supplierPayable: updatedSupplierPayable
+      input: {
+        payment: supplierPayment,
+        supplierPayable: updatedSupplierPayable
+      }
     });
   });
 });
