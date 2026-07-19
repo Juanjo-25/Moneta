@@ -521,20 +521,22 @@ describe("App navigation", () => {
       expect(invoke).toHaveBeenCalledWith(
         "save_sale",
         expect.objectContaining({
-          receivable: expect.objectContaining({
-            balanceMinor: 9000,
-            customerId: "customer-stored",
-            dueAt: "2026-08-18",
-            status: "pending"
-          }),
-          sale: expect.objectContaining({
-            customer: storedCustomer,
-            customerId: "customer-stored",
-            customerName: "Ana Perez",
-            paymentStatus: "pending",
-            productName: "Arroz libra",
-            quantity: 2,
-            totalMinor: 9000
+          input: expect.objectContaining({
+            receivable: expect.objectContaining({
+              balanceMinor: 9000,
+              customerId: "customer-stored",
+              dueAt: "2026-08-18",
+              status: "pending"
+            }),
+            sale: expect.objectContaining({
+              customer: storedCustomer,
+              customerId: "customer-stored",
+              customerName: "Ana Perez",
+              paymentStatus: "pending",
+              productName: "Arroz libra",
+              quantity: 2,
+              totalMinor: 9000
+            })
           })
         })
       )
@@ -736,18 +738,20 @@ describe("App navigation", () => {
       expect(invoke).toHaveBeenCalledWith(
         "save_purchase",
         expect.objectContaining({
-          purchase: expect.objectContaining({
-            invoiceNumber: "002",
-            paymentStatus: "pending",
-            quantity: 2,
-            supplierId: "supplier-stored",
-            totalMinor: 6600
-          }),
-          supplierPayable: expect.objectContaining({
-            balanceMinor: 6600,
-            invoiceNumber: "002",
-            status: "pending",
-            supplierId: "supplier-stored"
+          input: expect.objectContaining({
+            purchase: expect.objectContaining({
+              invoiceNumber: "002",
+              paymentStatus: "pending",
+              quantity: 2,
+              supplierId: "supplier-stored",
+              totalMinor: 6600
+            }),
+            supplierPayable: expect.objectContaining({
+              balanceMinor: 6600,
+              invoiceNumber: "002",
+              status: "pending",
+              supplierId: "supplier-stored"
+            })
           })
         })
       )
