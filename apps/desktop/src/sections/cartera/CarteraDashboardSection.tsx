@@ -33,7 +33,7 @@ type CarteraDashboardSectionProps = {
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
-  }) => void;
+  }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   receivables: ReceivableRecord[];
   supplierPayables: SupplierPayableRecord[];

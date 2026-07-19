@@ -25,11 +25,28 @@ export type ProductRecord = {
   id: string;
   sku: string;
   name: string;
+  unit: string;
   costMinor: number;
   salePriceMinor: number;
   minimumStock: number;
   stock: number;
   active: boolean;
+};
+
+export type InventoryAdjustmentType = "entry" | "exit" | "set";
+
+export type InventoryAdjustmentRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  adjustmentType: InventoryAdjustmentType;
+  quantity: number;
+  previousStock: number;
+  nextStock: number;
+  reason: string;
+  occurredAtMs: number;
+  occurredAtLabel: string;
 };
 
 export type CustomerRecord = {
@@ -113,9 +130,14 @@ export type ReceivableRecord = {
 };
 
 export type CustomerReceiptRecord = {
+  active: boolean;
   id: string;
   number: string;
   receivableId: string;
+  receivableOriginalAmountMinor: number;
+  receivablePaidAmountMinorBefore: number;
+  receivableBalanceMinorBefore: number;
+  receivableDueAt: string;
   saleId: string;
   customerId: string;
   customerName: string;
@@ -124,6 +146,8 @@ export type CustomerReceiptRecord = {
   receivedAt: string;
   receivedAtMs: number;
   receivedAtLabel: string;
+  voidedAtLabel: string;
+  voidedAtMs: number;
 };
 
 export type CreditNoteLineRecord = {
@@ -288,4 +312,5 @@ export type InvoiceDesignSettings = {
 export type AppSettings = {
   company: CompanySettings;
   invoice: InvoiceDesignSettings;
+  sellers: string[];
 };

@@ -124,7 +124,7 @@ type SalesSectionProps = {
   customers: CustomerRecord[];
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
+  onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -149,7 +149,7 @@ type SalesSectionProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -175,9 +175,9 @@ type SalesSectionProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
-  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
-  onDeleteSale: (saleId: string) => void;
+  }) => Promise<string | null>;
+  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => Promise<string | null>;
+  onDeleteSale: (saleId: string) => Promise<string | null>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -211,6 +211,8 @@ export function SalesSection({
 }: SalesSectionProps) {
   const { form, saleLines } = salesDraft;
   const [errors, setErrors] = useState<SalesFormErrors>({});
+  const [productSearch, setProductSearch] = useState("");
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
   const [customerForm, setCustomerForm] =
     useState<CustomerFormState>(emptyCustomerForm);
@@ -228,6 +230,21 @@ export function SalesSection({
     customers.find((customer) => customer.id === form.customerId) ?? null;
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
+  const activeProducts = products.filter((product) => product.active);
+  const normalizedProductSearch = normalizeSearchText(productSearch);
+  const filteredProducts =
+    normalizedProductSearch === ""
+      ? activeProducts
+      : activeProducts.filter((product) =>
+          normalizeSearchText(`${product.name} ${product.sku}`).includes(
+            normalizedProductSearch
+          )
+        );
+  const visibleProducts =
+    selectedProduct &&
+    !filteredProducts.some((product) => product.id === selectedProduct.id)
+      ? [selectedProduct, ...filteredProducts]
+      : filteredProducts;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
   const unitPriceMinor = parseNonNegativeInteger(form.unitPrice) ?? 0;
   const discountPercent = parsePercentage(form.discountPercent);
@@ -245,6 +262,7 @@ export function SalesSection({
   const totalMinor = saleLinesTotalMinor + draftLineTotalMinor;
   const nextInvoiceNumber = String(sales.length + 1).padStart(3, "0");
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
+  const configuredSellers = settings.sellers;
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -256,6 +274,7 @@ export function SalesSection({
       currentForm.unitPrice.trim() === ""
         ? {
             ...currentForm,
+            unit: selectedProduct.unit,
             unitPrice: formatIntegerInput(String(selectedProduct.salePriceMinor))
           }
         : currentForm
@@ -296,6 +315,24 @@ export function SalesSection({
     value: string
   ) {
     updateField(field, value.replace(/[^0-9]/g, ""));
+  }
+
+  function selectProduct(product: ProductRecord) {
+    updateField("productId", product.id);
+    setProductSearch(product.name);
+    setProductDropdownOpen(false);
+  }
+
+  function updateProductSearch(value: string) {
+    setProductSearch(value);
+    setProductDropdownOpen(true);
+
+    if (
+      selectedProduct &&
+      normalizeSearchText(value) !== normalizeSearchText(selectedProduct.name)
+    ) {
+      updateField("productId", "");
+    }
   }
 
   function validateDraftLine(): {
@@ -385,6 +422,7 @@ export function SalesSection({
       discountPercent: "0",
       taxPercent: "0"
     }));
+    setProductSearch("");
     setErrors((currentErrors) => ({
       ...currentErrors,
       productId: undefined,
@@ -395,7 +433,7 @@ export function SalesSection({
     }));
   }
 
-  function submitSale(event: FormEvent<HTMLFormElement>) {
+  async function submitSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: SalesFormErrors = {};
@@ -481,9 +519,9 @@ export function SalesSection({
     let submitError: string | null = null;
 
     if (form.paymentStatus === "paid") {
-      submitError = onRegisterPaidSale(registerInput);
+      submitError = await onRegisterPaidSale(registerInput);
     } else {
-      submitError = onRegisterPendingSale({
+      submitError = await onRegisterPendingSale({
         ...registerInput,
         dueAt: form.dueAt.trim()
       });
@@ -504,7 +542,7 @@ export function SalesSection({
     setCustomerErrors((currentErrors) => ({ ...currentErrors, [field]: undefined }));
   }
 
-  function submitCustomer() {
+  async function submitCustomer() {
     const nextErrors = onValidateCustomer(customerForm);
 
     setCustomerErrors(nextErrors);
@@ -513,7 +551,11 @@ export function SalesSection({
       return;
     }
 
-    const customer = onCreateCustomer(customerForm);
+    const customer = await onCreateCustomer(customerForm);
+
+    if (!customer) {
+      return;
+    }
 
     setForm((currentForm) => ({ ...currentForm, customerId: customer.id }));
     setCustomerForm(emptyCustomerForm);
@@ -624,7 +666,7 @@ export function SalesSection({
     setEditError(null);
   }
 
-  function submitSaleEdit(event: FormEvent<HTMLFormElement>) {
+  async function submitSaleEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!editingSale || !editForm) {
@@ -683,7 +725,7 @@ export function SalesSection({
       totalMinor,
       unitPriceMinor: firstLine.unitPriceMinor
     };
-    const updateError = onUpdateSale({
+    const updateError = await onUpdateSale({
       dueAt: editForm.paymentStatus === "pending" ? editForm.dueAt.trim() : "",
       sale: updatedSale
     });
@@ -699,8 +741,13 @@ export function SalesSection({
     setEditError(null);
   }
 
-  function removeSale(saleId: string) {
-    onDeleteSale(saleId);
+  async function removeSale(saleId: string) {
+    const deleteError = await onDeleteSale(saleId);
+
+    if (deleteError) {
+      setEditError(deleteError);
+      return;
+    }
 
     if (editingSale?.id === saleId) {
       setEditingSale(null);
@@ -768,12 +815,21 @@ export function SalesSection({
                 value={form.dueAt}
               />
             ) : null}
-            <TextField
-              label="Vendedor"
-              onChange={(value) => updateField("seller", value)}
-              placeholder="Sin asignar"
-              value={form.seller}
-            />
+            {configuredSellers.length > 0 ? (
+              <SellerSelect
+                label="Vendedor"
+                onChange={(value) => updateField("seller", value)}
+                sellers={configuredSellers}
+                value={form.seller}
+              />
+            ) : (
+              <TextField
+                label="Vendedor"
+                onChange={(value) => updateField("seller", value)}
+                placeholder="Sin asignar"
+                value={form.seller}
+              />
+            )}
             <div className="field">
               <span>Forma de pago</span>
               <div aria-label="Estado de pago" className="payment-status-group" role="radiogroup">
@@ -801,25 +857,91 @@ export function SalesSection({
             <span>Agrega los productos y sus valores antes de registrar la venta.</span>
           </div>
           <div className="sales-grid">
-          <label className="field" htmlFor="producto-venta">
+          <div className="field searchable-select">
             <span>Producto</span>
+            <div
+              className="searchable-select-control"
+              onBlur={() => window.setTimeout(() => setProductDropdownOpen(false), 120)}
+            >
+              <input
+                aria-autocomplete="list"
+                aria-controls="producto-venta-options"
+                aria-expanded={productDropdownOpen}
+                aria-invalid={Boolean(errors.productId)}
+                aria-label="Producto buscable"
+                id="producto-venta-buscable"
+                onChange={(event) => updateProductSearch(event.target.value)}
+                onFocus={() => setProductDropdownOpen(true)}
+                placeholder="Busca por nombre o codigo"
+                role="combobox"
+                type="text"
+                value={productSearch}
+              />
+              <button
+                aria-label="Abrir productos"
+                className="searchable-select-toggle"
+                onClick={() => setProductDropdownOpen((open) => !open)}
+                type="button"
+              >
+                ▾
+              </button>
+              {productDropdownOpen ? (
+                <div
+                  className="searchable-select-menu"
+                  id="producto-venta-options"
+                  role="listbox"
+                >
+                  {visibleProducts.length > 0 ? (
+                    visibleProducts.map((product) => (
+                      <button
+                        aria-label={product.name}
+                        aria-selected={form.productId === product.id}
+                        className="searchable-select-option"
+                        key={product.id}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectProduct(product)}
+                        role="option"
+                        type="button"
+                      >
+                        <strong>{product.name}</strong>
+                        <span>{product.sku} · Stock {product.stock}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="searchable-select-empty">
+                      Sin productos coincidentes
+                    </span>
+                  )}
+                </div>
+              ) : null}
+            </div>
             <select
-              aria-invalid={Boolean(errors.productId)}
-              id="producto-venta"
+              aria-label="Producto"
+              className="native-select-compat"
               onChange={(event) => {
+                const product =
+                  activeProducts.find((currentProduct) => currentProduct.id === event.target.value) ??
+                  null;
+
                 updateField("productId", event.target.value);
+                setProductSearch(product?.name ?? "");
               }}
               value={form.productId}
             >
               <option value="">Selecciona un producto</option>
-              {products.map((product) => (
+              {activeProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>
               ))}
             </select>
+            <small>
+              {visibleProducts.length === activeProducts.length
+                ? `${activeProducts.length} productos disponibles`
+                : `${visibleProducts.length} de ${activeProducts.length} productos`}
+            </small>
             {errors.productId ? <small>{errors.productId}</small> : null}
-          </label>
+          </div>
 
           <label className="field" htmlFor="unidad-venta">
             <span>Unidad</span>
@@ -946,7 +1068,16 @@ export function SalesSection({
                 </select>
               </label>
               <TextField label="Prefijo de venta" onChange={(value) => updateEditField("prefix", value)} value={editForm.prefix} />
-              <TextField label="Vendedor de venta" onChange={(value) => updateEditField("seller", value)} value={editForm.seller} />
+              {configuredSellers.length > 0 ? (
+                <SellerSelect
+                  label="Vendedor de venta"
+                  onChange={(value) => updateEditField("seller", value)}
+                  sellers={configuredSellers}
+                  value={editForm.seller}
+                />
+              ) : (
+                <TextField label="Vendedor de venta" onChange={(value) => updateEditField("seller", value)} value={editForm.seller} />
+              )}
               <TextField label="Fecha de elaboracion de venta" onChange={(value) => updateEditField("issuedAt", value)} type="date" value={editForm.issuedAt} />
               <TextField label="Concepto de venta" onChange={(value) => updateEditField("concept", value)} value={editForm.concept} />
               <div className="field">
@@ -1176,6 +1307,42 @@ function calculateDocumentLine(input: {
 function formatDocumentNumber(prefix: string, number: string): string {
   const normalizedPrefix = prefix.trim().toUpperCase();
   return normalizedPrefix === "" ? number : `${normalizedPrefix}-${number}`;
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .trim();
+}
+
+type SellerSelectProps = {
+  label: string;
+  onChange: (value: string) => void;
+  sellers: string[];
+  value: string;
+};
+
+function SellerSelect({ label, onChange, sellers, value }: SellerSelectProps) {
+  const hasHistoricalSeller =
+    value.trim() !== "" &&
+    !sellers.some((seller) => seller.toLocaleLowerCase() === value.toLocaleLowerCase());
+
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select onChange={(event) => onChange(event.target.value)} value={value}>
+        <option value="">Sin asignar</option>
+        {hasHistoricalSeller ? <option value={value}>{value}</option> : null}
+        {sellers.map((seller) => (
+          <option key={seller} value={seller}>
+            {seller}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function getDocumentSequence(invoiceNumber: string): string {

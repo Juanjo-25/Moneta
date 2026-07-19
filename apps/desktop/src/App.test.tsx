@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { generateInvoicePdf } from "./invoice-pdf";
 
@@ -10,12 +10,21 @@ vi.mock("./invoice-pdf", () => ({
 
 const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
 
+function setTauriInvoke(
+  invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
+) {
+  Object.defineProperty(window, "__TAURI__", {
+    configurable: true,
+    value: invoke ? { core: { invoke } } : undefined
+  });
+}
+
 async function createProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Productos" }));
   await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
   await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
   await user.type(screen.getByLabelText("Producto"), "Arroz libra");
-  await user.type(screen.getByLabelText("Unidad"), "4");
+  await user.type(screen.getByLabelText("Cantidad inicial"), "4");
   await user.type(screen.getByLabelText("Costo"), "3200");
   await user.type(screen.getByLabelText("Precio venta"), "4500");
   await user.type(screen.getByLabelText("Stock minimo"), "1");
@@ -27,11 +36,19 @@ async function createSecondProductFixture(user: UserEvent) {
   await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
   await user.type(screen.getByLabelText("Codigo"), "PNL-001");
   await user.type(screen.getByLabelText("Producto"), "Panela unidad");
-  await user.type(screen.getByLabelText("Unidad"), "3");
+  await user.type(screen.getByLabelText("Cantidad inicial"), "3");
   await user.type(screen.getByLabelText("Costo"), "2500");
   await user.type(screen.getByLabelText("Precio venta"), "3500");
   await user.type(screen.getByLabelText("Stock minimo"), "1");
   await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+}
+
+async function selectFirstInventoryAdjustmentProduct(user: UserEvent) {
+  const productSelect = screen.getByLabelText(
+    "Producto a ajustar"
+  ) as HTMLSelectElement;
+
+  await user.selectOptions(productSelect, productSelect.options[1]?.value ?? "");
 }
 
 async function createSupplierFixture(user: UserEvent, name = "Distribuidora Norte") {
@@ -90,6 +107,10 @@ describe("App navigation", () => {
       dataUri: "data:application/pdf;base64,invoice-pdf",
       fileName: "factura-FE-sale-1.pdf"
     });
+  });
+
+  afterEach(() => {
+    setTauriInvoke();
   });
 
   it("switches active section from the sidebar", async () => {
@@ -165,7 +186,575 @@ describe("App navigation", () => {
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
   });
 
-  it("creates a product with unidad as initial stock and updates dashboard metrics", async () => {
+  it("manages sellers and uses them in sales and reports", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Laura Gomez");
+    await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Mario");
+    await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+
+    const sellersTable = screen.getByRole("table", { name: "Vendedores configurados" });
+    const marioRow = within(sellersTable).getByText("Mario").closest("tr");
+    const lauraRow = within(sellersTable).getByText("Laura Gomez").closest("tr");
+
+    if (!marioRow || !lauraRow) {
+      throw new Error("Configured seller rows were not rendered.");
+    }
+
+    await user.click(within(marioRow).getByRole("button", { name: "Editar" }));
+    await user.clear(screen.getByLabelText("Nombre vendedor"));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Mario Ruiz");
+    await user.click(screen.getByRole("button", { name: "Guardar vendedor" }));
+
+    const updatedSellersTable = screen.getByRole("table", {
+      name: "Vendedores configurados"
+    });
+    const updatedLauraRow = within(updatedSellersTable)
+      .getByText("Laura Gomez")
+      .closest("tr");
+
+    if (!updatedLauraRow) {
+      throw new Error("Seller row to delete was not rendered.");
+    }
+
+    await user.click(within(updatedLauraRow).getByRole("button", { name: "Eliminar" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(screen.getByLabelText("Vendedor"), "Mario Ruiz");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Mario Ruiz")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Reportes" }));
+    await user.click(
+      within(screen.getByRole("tablist", { name: "Tipos de rentabilidad" })).getByRole(
+        "tab",
+        { name: "Vendedores" }
+      )
+    );
+
+    expect(screen.getByLabelText("Grafico ventas por vendedor")).toBeTruthy();
+    expect(screen.getByText("Mario Ruiz")).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", { name: "Abrir detalle de ventas por vendedor" })
+    );
+    const sellerReportTable = screen.getByRole("table", {
+      name: "Detalle ventas por vendedor"
+    });
+    expect(within(sellerReportTable).getByText("Mario Ruiz")).toBeTruthy();
+  });
+
+  it("saves configuration changes through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("get_app_settings")
+    );
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.type(screen.getByLabelText("Nombre vendedor"), "Laura Gomez");
+    await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_app_settings",
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            sellers: ["Laura Gomez"]
+          })
+        })
+      )
+    );
+  });
+
+  it("loads and saves products through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 2800,
+      id: "product-stored",
+      minimumStock: 2,
+      name: "Frijol kilo",
+      salePriceMinor: 5200,
+      sku: "FRJ-001",
+      stock: 6,
+      unit: "Kg"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    expect(await screen.findByRole("cell", { name: "FRJ-001" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
+    await user.type(screen.getByLabelText("Producto"), "Arroz libra");
+    await user.type(screen.getByLabelText("Cantidad inicial"), "4");
+    await user.type(screen.getByLabelText("Costo"), "3200");
+    await user.type(screen.getByLabelText("Precio venta"), "4500");
+    await user.type(screen.getByLabelText("Stock minimo"), "1");
+    await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_product",
+        expect.objectContaining({
+          product: expect.objectContaining({
+            name: "Arroz libra",
+            sku: "ARZ-001",
+            stock: 4,
+            unit: "Unidad"
+          })
+        })
+      )
+    );
+  });
+
+  it("loads and updates customers through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedCustomer = {
+      active: true,
+      address: "Calle 10",
+      city: "Medellin",
+      document: "123456789",
+      email: "ana@correo.com",
+      id: "customer-stored",
+      name: "Ana Perez"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([storedCustomer]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Clientes" }));
+    expect(await screen.findByRole("cell", { name: "Ana Perez" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Ver cliente Ana Perez" }));
+    await user.click(screen.getByRole("button", { name: "Editar cliente" }));
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez Mayorista");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_customer",
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            id: "customer-stored",
+            name: "Ana Perez Mayorista"
+          })
+        })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Desactivar cliente" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_customer",
+        expect.objectContaining({
+          customer: expect.objectContaining({
+            active: false,
+            id: "customer-stored"
+          })
+        })
+      )
+    );
+  });
+
+  it("saves sales and receivables through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 3200,
+      id: "product-stored",
+      minimumStock: 1,
+      name: "Arroz libra",
+      salePriceMinor: 4500,
+      sku: "ARZ-001",
+      stock: 4,
+      unit: "Unidad"
+    };
+    const storedCustomer = {
+      active: true,
+      address: "Calle 10",
+      city: "Medellin",
+      document: "123456789",
+      email: "ana@correo.com",
+      id: "customer-stored",
+      name: "Ana Perez"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 5,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([storedCustomer]);
+      }
+      if (command === "list_sales") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_receivables") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_purchases") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_supplier_payables") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_supplier_payments") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await screen.findByRole("option", { name: /Ana Perez/ });
+    await user.selectOptions(screen.getByLabelText("Cliente"), "customer-stored");
+    await user.selectOptions(screen.getByLabelText("Producto"), "product-stored");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-08-18");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_sale",
+        expect.objectContaining({
+          receivable: expect.objectContaining({
+            balanceMinor: 9000,
+            customerId: "customer-stored",
+            dueAt: "2026-08-18",
+            status: "pending"
+          }),
+          sale: expect.objectContaining({
+            customer: storedCustomer,
+            customerId: "customer-stored",
+            customerName: "Ana Perez",
+            paymentStatus: "pending",
+            productName: "Arroz libra",
+            quantity: 2,
+            totalMinor: 9000
+          })
+        })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByText("2")).toBeTruthy();
+  });
+
+  it("loads and updates suppliers through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedSupplier = {
+      active: true,
+      address: "Calle 20",
+      city: "Medellin",
+      department: "Antioquia",
+      document: "900123",
+      email: "proveedor@correo.com",
+      id: "supplier-stored",
+      name: "Distribuidora Norte",
+      phone: "300"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 2,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([storedSupplier]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    expect(
+      await screen.findByRole("cell", { name: "Distribuidora Norte" })
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "Editar proveedor Distribuidora Norte" })
+    );
+    await user.clear(screen.getByLabelText("Razón social"));
+    await user.type(screen.getByLabelText("Razón social"), "Distribuidora Sur");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios proveedor" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_supplier",
+        expect.objectContaining({
+          supplier: expect.objectContaining({
+            id: "supplier-stored",
+            name: "Distribuidora Sur"
+          })
+        })
+      )
+    );
+
+    await user.click(screen.getByRole("button", { name: "Desactivar proveedor" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_supplier",
+        expect.objectContaining({
+          supplier: expect.objectContaining({
+            active: false,
+            id: "supplier-stored"
+          })
+        })
+      )
+    );
+  });
+
+  it("loads and saves purchases through SQLite when Tauri is available", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 3200,
+      id: "product-stored",
+      minimumStock: 1,
+      name: "Arroz libra",
+      salePriceMinor: 4500,
+      sku: "ARZ-001",
+      stock: 4,
+      unit: "Unidad"
+    };
+    const storedSupplier = {
+      active: true,
+      address: "Calle 20",
+      city: "Medellin",
+      department: "Antioquia",
+      document: "900123",
+      email: "proveedor@correo.com",
+      id: "supplier-stored",
+      name: "Distribuidora Norte",
+      phone: "300"
+    };
+    const storedPurchase = {
+      branch: "Principal",
+      concept: "Factura de compra",
+      currency: "COP" as const,
+      dueAt: "",
+      expenseCategory: "inventory" as const,
+      id: "purchase-stored",
+      invoiceNumber: "001",
+      issuedAt: "2026-07-01",
+      lines: [
+        {
+          discountMinor: 0,
+          discountPercent: 0,
+          id: "purchase-stored-line-0",
+          productId: "product-stored",
+          productName: "Arroz libra",
+          quantity: 1,
+          subtotalMinor: 3200,
+          taxMinor: 0,
+          taxPercent: 0,
+          totalMinor: 3200,
+          unit: "Unidad",
+          unitCostMinor: 3200
+        }
+      ],
+      occurredAtLabel: "01/07/26, 12:00",
+      occurredAtMs: 1,
+      paymentStatus: "paid" as const,
+      prefix: "",
+      productId: "product-stored",
+      productName: "Arroz libra",
+      quantity: 1,
+      supplierId: "supplier-stored",
+      supplierName: "Distribuidora Norte",
+      totalMinor: 3200,
+      unitCostMinor: 3200
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 3,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+      if (command === "list_customers") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([storedSupplier]);
+      }
+      if (command === "list_purchases") {
+        return Promise.resolve([storedPurchase]);
+      }
+      if (command === "list_supplier_payables") {
+        return Promise.resolve([]);
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    expect(await screen.findByRole("cell", { name: "001" })).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Proveedor"), "supplier-stored");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-18");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-08-18");
+    await user.selectOptions(screen.getByLabelText("Producto"), "product-stored");
+    await user.type(screen.getByLabelText("Cantidad compra"), "2");
+    await user.type(screen.getByLabelText("Costo unitario"), "3300");
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_purchase",
+        expect.objectContaining({
+          purchase: expect.objectContaining({
+            invoiceNumber: "002",
+            paymentStatus: "pending",
+            quantity: 2,
+            supplierId: "supplier-stored",
+            totalMinor: 6600
+          }),
+          supplierPayable: expect.objectContaining({
+            balanceMinor: 6600,
+            invoiceNumber: "002",
+            status: "pending",
+            supplierId: "supplier-stored"
+          })
+        })
+      )
+    );
+  });
+
+  it("creates a product with unit and initial quantity, then updates dashboard metrics", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -174,7 +763,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     await user.type(screen.getByLabelText("Codigo"), "ARZ-001");
     await user.type(screen.getByLabelText("Producto"), "Arroz libra");
-    await user.type(screen.getByLabelText("Unidad"), "4");
+    await user.selectOptions(screen.getByLabelText("Unidad"), "Libra");
+    await user.type(screen.getByLabelText("Cantidad inicial"), "4");
     await user.type(screen.getByLabelText("Costo"), "3200");
     await user.type(screen.getByLabelText("Precio venta"), "4500");
     await user.type(screen.getByLabelText("Stock minimo"), "5");
@@ -183,6 +773,7 @@ describe("App navigation", () => {
     expect(screen.queryByLabelText("Stock inicial")).toBeNull();
     expect(screen.getByRole("cell", { name: "ARZ-001" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "Arroz libra" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Libra" })).toBeTruthy();
     expect(screen.getByRole("cell", { name: /\$\s*3\.200/ })).toBeTruthy();
     expect(screen.getByRole("cell", { name: /\$\s*4\.500/ })).toBeTruthy();
     expect(screen.getByRole("cell", { name: "4" })).toBeTruthy();
@@ -194,6 +785,138 @@ describe("App navigation", () => {
     expect(screen.getByText("Alertas de inventario")).toBeTruthy();
     expect(screen.getAllByText("1")).toHaveLength(2);
     expect(screen.getByText("Arroz libra")).toBeTruthy();
+  });
+
+  it("edits and inactivates a product without offering it in new sales", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Editar" }));
+    await user.clear(screen.getByLabelText("Producto"));
+    await user.type(screen.getByLabelText("Producto"), "Arroz premium");
+    await user.selectOptions(screen.getByLabelText("Unidad"), "Kg");
+    await user.clear(screen.getByLabelText("Costo"));
+    await user.type(screen.getByLabelText("Costo"), "3500");
+    await user.clear(screen.getByLabelText("Precio venta"));
+    await user.type(screen.getByLabelText("Precio venta"), "5200");
+    await user.clear(screen.getByLabelText("Stock minimo"));
+    await user.type(screen.getByLabelText("Stock minimo"), "2");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz premium\s+Kg\s+\$\s*3\.500\s+\$\s*5\.200\s+4\s+2/
+      })
+    ).toBeTruthy();
+
+    await user.click(within(productsTable).getByRole("button", { name: "Inactivar" }));
+    expect(within(productsTable).getByText("Inactivo")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.queryByRole("option", { name: "Arroz premium" })).toBeNull();
+  });
+
+  it("registers an inventory adjustment and keeps a movement history", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await selectFirstInventoryAdjustmentProduct(user);
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.type(screen.getByLabelText("Motivo"), "Merma bodega");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+      })
+    ).toBeTruthy();
+
+    const adjustmentsTable = screen.getByRole("table", {
+      name: "Ajustes de inventario"
+    });
+    expect(
+      within(adjustmentsTable).getByRole("row", {
+        name: /Arroz libra\s+Salida\s+-2 Unidad\s+4\s+2\s+Merma bodega/
+      })
+    ).toBeTruthy();
+  });
+
+  it("rejects inventory exits above current stock", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await selectFirstInventoryAdjustmentProduct(user);
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "5");
+    await user.type(screen.getByLabelText("Motivo"), "Salida mal digitada");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+
+    expect(screen.getByText("La salida no puede superar el stock actual.")).toBeTruthy();
+    expect(
+      screen.queryByRole("table", { name: "Ajustes de inventario" })
+    ).toBeNull();
+  });
+
+  it("shows a unified inventory history from sales, purchases, and adjustments", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await createSupplierFixture(user, "Distribuidora Norte");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-07-18");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad compra"), "2");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await selectFirstInventoryAdjustmentProduct(user);
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.type(screen.getByLabelText("Motivo"), "Muestra interna");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+
+    const historyTable = screen.getByRole("table", {
+      name: "Historial de inventario"
+    });
+    expect(within(historyTable).getByText("Venta")).toBeTruthy();
+    expect(within(historyTable).getByText("Compra")).toBeTruthy();
+    expect(within(historyTable).getByText("Ajuste")).toBeTruthy();
+    expect(within(historyTable).getByText("Ana Perez")).toBeTruthy();
+    expect(within(historyTable).getByText("Distribuidora Norte")).toBeTruthy();
+    expect(within(historyTable).getByText("Muestra interna")).toBeTruthy();
+
+    await user.selectOptions(screen.getByLabelText("Origen"), "sale");
+    expect(within(historyTable).getByText("Venta")).toBeTruthy();
+    expect(within(historyTable).queryByText("Compra")).toBeNull();
+    expect(within(historyTable).queryByText("Ajuste")).toBeNull();
   });
 
   it("shows the product entry form only after clicking nuevo producto", async () => {
@@ -275,6 +998,30 @@ describe("App navigation", () => {
 
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(within(productsTable).getByRole("cell", { name: "2" })).toBeTruthy();
+  });
+
+  it("filters the sales product selector by name before registering a sale", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Busqueda");
+    await user.type(screen.getByLabelText("NIT o C.C."), "101010");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.type(screen.getByLabelText("Producto buscable"), "pan");
+    const productDropdown = screen.getByRole("listbox");
+    expect(within(productDropdown).queryByRole("option", { name: "Arroz libra" })).toBeNull();
+    await user.click(within(productDropdown).getByRole("option", { name: "Panela unidad" }));
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Cliente Busqueda")).toBeTruthy();
+    expect(within(salesTable).getByText("Panela unidad")).toBeTruthy();
   });
 
   it("shows sales charts on the dashboard from registered sales", async () => {
@@ -401,7 +1148,7 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+1\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+1\s+1/
       })
     ).toBeTruthy();
 
@@ -511,15 +1258,22 @@ describe("App navigation", () => {
     expect(within(receiptsTable).getByText("RC-001")).toBeTruthy();
     expect(within(receiptsTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receiptsTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    await user.click(within(receiptsTable).getByRole("button", { name: "Detalle" }));
+    const receiptDetail = screen.getByLabelText("Detalle historico RC-001");
+    expect(within(receiptDetail).getByText("Cartera antes")).toBeTruthy();
+    expect(within(receiptDetail).getByText("Cartera despues")).toBeTruthy();
+    expect(within(receiptDetail).getByText("Saldo aplicado por el recibo.")).toBeTruthy();
+    await user.click(within(receiptDetail).getByRole("button", { name: "Cerrar" }));
+    await user.click(within(receiptsTable).getByRole("button", { name: "Anular" }));
+    expect(within(receiptsTable).getByText(/Anulado/)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
-    expect(within(receivablesTable).getByText(/\$\s*8\.500/)).toBeTruthy();
-    expect(within(receivablesTable).getByText("Abonada")).toBeTruthy();
+    expect(within(receivablesTable).getAllByText(/\$\s*13\.500/)).toHaveLength(2);
+    expect(within(receivablesTable).getByText(/\$\s*0/)).toBeTruthy();
+    expect(within(receivablesTable).getByText("Pendiente")).toBeTruthy();
   });
 
   it("uses cash receipts as real inflows and keeps the remaining receivable projected", async () => {
@@ -615,20 +1369,25 @@ describe("App navigation", () => {
     ).toBeTruthy();
     expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*4\.500/)).toBeTruthy();
-    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
-    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Detalle" }));
+    const reviewPanel = screen.getByLabelText("Detalle historico NC-001");
     expect(within(reviewPanel).getByText("Entran 1 unidades")).toBeTruthy();
     expect(within(reviewPanel).getByText("Sin saldo por cobrar")).toBeTruthy();
     expect(within(reviewPanel).getByText("Arroz libra")).toBeTruthy();
     await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
     expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Detalle" }));
+    const historicalPanel = screen.getByLabelText("Detalle historico NC-001");
+    expect(within(historicalPanel).getByText("Confirmada")).toBeTruthy();
+    expect(within(historicalPanel).queryByRole("button", { name: "Confirmar nota" })).toBeNull();
+    await user.click(within(historicalPanel).getByRole("button", { name: "Cerrar" }));
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
       })
     ).toBeTruthy();
 
@@ -641,7 +1400,7 @@ describe("App navigation", () => {
       within(screen.getByRole("table", { name: "Productos registrados" })).getByRole(
         "row",
         {
-          name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+          name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
         }
       )
     ).toBeTruthy();
@@ -695,8 +1454,8 @@ describe("App navigation", () => {
     expect(within(creditNotesTable).getByText("Descuento")).toBeTruthy();
     expect(within(creditNotesTable).getByText("Borrador")).toBeTruthy();
     expect(within(creditNotesTable).getByText(/\$\s*1\.000/)).toBeTruthy();
-    await user.click(within(creditNotesTable).getByRole("button", { name: "Revisar" }));
-    const reviewPanel = screen.getByLabelText("Resumen antes de confirmar NC-001");
+    await user.click(within(creditNotesTable).getByRole("button", { name: "Detalle" }));
+    const reviewPanel = screen.getByLabelText("Detalle historico NC-001");
     expect(within(reviewPanel).getAllByText("Sin movimiento")).toHaveLength(2);
     await user.click(within(reviewPanel).getByRole("button", { name: "Confirmar nota" }));
     expect(within(creditNotesTable).getByText("Confirmada")).toBeTruthy();
@@ -706,7 +1465,7 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
       })
     ).toBeTruthy();
 
@@ -773,7 +1532,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
-    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
     await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
     await user.click(screen.getByRole("button", { name: "Cartera" }));
 
@@ -808,7 +1567,7 @@ describe("App navigation", () => {
     );
     await user.type(screen.getByLabelText("Cantidad a acreditar Arroz libra"), "1");
     await user.click(screen.getByRole("button", { name: "Registrar nota credito" }));
-    await user.click(screen.getByRole("button", { name: "Revisar" }));
+    await user.click(screen.getByRole("button", { name: "Detalle" }));
     await user.click(screen.getByRole("button", { name: "Confirmar nota" }));
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
@@ -880,12 +1639,12 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
       })
     ).toBeTruthy();
     expect(
       within(productsTable).getByRole("row", {
-        name: /PNL-001\s+Panela unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+        name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
       })
     ).toBeTruthy();
   });
@@ -923,12 +1682,12 @@ describe("App navigation", () => {
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
-        name: /ARZ-001\s+Arroz libra\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+3\s+1/
       })
     ).toBeTruthy();
     expect(
       within(productsTable).getByRole("row", {
-        name: /PNL-001\s+Panela unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+        name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
       })
     ).toBeTruthy();
 
@@ -2049,7 +2808,7 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
     await user.type(screen.getByLabelText("Codigo"), "PNL-001");
     await user.type(screen.getByLabelText("Producto"), "Panela unidad");
-    await user.type(screen.getByLabelText("Unidad"), "2");
+    await user.type(screen.getByLabelText("Cantidad inicial"), "2");
     await user.type(screen.getByLabelText("Costo"), "2500");
     await user.type(screen.getByLabelText("Precio venta"), "3500");
     await user.type(screen.getByLabelText("Stock minimo"), "1");

@@ -31,9 +31,12 @@ type CustomersSectionProps = {
   }) => CustomerSummary;
   customers: CustomerRecord[];
   formatCurrency: (minor: number) => string;
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
-  onSetCustomerActive: (customerId: string, active: boolean) => void;
-  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
+  onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
+  onSetCustomerActive: (customerId: string, active: boolean) => Promise<boolean>;
+  onUpdateCustomer: (
+    customerId: string,
+    input: CustomerFormState
+  ) => Promise<boolean>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -132,7 +135,7 @@ export function CustomersSection({
     setEditErrors({});
   }
 
-  function submitCustomer(event: FormEvent<HTMLFormElement>) {
+  async function submitCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors = onValidateCustomer(form);
@@ -143,13 +146,18 @@ export function CustomersSection({
       return;
     }
 
-    onCreateCustomer(form);
+    const customer = await onCreateCustomer(form);
+
+    if (!customer) {
+      return;
+    }
+
     setForm(emptyCustomerForm);
     setErrors({});
     setFormVisible(false);
   }
 
-  function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
+  async function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!editingCustomer) {
@@ -164,7 +172,12 @@ export function CustomersSection({
       return;
     }
 
-    onUpdateCustomer(editingCustomer.id, editForm);
+    const updated = await onUpdateCustomer(editingCustomer.id, editForm);
+
+    if (!updated) {
+      return;
+    }
+
     setEditErrors({});
     setEditingCustomerId(null);
   }
@@ -301,9 +314,12 @@ export function CustomersSection({
                 Editar cliente
               </SecondaryActionButton>
               <SecondaryActionButton
-                onClick={() =>
-                  onSetCustomerActive(selectedCustomer.id, !selectedCustomer.active)
-                }
+                onClick={() => {
+                  void onSetCustomerActive(
+                    selectedCustomer.id,
+                    !selectedCustomer.active
+                  );
+                }}
                 variant="compact"
               >
                 {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}

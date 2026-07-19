@@ -876,6 +876,31 @@ button,
   padding: 18px;
 }
 
+.product-adjustment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.product-adjustment-preview strong {
+  color: var(--text-primary);
+}
+
+.product-history-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.product-history-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -934,6 +959,25 @@ button,
 
 .settings-logo-field {
   grid-column: span 2;
+}
+
+.settings-sellers-manager {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+}
+
+.settings-seller-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-sellers-empty {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .settings-save-message {
@@ -1254,7 +1298,20 @@ button,
   background: var(--surface-soft);
 }
 
+.cash-receipt-detail-row td {
+  background: var(--surface-soft);
+}
+
 .credit-note-review {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  padding: 14px;
+}
+
+.cash-receipt-detail {
   display: grid;
   gap: 14px;
   border: 1px solid var(--border-default);
@@ -1376,6 +1433,83 @@ button,
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
+}
+
+.searchable-select {
+  position: relative;
+}
+
+.searchable-select-control {
+  position: relative;
+}
+
+.searchable-select-control input {
+  width: 100%;
+  padding-right: 42px;
+}
+
+.searchable-select-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 38px;
+  border: 0;
+  border-left: 1px solid var(--border-soft);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+
+.searchable-select-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-subtle);
+  padding: 6px;
+}
+
+.searchable-select-option {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.searchable-select-option:hover,
+.searchable-select-option[aria-selected="true"] {
+  background: var(--surface-muted);
+}
+
+.searchable-select-option span,
+.searchable-select-empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.native-select-compat {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .document-header,

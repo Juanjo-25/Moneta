@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -68,6 +68,7 @@ type PurchaseFormErrors = {
 type PurchaseProductFormState = {
   sku: string;
   name: string;
+  unit: string;
   cost: string;
   salePrice: string;
   minimumStock: string;
@@ -84,8 +85,8 @@ type PurchaseProductFormErrors = {
 type PurchasesSectionProps = {
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
-  onCreateProduct: (product: ProductRecord) => void;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -107,7 +108,7 @@ type PurchasesSectionProps = {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) => void;
+  }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
   purchases: PurchaseRecord[];
@@ -147,8 +148,11 @@ const emptyPurchaseProductForm: PurchaseProductFormState = {
   minimumStock: "",
   name: "",
   salePrice: "",
-  sku: ""
+  sku: "",
+  unit: "Unidad"
 };
+
+const productUnitOptions = ["Unidad", "Kg", "Libra", "Metro", "Caja", "Paquete"];
 
 const expenseCategoryOptions: Array<{
   label: string;
@@ -196,6 +200,7 @@ export function PurchasesSection({
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
   const activeSuppliers = suppliers.filter((supplier) => supplier.active);
+  const activeProducts = products.filter((product) => product.active);
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
@@ -216,6 +221,18 @@ export function PurchasesSection({
   const nextInvoiceNumber = String(purchases.length + 1).padStart(3, "0");
   const nextProductSku = String(products.length + 1).padStart(3, "0");
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+
+    setForm((currentForm) =>
+      currentForm.productId === selectedProduct.id
+        ? { ...currentForm, unit: selectedProduct.unit }
+        : currentForm
+    );
+  }, [selectedProduct]);
 
   function updateField(field: keyof PurchaseFormState, value: string) {
     setForm((currentForm) => ({
@@ -258,7 +275,7 @@ export function PurchasesSection({
     }));
   }
 
-  function submitSupplier() {
+  async function submitSupplier() {
     const nextErrors: SupplierFormErrors = {};
 
     if (supplierForm.name.trim() === "") {
@@ -271,7 +288,11 @@ export function PurchasesSection({
       return;
     }
 
-    const supplier = onCreateSupplier(supplierForm);
+    const supplier = await onCreateSupplier(supplierForm);
+
+    if (!supplier) {
+      return;
+    }
 
     setForm((currentForm) => ({ ...currentForm, supplierId: supplier.id }));
     setSupplierForm(emptySupplierForm);
@@ -279,7 +300,7 @@ export function PurchasesSection({
     setSupplierFormVisible(false);
   }
 
-  function submitProduct() {
+  async function submitProduct() {
     const nextErrors: PurchaseProductFormErrors = {};
     const minimumStock = parseNonNegativeInteger(productForm.minimumStock);
 
@@ -304,10 +325,16 @@ export function PurchasesSection({
       name: productForm.name.trim(),
       salePriceMinor: 0,
       sku: nextProductSku,
-      stock: 0
+      stock: 0,
+      unit: productForm.unit
     };
 
-    onCreateProduct(product);
+    const created = await onCreateProduct(product);
+
+    if (!created) {
+      return;
+    }
+
     setForm((currentForm) => ({ ...currentForm, productId: product.id }));
     setProductForm(emptyPurchaseProductForm);
     setProductErrors({});
@@ -421,7 +448,7 @@ export function PurchasesSection({
     }));
   }
 
-  function submitPurchase(event: FormEvent<HTMLFormElement>) {
+  async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: PurchaseFormErrors = {};
@@ -492,7 +519,7 @@ export function PurchasesSection({
       return;
     }
 
-    onRegisterPurchase({
+    const registered = await onRegisterPurchase({
       branch: form.branch.trim() || "Principal",
       concept: form.concept.trim() || "Factura de compra",
       dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
@@ -514,6 +541,11 @@ export function PurchasesSection({
       prefix: form.prefix.trim(),
       supplier: selectedSupplier
     });
+
+    if (!registered) {
+      return;
+    }
+
     setErrors({});
     setPurchaseLines([]);
     setForm(emptyPurchaseForm);
@@ -550,7 +582,7 @@ export function PurchasesSection({
               value={form.productId}
             >
               <option value="">Selecciona un producto</option>
-              {products.map((product) => (
+              {activeProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>
@@ -616,6 +648,20 @@ export function PurchasesSection({
               onChange={(value) => updateProductField("name", value)}
               value={productForm.name}
             />
+            <label className="field" htmlFor="unidad-producto-compra">
+              <span>Unidad producto</span>
+              <select
+                id="unidad-producto-compra"
+                onChange={(event) => updateProductField("unit", event.target.value)}
+                value={productForm.unit}
+              >
+                {productUnitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            </label>
             <TextField
               error={productErrors.minimumStock}
               inputMode="numeric"
