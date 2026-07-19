@@ -68,13 +68,13 @@ describe("checkNativeConnection", () => {
     await expect(checkNativeConnection()).resolves.toEqual({
       databasePath: "/tmp/moneta.sqlite3",
       kind: "connected",
-      message: "Base de datos lista (1 migracion inicial)."
+      message: "Base de datos lista."
     });
     expect(invoke).toHaveBeenCalledWith("health_check");
     expect(invoke).toHaveBeenCalledWith("database_status");
   });
 
-  it("formats several database migrations", async () => {
+  it("keeps migration details out of the public connection message", async () => {
     const invoke = vi.fn().mockImplementation((command: string) => {
       if (command === "health_check") {
         return Promise.resolve("Moneta Tauri conectado");
@@ -90,7 +90,7 @@ describe("checkNativeConnection", () => {
     await expect(checkNativeConnection()).resolves.toEqual({
       databasePath: "/tmp/moneta.sqlite3",
       kind: "connected",
-      message: "Base de datos lista (2 migraciones iniciales)."
+      message: "Base de datos lista."
     });
   });
 

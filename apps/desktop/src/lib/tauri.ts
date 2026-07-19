@@ -45,10 +45,6 @@ type DatabaseStatus = {
   path: string;
 };
 
-function formatMigrationCount(count: number): string {
-  return count === 1 ? "1 migracion inicial" : `${count} migraciones iniciales`;
-}
-
 export async function checkNativeConnection(): Promise<NativeConnectionStatus> {
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -66,7 +62,7 @@ export async function checkNativeConnection(): Promise<NativeConnectionStatus> {
     return {
       kind: "connected",
       databasePath: database.path,
-      message: `Base de datos lista (${formatMigrationCount(database.migrationCount)}).`
+      message: "Base de datos lista."
     };
   } catch {
     return {
