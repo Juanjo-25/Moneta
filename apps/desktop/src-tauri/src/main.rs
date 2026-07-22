@@ -1,7 +1,8 @@
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, DatabaseName, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 #[derive(Serialize)]
@@ -9,6 +10,22 @@ use tauri::Manager;
 struct DatabaseStatus {
     path: String,
     migration_count: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupStatus {
+    file_name: String,
+    path: String,
+    size_bytes: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AutomaticBackupStatus {
+    backup: Option<BackupStatus>,
+    created: bool,
+    deleted_old_backups: usize,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -429,6 +446,152 @@ fn save_app_settings(app: tauri::AppHandle, settings: AppSettings) -> Result<(),
         .map_err(|error| format!("No se pudo guardar la configuracion: {error}"))?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn create_database_backup(app: tauri::AppHandle) -> Result<BackupStatus, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let backup_dir = backup_directory(&app, &database_path)?;
+
+    create_database_backup_file(&connection, &backup_dir, "moneta-backup")
+}
+
+#[tauri::command]
+fn create_automatic_database_backup(
+    app: tauri::AppHandle,
+) -> Result<AutomaticBackupStatus, String> {
+    let database_path = database_path(&app)?;
+    let connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let backup_dir = backup_directory(&app, &database_path)?;
+    let current_day = current_epoch_day()?;
+    let automatic_prefix = format!("moneta-auto-backup-{current_day}");
+
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("No se pudo crear la carpeta de backups: {error}"))?;
+
+    if has_backup_for_prefix(&backup_dir, &automatic_prefix)? {
+        let deleted_old_backups = prune_automatic_backups(&backup_dir, 30)?;
+
+        return Ok(AutomaticBackupStatus {
+            backup: None,
+            created: false,
+            deleted_old_backups,
+        });
+    }
+
+    let backup = create_database_backup_file(&connection, &backup_dir, &automatic_prefix)?;
+    let deleted_old_backups = prune_automatic_backups(&backup_dir, 30)?;
+
+    Ok(AutomaticBackupStatus {
+        backup: Some(backup),
+        created: true,
+        deleted_old_backups,
+    })
+}
+
+fn backup_directory(app: &tauri::AppHandle, database_path: &PathBuf) -> Result<PathBuf, String> {
+    app.path()
+        .document_dir()
+        .map(|documents_dir| documents_dir.join("Moneta Backups"))
+        .or_else(|_| {
+            database_path
+                .parent()
+                .map(|data_dir| data_dir.join("backups"))
+                .ok_or(())
+        })
+        .map_err(|_| "No se pudo ubicar la carpeta para backups.".to_string())
+}
+
+fn create_database_backup_file(
+    connection: &Connection,
+    backup_dir: &PathBuf,
+    name_prefix: &str,
+) -> Result<BackupStatus, String> {
+    fs::create_dir_all(&backup_dir)
+        .map_err(|error| format!("No se pudo crear la carpeta de backups: {error}"))?;
+
+    let timestamp = current_epoch_seconds()?;
+    let file_name = format!("{name_prefix}-{timestamp}.sqlite3");
+    let backup_path = backup_dir.join(&file_name);
+
+    connection
+        .backup(DatabaseName::Main, &backup_path, None)
+        .map_err(|error| format!("No se pudo crear el backup: {error}"))?;
+
+    let size_bytes = fs::metadata(&backup_path)
+        .map_err(|error| format!("No se pudo leer el backup creado: {error}"))?
+        .len();
+
+    Ok(BackupStatus {
+        file_name,
+        path: backup_path.to_string_lossy().to_string(),
+        size_bytes,
+    })
+}
+
+fn has_backup_for_prefix(backup_dir: &PathBuf, name_prefix: &str) -> Result<bool, String> {
+    if !backup_dir.exists() {
+        return Ok(false);
+    }
+
+    let entries = fs::read_dir(backup_dir)
+        .map_err(|error| format!("No se pudo leer la carpeta de backups: {error}"))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("No se pudo leer un backup: {error}"))?;
+        let file_name = entry.file_name().to_string_lossy().to_string();
+
+        if file_name.starts_with(name_prefix) && file_name.ends_with(".sqlite3") {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn prune_automatic_backups(backup_dir: &PathBuf, keep_count: usize) -> Result<usize, String> {
+    if !backup_dir.exists() {
+        return Ok(0);
+    }
+
+    let mut backups: Vec<(String, PathBuf)> = fs::read_dir(backup_dir)
+        .map_err(|error| format!("No se pudo leer la carpeta de backups: {error}"))?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+
+            if file_name.starts_with("moneta-auto-backup-") && file_name.ends_with(".sqlite3") {
+                Some((file_name, entry.path()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    backups.sort_by(|left, right| right.0.cmp(&left.0));
+
+    let mut deleted_count = 0;
+    for (_, path) in backups.into_iter().skip(keep_count) {
+        fs::remove_file(&path)
+            .map_err(|error| format!("No se pudo borrar un backup antiguo: {error}"))?;
+        deleted_count += 1;
+    }
+
+    Ok(deleted_count)
+}
+
+fn current_epoch_seconds() -> Result<u64, String> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("No se pudo generar la fecha del backup: {error}"))
+        .map(|duration| duration.as_secs())
+}
+
+fn current_epoch_day() -> Result<u64, String> {
+    current_epoch_seconds().map(|seconds| seconds / 86_400)
 }
 
 #[tauri::command]
@@ -1140,7 +1303,10 @@ fn save_sale(app: tauri::AppHandle, input: SalePersistence) -> Result<(), String
                 )
                 .optional()
                 .map_err(|error| {
-                    format!("No se pudo validar el inventario de {}: {error}", line.product_name)
+                    format!(
+                        "No se pudo validar el inventario de {}: {error}",
+                        line.product_name
+                    )
                 })?;
 
             return match current_stock {
@@ -3061,6 +3227,8 @@ fn main() {
             database_status,
             get_app_settings,
             save_app_settings,
+            create_database_backup,
+            create_automatic_database_backup,
             list_products,
             save_product,
             list_inventory_adjustments,

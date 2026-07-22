@@ -980,6 +980,29 @@ button,
   font-weight: 700;
 }
 
+.settings-backup-panel {
+  display: grid;
+  gap: 12px;
+  max-width: 760px;
+}
+
+.settings-backup-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settings-backup-panel code {
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  padding: 10px 11px;
+  font-size: 12px;
+}
+
 .settings-save-message {
   align-self: center;
   color: var(--accent);

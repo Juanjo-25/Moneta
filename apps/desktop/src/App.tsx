@@ -17,6 +17,8 @@ import {
 } from "./lib/formatters";
 import {
   checkNativeConnection,
+  createNativeAutomaticDatabaseBackup,
+  createNativeDatabaseBackup,
   deleteNativeSale,
   loadNativeCreditNotes,
   loadNativeCustomers,
@@ -398,6 +400,17 @@ export function App() {
       }
 
       try {
+        await createNativeAutomaticDatabaseBackup();
+      } catch {
+        if (isMounted) {
+          setNativeConnectionStatus({
+            kind: "error",
+            message: "No se pudo crear el backup automatico."
+          });
+        }
+      }
+
+      try {
         const [
           storedSettings,
           storedProducts,
@@ -480,6 +493,10 @@ export function App() {
   function updateSettings(nextSettings: AppSettings) {
     setSettings(nextSettings);
     void saveNativeSettings(nextSettings);
+  }
+
+  async function createBackup() {
+    return createNativeDatabaseBackup();
   }
 
   const lowStockProducts = products.filter(isLowStock);
@@ -2101,6 +2118,7 @@ export function App() {
             salesDraft={salesDraft}
             section={activeSection}
             onSalesDraftChange={setSalesDraft}
+            onCreateBackup={createBackup}
             onSettingsChange={updateSettings}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}

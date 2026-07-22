@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkNativeConnection,
+  createNativeAutomaticDatabaseBackup,
+  createNativeDatabaseBackup,
   deleteNativeSale,
   loadNativeCreditNotes,
   loadNativeCustomers,
@@ -113,6 +115,8 @@ describe("native settings persistence", () => {
     setTauriInvoke();
 
     await expect(loadNativeSettings()).resolves.toBeNull();
+    await expect(createNativeAutomaticDatabaseBackup()).resolves.toBeNull();
+    await expect(createNativeDatabaseBackup()).resolves.toBeNull();
     await expect(
       saveNativeSettings({
         company: {
@@ -185,6 +189,38 @@ describe("native settings persistence", () => {
 
     await expect(saveNativeSettings(settings)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_app_settings", { settings });
+  });
+
+  it("creates a database backup through Tauri", async () => {
+    const backup = {
+      fileName: "moneta-backup-1784670000.sqlite3",
+      path: "/tmp/moneta/backups/moneta-backup-1784670000.sqlite3",
+      sizeBytes: 4096
+    };
+    const invoke = vi.fn().mockResolvedValue(backup);
+    setTauriInvoke(invoke);
+
+    await expect(createNativeDatabaseBackup()).resolves.toEqual(backup);
+    expect(invoke).toHaveBeenCalledWith("create_database_backup");
+  });
+
+  it("creates an automatic database backup through Tauri", async () => {
+    const backupStatus = {
+      backup: {
+        fileName: "moneta-auto-backup-20657-1784670000.sqlite3",
+        path: "/tmp/Moneta Backups/moneta-auto-backup-20657-1784670000.sqlite3",
+        sizeBytes: 4096
+      },
+      created: true,
+      deletedOldBackups: 1
+    };
+    const invoke = vi.fn().mockResolvedValue(backupStatus);
+    setTauriInvoke(invoke);
+
+    await expect(createNativeAutomaticDatabaseBackup()).resolves.toEqual(
+      backupStatus
+    );
+    expect(invoke).toHaveBeenCalledWith("create_automatic_database_backup");
   });
 });
 

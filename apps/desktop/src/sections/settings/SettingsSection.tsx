@@ -13,6 +13,7 @@ import { TextField } from "../../components/TextField";
 import type { AppSettings, CompanySettings, InvoiceDesignSettings } from "../../types";
 
 type SettingsSectionProps = {
+  onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
 };
@@ -25,7 +26,20 @@ const accentOptions = [
   { label: "Vino", value: "#9f1239" }
 ];
 
+function formatBackupSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function SettingsSection({
+  onCreateBackup,
   settings,
   onSettingsChange
 }: SettingsSectionProps) {
@@ -34,6 +48,14 @@ export function SettingsSection({
   const [sellerError, setSellerError] = useState<string | null>(null);
   const [editingSellerIndex, setEditingSellerIndex] = useState<number | null>(null);
   const [savedMessageVisible, setSavedMessageVisible] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{
+    kind: "idle" | "creating" | "success" | "error";
+    message: string;
+    path?: string;
+  }>({
+    kind: "idle",
+    message: "Crea una copia local de la base de datos antes de cambios importantes."
+  });
   const hasUnsavedChanges =
     JSON.stringify(draftSettings) !== JSON.stringify(settings);
 
@@ -149,8 +171,66 @@ export function SettingsSection({
     setSavedMessageVisible(true);
   }
 
+  async function createBackup() {
+    setBackupStatus({
+      kind: "creating",
+      message: "Creando backup..."
+    });
+
+    try {
+      const backup = await onCreateBackup();
+
+      if (!backup) {
+        setBackupStatus({
+          kind: "error",
+          message: "Abre Moneta como app de escritorio para crear backups."
+        });
+        return;
+      }
+
+      setBackupStatus({
+        kind: "success",
+        message: `Backup creado (${formatBackupSize(backup.sizeBytes)}).`,
+        path: backup.path
+      });
+    } catch (error) {
+      setBackupStatus({
+        kind: "error",
+        message:
+          error instanceof Error && error.message.trim() !== ""
+            ? error.message
+            : "No se pudo crear el backup."
+      });
+    }
+  }
+
   return (
     <form className="settings-layout" onSubmit={saveChanges}>
+      <section className="section-form-shell settings-form">
+        <div className="panel-header">
+          <div>
+            <h2>Backups</h2>
+            <span>Copias locales de seguridad de la base de datos.</span>
+          </div>
+        </div>
+
+        <div className="settings-backup-panel">
+          <p>{backupStatus.message}</p>
+          {backupStatus.path ? (
+            <code title={backupStatus.path}>{backupStatus.path}</code>
+          ) : null}
+          <FormActions>
+            <SecondaryActionButton
+              disabled={backupStatus.kind === "creating"}
+              onClick={createBackup}
+              type="button"
+            >
+              {backupStatus.kind === "creating" ? "Creando..." : "Crear backup"}
+            </SecondaryActionButton>
+          </FormActions>
+        </div>
+      </section>
+
       <section className="section-form-shell settings-form">
         <div className="panel-header">
           <div>

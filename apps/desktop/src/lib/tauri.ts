@@ -45,6 +45,18 @@ type DatabaseStatus = {
   path: string;
 };
 
+export type BackupStatus = {
+  fileName: string;
+  path: string;
+  sizeBytes: number;
+};
+
+export type AutomaticBackupStatus = {
+  backup: BackupStatus | null;
+  created: boolean;
+  deletedOldBackups: number;
+};
+
 export async function checkNativeConnection(): Promise<NativeConnectionStatus> {
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -92,6 +104,28 @@ export async function saveNativeSettings(settings: AppSettings): Promise<boolean
   await invoke<void>("save_app_settings", { settings });
 
   return true;
+}
+
+export async function createNativeDatabaseBackup(): Promise<BackupStatus | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<BackupStatus>("create_database_backup");
+}
+
+export async function createNativeAutomaticDatabaseBackup(): Promise<
+  AutomaticBackupStatus | null
+> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<AutomaticBackupStatus>("create_automatic_database_backup");
 }
 
 export async function loadNativeProducts(): Promise<ProductRecord[] | null> {
