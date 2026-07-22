@@ -1,4 +1,11 @@
-import { useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent
+} from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -7,6 +14,7 @@ import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
+import { parseProductImportCsv } from "../../lib/product-import";
 import type {
   InventoryAdjustmentRecord,
   InventoryAdjustmentType,
@@ -140,6 +148,10 @@ export function ProductsSection({
   const [movementSourceFilter, setMovementSourceFilter] = useState<
     InventoryMovementSource | ""
   >("");
+  const [importMessage, setImportMessage] = useState("");
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importingProducts, setImportingProducts] = useState(false);
+  const editFormRef = useRef<HTMLFormElement | null>(null);
   const editingProduct =
     products.find((product) => product.id === editingProductId) ?? null;
   const activeProducts = products.filter((product) => product.active);
@@ -172,6 +184,17 @@ export function ProductsSection({
 
     return matchesProduct && matchesSource;
   });
+
+  useEffect(() => {
+    if (!editingProduct || !editForm) {
+      return;
+    }
+
+    editFormRef.current?.scrollIntoView?.({
+      behavior: "smooth",
+      block: "start"
+    });
+  }, [editingProduct, editForm]);
 
   function updateField(
     field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
@@ -252,6 +275,7 @@ export function ProductsSection({
   }
 
   function startEditProduct(product: ProductRecord) {
+    onCloseForm();
     setEditingProductId(product.id);
     setEditForm({
       cost: formatIntegerInput(String(product.costMinor)),
@@ -412,76 +436,170 @@ export function ProductsSection({
     setAdjustmentMessage("");
   }
 
+  async function importProductsFromCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setImportingProducts(true);
+    setImportMessage("");
+    setImportErrors([]);
+
+    try {
+      const content = await readFileAsText(file);
+      const result = parseProductImportCsv(content, products);
+
+      if (result.errors.length > 0) {
+        setImportErrors(result.errors);
+        setImportMessage("");
+        return;
+      }
+
+      if (result.products.length === 0) {
+        setImportErrors(["El archivo no contiene productos validos."]);
+        setImportMessage("");
+        return;
+      }
+
+      for (const [index, product] of result.products.entries()) {
+        const created = await onCreateProduct({
+          ...product,
+          active: true,
+          id: `product-import-${Date.now()}-${index}`
+        });
+
+        if (!created) {
+          setImportErrors([
+            `No se pudo guardar ${product.sku}. Revisa la base de datos local.`
+          ]);
+          setImportMessage("");
+          return;
+        }
+      }
+
+      setImportMessage(`${result.products.length} productos importados.`);
+      setImportErrors([]);
+    } catch {
+      setImportErrors(["No se pudo leer el archivo seleccionado."]);
+      setImportMessage("");
+    } finally {
+      setImportingProducts(false);
+    }
+  }
+
   return (
     <section className="products-layout">
       {formVisible ? (
-        <form className="product-form section-form-shell" onSubmit={submitProduct}>
-          <div className="form-grid">
-            <TextField
-              error={errors.sku}
-              label="Codigo"
-              onChange={(value) => updateField("sku", value)}
-              value={form.sku}
-            />
-            <TextField
-              error={errors.name}
-              label="Producto"
-              onChange={(value) => updateField("name", value)}
-              value={form.name}
-            />
-            <label className="field" htmlFor="unidad-medida-producto">
-              <span>Unidad</span>
-              <select
-                aria-invalid={Boolean(errors.unit)}
-                id="unidad-medida-producto"
-                onChange={(event) => updateField("unit", event.target.value)}
-                value={form.unit}
-              >
-                {productUnitOptions.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
-                  </option>
-                ))}
-              </select>
-              {errors.unit ? <small>{errors.unit}</small> : null}
+        <section className="product-create-shell">
+          <form className="product-form section-form-shell" onSubmit={submitProduct}>
+            <div className="form-grid">
+              <TextField
+                error={errors.sku}
+                label="Codigo"
+                onChange={(value) => updateField("sku", value)}
+                value={form.sku}
+              />
+              <TextField
+                error={errors.name}
+                label="Producto"
+                onChange={(value) => updateField("name", value)}
+                value={form.name}
+              />
+              <label className="field" htmlFor="unidad-medida-producto">
+                <span>Unidad</span>
+                <select
+                  aria-invalid={Boolean(errors.unit)}
+                  id="unidad-medida-producto"
+                  onChange={(event) => updateField("unit", event.target.value)}
+                  value={form.unit}
+                >
+                  {productUnitOptions.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+                {errors.unit ? <small>{errors.unit}</small> : null}
+              </label>
+              <TextField
+                error={errors.quantity}
+                inputMode="numeric"
+                label="Cantidad inicial"
+                onChange={(value) => updateField("quantity", value)}
+                value={form.quantity}
+              />
+              <TextField
+                error={errors.cost}
+                inputMode="numeric"
+                label="Costo"
+                onChange={(value) => updateMoneyField("cost", value)}
+                value={form.cost}
+              />
+              <TextField
+                error={errors.salePrice}
+                inputMode="numeric"
+                label="Precio venta"
+                onChange={(value) => updateMoneyField("salePrice", value)}
+                value={form.salePrice}
+              />
+              <TextField
+                error={errors.minimumStock}
+                inputMode="numeric"
+                label="Stock minimo"
+                onChange={(value) => updateField("minimumStock", value)}
+                value={form.minimumStock}
+              />
+            </div>
+            <FormActions>
+              <PrimaryActionButton type="submit">Guardar producto</PrimaryActionButton>
+            </FormActions>
+          </form>
+
+          <div className="product-import-panel">
+            <label className="field product-import-field" htmlFor="productos-import-csv">
+              <span>Importar Excel guardado como CSV</span>
+              <input
+                accept=".csv,text/csv"
+                disabled={importingProducts}
+                id="productos-import-csv"
+                onChange={importProductsFromCsv}
+                type="file"
+              />
             </label>
-            <TextField
-              error={errors.quantity}
-              inputMode="numeric"
-              label="Cantidad inicial"
-              onChange={(value) => updateField("quantity", value)}
-              value={form.quantity}
-            />
-            <TextField
-              error={errors.cost}
-              inputMode="numeric"
-              label="Costo"
-              onChange={(value) => updateMoneyField("cost", value)}
-              value={form.cost}
-            />
-            <TextField
-              error={errors.salePrice}
-              inputMode="numeric"
-              label="Precio venta"
-              onChange={(value) => updateMoneyField("salePrice", value)}
-              value={form.salePrice}
-            />
-            <TextField
-              error={errors.minimumStock}
-              inputMode="numeric"
-              label="Stock minimo"
-              onChange={(value) => updateField("minimumStock", value)}
-              value={form.minimumStock}
-            />
+            <p className="product-import-help">
+              Acepta columnas producto, costo y precio venta. Si faltan codigo o stock,
+              quedan pendientes para editar.
+            </p>
+            {importMessage ? <p className="form-success">{importMessage}</p> : null}
+            {importErrors.length > 0 ? (
+              <div className="form-error product-import-errors" role="alert">
+                {importErrors.slice(0, 6).map((error) => (
+                  <p key={error}>{error}</p>
+                ))}
+                {importErrors.length > 6 ? (
+                  <p>{importErrors.length - 6} errores adicionales.</p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          <FormActions>
-            <PrimaryActionButton type="submit">Guardar producto</PrimaryActionButton>
-          </FormActions>
-        </form>
+        </section>
       ) : null}
 
       {editingProduct && editForm ? (
-        <form className="product-form section-form-shell" onSubmit={submitEditProduct}>
+        <form
+          className="product-form product-edit-form section-form-shell"
+          onSubmit={submitEditProduct}
+          ref={editFormRef}
+        >
+          <div className="panel-header">
+            <div>
+              <h2>Editar producto</h2>
+              <span>{editingProduct.name}</span>
+            </div>
+          </div>
           <div className="form-grid">
             <TextField
               error={editErrors.sku}
@@ -660,6 +778,20 @@ export function ProductsSection({
       )}
     </section>
   );
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.addEventListener("load", () => {
+      resolve(String(reader.result ?? ""));
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error("No se pudo leer el archivo."));
+    });
+    reader.readAsText(file);
+  });
 }
 
 type InventoryMovementsTableProps = {
@@ -925,6 +1057,10 @@ function ProductTable({
   onSetProductActive,
   products
 }: ProductTableProps) {
+  const [openActionsProductId, setOpenActionsProductId] = useState<string | null>(
+    null
+  );
+
   return (
     <DataTable ariaLabel="Productos registrados">
       <DataTableHeader
@@ -961,19 +1097,45 @@ function ProductTable({
                     : "Disponible"}
               </StatusBadge>
             </td>
-            <td>
-              <SecondaryActionButton
-                onClick={() => onEditProduct(product)}
-                variant="compact"
-              >
-                Editar
-              </SecondaryActionButton>
-              <SecondaryActionButton
-                onClick={() => onSetProductActive(product, !product.active)}
-                variant="compact"
-              >
-                {product.active ? "Inactivar" : "Reactivar"}
-              </SecondaryActionButton>
+            <td className="product-actions-cell">
+              <div className="product-actions-menu">
+                <button
+                  aria-expanded={openActionsProductId === product.id}
+                  aria-haspopup="menu"
+                  aria-label={`Acciones de ${product.name}`}
+                  className="product-actions-trigger"
+                  onClick={() =>
+                    setOpenActionsProductId((currentId) =>
+                      currentId === product.id ? null : product.id
+                    )
+                  }
+                  type="button"
+                >
+                  ...
+                </button>
+              </div>
+              {openActionsProductId === product.id ? (
+                <div className="product-actions-popover" role="menu">
+                  <SecondaryActionButton
+                    onClick={() => {
+                      onEditProduct(product);
+                      setOpenActionsProductId(null);
+                    }}
+                    variant="compact"
+                  >
+                    Editar
+                  </SecondaryActionButton>
+                  <SecondaryActionButton
+                    onClick={() => {
+                      onSetProductActive(product, !product.active);
+                      setOpenActionsProductId(null);
+                    }}
+                    variant="compact"
+                  >
+                    {product.active ? "Inactivar" : "Reactivar"}
+                  </SecondaryActionButton>
+                </div>
+              ) : null}
             </td>
           </tr>
         ))}

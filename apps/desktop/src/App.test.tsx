@@ -791,6 +791,39 @@ describe("App navigation", () => {
     expect(screen.getByText("Arroz libra")).toBeTruthy();
   });
 
+  it("imports products from an Excel CSV export", async () => {
+    const user = userEvent.setup();
+    const file = new File(
+      [
+        [
+          "Codigo;Producto;Unidad;Cantidad inicial;Costo;Precio venta;Stock minimo",
+          "ARZ-001;Arroz libra;Libra;4;3200;4500;1",
+          "FRJ-001;Frijol kilo;Kg;6;2800;5200;2"
+        ].join("\n")
+      ],
+      "productos.csv",
+      { type: "text/csv" }
+    );
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    expect(screen.queryByLabelText("Importar Excel guardado como CSV")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Nuevo producto" }));
+    await user.upload(screen.getByLabelText("Importar Excel guardado como CSV"), file);
+
+    await screen.findByText("2 productos importados.");
+    const productsTable = screen.getByRole("table", {
+      name: "Productos registrados"
+    });
+
+    expect(within(productsTable).getByRole("cell", { name: "ARZ-001" })).toBeTruthy();
+    expect(within(productsTable).getByRole("cell", { name: "Arroz libra" })).toBeTruthy();
+    expect(within(productsTable).getByRole("cell", { name: "FRJ-001" })).toBeTruthy();
+    expect(within(productsTable).getByRole("cell", { name: "Frijol kilo" })).toBeTruthy();
+  });
+
   it("edits and inactivates a product without offering it in new sales", async () => {
     const user = userEvent.setup();
 
@@ -798,7 +831,12 @@ describe("App navigation", () => {
 
     await createProductFixture(user);
     await user.click(screen.getByRole("button", { name: "Productos" }));
+    let productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    await user.click(
+      within(productsTable).getByRole("button", { name: "Acciones de Arroz libra" })
+    );
     await user.click(screen.getByRole("button", { name: "Editar" }));
+    expect(screen.getByRole("heading", { name: "Editar producto" })).toBeTruthy();
     await user.clear(screen.getByLabelText("Producto"));
     await user.type(screen.getByLabelText("Producto"), "Arroz premium");
     await user.selectOptions(screen.getByLabelText("Unidad"), "Kg");
@@ -810,13 +848,16 @@ describe("App navigation", () => {
     await user.type(screen.getByLabelText("Stock minimo"), "2");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
-    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(
       within(productsTable).getByRole("row", {
         name: /ARZ-001\s+Arroz premium\s+Kg\s+\$\s*3\.500\s+\$\s*5\.200\s+4\s+2/
       })
     ).toBeTruthy();
 
+    await user.click(
+      within(productsTable).getByRole("button", { name: "Acciones de Arroz premium" })
+    );
     await user.click(within(productsTable).getByRole("button", { name: "Inactivar" }));
     expect(within(productsTable).getByText("Inactivo")).toBeTruthy();
 

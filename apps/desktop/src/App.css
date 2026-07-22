@@ -872,8 +872,45 @@ button,
   gap: 18px;
 }
 
+.product-create-shell {
+  display: grid;
+  gap: 0;
+}
+
 .product-form {
   padding: 18px;
+}
+
+.product-import-panel {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border-soft);
+  padding: 12px 18px 16px;
+}
+
+.product-import-field {
+  max-width: 520px;
+}
+
+.product-import-field span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.product-import-help {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-import-errors {
+  display: grid;
+  gap: 6px;
+}
+
+.product-import-errors p {
+  margin: 0;
 }
 
 .product-adjustment-preview {
@@ -899,6 +936,49 @@ button,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.product-actions-cell {
+  position: relative;
+}
+
+.product-actions-menu {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.product-actions-trigger {
+  width: 42px;
+  height: 38px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.product-actions-trigger:hover,
+.product-actions-trigger[aria-expanded="true"] {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+.product-actions-popover {
+  position: absolute;
+  z-index: 3;
+  top: 54px;
+  right: 22px;
+  display: grid;
+  min-width: 128px;
+  gap: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-subtle);
+  padding: 8px;
 }
 
 .form-grid {
@@ -1843,6 +1923,13 @@ button,
   color: var(--danger);
   font-size: 14px;
   font-weight: 600;
+}
+
+.form-success {
+  margin: 0;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .purchases-layout {
