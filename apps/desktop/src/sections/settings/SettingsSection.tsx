@@ -4,6 +4,8 @@ import {
   type ChangeEvent,
   type FormEvent
 } from "react";
+import { DataTable } from "../../components/DataTable";
+import { DataTableHeader } from "../../components/DataTableHeader";
 import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
@@ -11,6 +13,7 @@ import { TextField } from "../../components/TextField";
 import type { AppSettings, CompanySettings, InvoiceDesignSettings } from "../../types";
 
 type SettingsSectionProps = {
+  onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
 };
@@ -23,17 +26,44 @@ const accentOptions = [
   { label: "Vino", value: "#9f1239" }
 ];
 
+function formatBackupSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function SettingsSection({
+  onCreateBackup,
   settings,
   onSettingsChange
 }: SettingsSectionProps) {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
+  const [sellerName, setSellerName] = useState("");
+  const [sellerError, setSellerError] = useState<string | null>(null);
+  const [editingSellerIndex, setEditingSellerIndex] = useState<number | null>(null);
   const [savedMessageVisible, setSavedMessageVisible] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{
+    kind: "idle" | "creating" | "success" | "error";
+    message: string;
+    path?: string;
+  }>({
+    kind: "idle",
+    message: "Crea una copia local de la base de datos antes de cambios importantes."
+  });
   const hasUnsavedChanges =
     JSON.stringify(draftSettings) !== JSON.stringify(settings);
 
   useEffect(() => {
     setDraftSettings(settings);
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
   }, [settings]);
 
   function updateCompany(field: keyof CompanySettings, value: string) {
@@ -58,6 +88,68 @@ export function SettingsSection({
     setSavedMessageVisible(false);
   }
 
+  function saveSeller() {
+    const normalizedSeller = sellerName.trim();
+
+    if (normalizedSeller === "") {
+      setSellerError("El nombre del vendedor es obligatorio.");
+      return;
+    }
+
+    const duplicate = draftSettings.sellers.some(
+      (seller, index) =>
+        index !== editingSellerIndex &&
+        seller.toLocaleLowerCase() === normalizedSeller.toLocaleLowerCase()
+    );
+
+    if (duplicate) {
+      setSellerError("Ya existe un vendedor con ese nombre.");
+      return;
+    }
+
+    setDraftSettings((currentSettings) => {
+      const sellers =
+        editingSellerIndex === null
+          ? [...currentSettings.sellers, normalizedSeller]
+          : currentSettings.sellers.map((seller, index) =>
+              index === editingSellerIndex ? normalizedSeller : seller
+            );
+
+      return {
+        ...currentSettings,
+        sellers
+      };
+    });
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
+    setSavedMessageVisible(false);
+  }
+
+  function editSeller(index: number) {
+    setSellerName(draftSettings.sellers[index] ?? "");
+    setSellerError(null);
+    setEditingSellerIndex(index);
+    setSavedMessageVisible(false);
+  }
+
+  function deleteSeller(index: number) {
+    setDraftSettings((currentSettings) => ({
+      ...currentSettings,
+      sellers: currentSettings.sellers.filter((_, sellerIndex) => sellerIndex !== index)
+    }));
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
+    setSavedMessageVisible(false);
+  }
+
+  function cancelSellerEdit() {
+    setSellerName("");
+    setSellerError(null);
+    setEditingSellerIndex(null);
+  }
+
   function handleLogoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
@@ -79,8 +171,66 @@ export function SettingsSection({
     setSavedMessageVisible(true);
   }
 
+  async function createBackup() {
+    setBackupStatus({
+      kind: "creating",
+      message: "Creando backup..."
+    });
+
+    try {
+      const backup = await onCreateBackup();
+
+      if (!backup) {
+        setBackupStatus({
+          kind: "error",
+          message: "Abre Moneta como app de escritorio para crear backups."
+        });
+        return;
+      }
+
+      setBackupStatus({
+        kind: "success",
+        message: `Backup creado (${formatBackupSize(backup.sizeBytes)}).`,
+        path: backup.path
+      });
+    } catch (error) {
+      setBackupStatus({
+        kind: "error",
+        message:
+          error instanceof Error && error.message.trim() !== ""
+            ? error.message
+            : "No se pudo crear el backup."
+      });
+    }
+  }
+
   return (
     <form className="settings-layout" onSubmit={saveChanges}>
+      <section className="section-form-shell settings-form">
+        <div className="panel-header">
+          <div>
+            <h2>Backups</h2>
+            <span>Copias locales de seguridad de la base de datos.</span>
+          </div>
+        </div>
+
+        <div className="settings-backup-panel">
+          <p>{backupStatus.message}</p>
+          {backupStatus.path ? (
+            <code title={backupStatus.path}>{backupStatus.path}</code>
+          ) : null}
+          <FormActions>
+            <SecondaryActionButton
+              disabled={backupStatus.kind === "creating"}
+              onClick={createBackup}
+              type="button"
+            >
+              {backupStatus.kind === "creating" ? "Creando..." : "Crear backup"}
+            </SecondaryActionButton>
+          </FormActions>
+        </div>
+      </section>
+
       <section className="section-form-shell settings-form">
         <div className="panel-header">
           <div>
@@ -188,6 +338,71 @@ export function SettingsSection({
               value={draftSettings.invoice.observations}
             />
           </label>
+        </div>
+      </section>
+
+      <section className="section-form-shell settings-form">
+        <div className="panel-header">
+          <div>
+            <h2>Vendedores</h2>
+            <span>Lista disponible al registrar o modificar ventas.</span>
+          </div>
+        </div>
+
+        <div className="settings-sellers-manager">
+          <TextField
+            error={sellerError ?? undefined}
+            label="Nombre vendedor"
+            onChange={(value) => {
+              setSellerName(value);
+              setSellerError(null);
+              setSavedMessageVisible(false);
+            }}
+            value={sellerName}
+          />
+          <FormActions>
+            {editingSellerIndex === null ? null : (
+              <SecondaryActionButton onClick={cancelSellerEdit} type="button">
+                Cancelar edicion
+              </SecondaryActionButton>
+            )}
+            <PrimaryActionButton onClick={saveSeller} type="button">
+              {editingSellerIndex === null ? "Agregar vendedor" : "Guardar vendedor"}
+            </PrimaryActionButton>
+          </FormActions>
+
+          {draftSettings.sellers.length > 0 ? (
+            <DataTable ariaLabel="Vendedores configurados">
+              <DataTableHeader labels={["Vendedor", "Acciones"]} />
+              <tbody>
+                {draftSettings.sellers.map((seller, index) => (
+                  <tr key={seller}>
+                    <td>{seller}</td>
+                    <td>
+                      <div className="settings-seller-actions">
+                        <SecondaryActionButton
+                          onClick={() => editSeller(index)}
+                          type="button"
+                        >
+                          Editar
+                        </SecondaryActionButton>
+                        <SecondaryActionButton
+                          onClick={() => deleteSeller(index)}
+                          type="button"
+                        >
+                          Eliminar
+                        </SecondaryActionButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+          ) : (
+            <p className="settings-sellers-empty">
+              Sin vendedores configurados. Ventas permite escribir el vendedor manualmente.
+            </p>
+          )}
         </div>
       </section>
 

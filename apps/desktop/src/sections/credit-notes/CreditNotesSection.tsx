@@ -35,11 +35,11 @@ type CreditNotesSectionProps = {
       saleLineId: string;
       quantity: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
-  ) => void;
+  ) => Promise<void>;
   parseNonNegativeInteger: (value: string) => number | null;
   sales: SaleRecord[];
 };
@@ -197,7 +197,7 @@ export function CreditNotesSection({
     }));
   }
 
-  function submitCreditNote(event: FormEvent<HTMLFormElement>) {
+  async function submitCreditNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: CreditNoteFormErrors = {};
@@ -234,7 +234,7 @@ export function CreditNotesSection({
       return;
     }
 
-    const submitError = onRegisterCreditNote({
+    const submitError = await onRegisterCreditNote({
       adjustmentType: form.adjustmentType,
       issuedAt: form.issuedAt.trim(),
       lines: selectedCreditLines.map(({ amountMinor, line, quantity }) => ({
@@ -496,15 +496,37 @@ export function CreditNotesSection({
                             setReviewCreditNoteId(isReviewing ? null : creditNote.id)
                           }
                         >
-                          Revisar
+                          Detalle
                         </PrimaryActionButton>
                       ) : null}
                       {creditNote.status === "confirmed" ? (
+                        <>
+                          <SecondaryActionButton
+                            onClick={() =>
+                              setReviewCreditNoteId(
+                                isReviewing ? null : creditNote.id
+                              )
+                            }
+                            variant="compact"
+                          >
+                            Detalle
+                          </SecondaryActionButton>
+                          <SecondaryActionButton
+                            onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                            variant="compact"
+                          >
+                            Anular
+                          </SecondaryActionButton>
+                        </>
+                      ) : null}
+                      {creditNote.status === "void" ? (
                         <SecondaryActionButton
-                          onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                          onClick={() =>
+                            setReviewCreditNoteId(isReviewing ? null : creditNote.id)
+                          }
                           variant="compact"
                         >
-                          Anular
+                          Detalle
                         </SecondaryActionButton>
                       ) : null}
                     </td>
@@ -516,8 +538,8 @@ export function CreditNotesSection({
                           creditNote={creditNote}
                           formatCurrency={formatCurrency}
                           onCancel={() => setReviewCreditNoteId(null)}
-                          onConfirm={() => {
-                            onSetCreditNoteStatus(creditNote.id, "confirmed");
+                          onConfirm={async () => {
+                            await onSetCreditNoteStatus(creditNote.id, "confirmed");
                             setReviewCreditNoteId(null);
                           }}
                           salePaymentStatus={relatedSale?.paymentStatus ?? "paid"}
@@ -560,26 +582,38 @@ function CreditNoteReviewPanel({
     (total, line) => total + line.quantity,
     0
   );
+  const isDraft = creditNote.status === "draft";
 
   return (
     <section
-      aria-label={`Resumen antes de confirmar ${creditNote.number}`}
+      aria-label={`Detalle historico ${creditNote.number}`}
       className="credit-note-review"
     >
       <div className="credit-note-review-heading">
         <div>
-          <span>Resumen antes de confirmar</span>
+          <span>{isDraft ? "Resumen antes de confirmar" : "Detalle historico"}</span>
           <strong>{creditNote.number}</strong>
         </div>
         <div className="credit-note-review-actions">
           <SecondaryActionButton onClick={onCancel} variant="compact">
-            Cancelar
+            Cerrar
           </SecondaryActionButton>
-          <PrimaryActionButton onClick={onConfirm}>Confirmar nota</PrimaryActionButton>
+          {isDraft ? (
+            <PrimaryActionButton onClick={onConfirm}>Confirmar nota</PrimaryActionButton>
+          ) : null}
         </div>
       </div>
 
       <div className="credit-note-impact-grid">
+        <div>
+          <span>Estado</span>
+          <strong>{formatCreditNoteStatus(creditNote.status)}</strong>
+          <small>
+            {creditNote.status === "void"
+              ? creditNote.voidedAtLabel
+              : creditNote.confirmedAtLabel || creditNote.occurredAtLabel}
+          </small>
+        </div>
         <div>
           <span>Venta afectada</span>
           <strong>{creditNote.invoiceNumber}</strong>

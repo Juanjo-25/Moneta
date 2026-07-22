@@ -25,11 +25,28 @@ export type ProductRecord = {
   id: string;
   sku: string;
   name: string;
+  unit: string;
   costMinor: number;
   salePriceMinor: number;
   minimumStock: number;
   stock: number;
   active: boolean;
+};
+
+export type InventoryAdjustmentType = "entry" | "exit" | "set";
+
+export type InventoryAdjustmentRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  adjustmentType: InventoryAdjustmentType;
+  quantity: number;
+  previousStock: number;
+  nextStock: number;
+  reason: string;
+  occurredAtMs: number;
+  occurredAtLabel: string;
 };
 
 export type CustomerRecord = {
@@ -113,9 +130,14 @@ export type ReceivableRecord = {
 };
 
 export type CustomerReceiptRecord = {
+  active: boolean;
   id: string;
   number: string;
   receivableId: string;
+  receivableOriginalAmountMinor: number;
+  receivablePaidAmountMinorBefore: number;
+  receivableBalanceMinorBefore: number;
+  receivableDueAt: string;
   saleId: string;
   customerId: string;
   customerName: string;
@@ -124,6 +146,8 @@ export type CustomerReceiptRecord = {
   receivedAt: string;
   receivedAtMs: number;
   receivedAtLabel: string;
+  voidedAtLabel: string;
+  voidedAtMs: number;
 };
 
 export type CreditNoteLineRecord = {
@@ -169,6 +193,14 @@ export type CreditNoteRecord = {
 };
 
 export type PurchasePaymentStatus = "paid" | "pending";
+export type PurchaseExpenseCategory =
+  | "inventory"
+  | "services"
+  | "payroll"
+  | "rent"
+  | "transport"
+  | "taxes"
+  | "other";
 
 export type PurchaseLineRecord = {
   id: string;
@@ -189,6 +221,7 @@ export type PurchaseRecord = {
   id: string;
   supplierId: string;
   supplierName: string;
+  expenseCategory: PurchaseExpenseCategory;
   branch: string;
   prefix: string;
   currency: "COP";
@@ -237,6 +270,7 @@ export type SupplierPayableRecord = {
   id: string;
   supplierId: string;
   supplierName: string;
+  expenseCategory: PurchaseExpenseCategory;
   purchaseId: string;
   invoiceNumber: string;
   originalAmountMinor: number;
@@ -252,6 +286,7 @@ export type SupplierPaymentRecord = {
   purchaseId: string;
   supplierId: string;
   supplierName: string;
+  expenseCategory: PurchaseExpenseCategory;
   amountMinor: number;
   paidAtMs: number;
   paidAtLabel: string;
@@ -277,4 +312,5 @@ export type InvoiceDesignSettings = {
 export type AppSettings = {
   company: CompanySettings;
   invoice: InvoiceDesignSettings;
+  sellers: string[];
 };

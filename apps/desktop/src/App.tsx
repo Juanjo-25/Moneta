@@ -15,6 +15,38 @@ import {
   formatIntegerInput,
   parseNonNegativeInteger
 } from "./lib/formatters";
+import {
+  checkNativeConnection,
+  createNativeAutomaticDatabaseBackup,
+  createNativeDatabaseBackup,
+  deleteNativeSale,
+  loadNativeCreditNotes,
+  loadNativeCustomers,
+  loadNativeCustomerReceipts,
+  loadNativeInventoryAdjustments,
+  loadNativeProducts,
+  loadNativePurchases,
+  loadNativeReceivables,
+  loadNativeSales,
+  loadNativeSettings,
+  loadNativeSupplierPayables,
+  loadNativeSupplierPayments,
+  loadNativeSuppliers,
+  saveNativeCustomer,
+  saveNativeCustomerReceipt,
+  saveNativeCreditNote,
+  saveNativeCreditNoteStatus,
+  saveNativeInventoryAdjustment,
+  saveNativeProduct,
+  saveNativePurchase,
+  saveNativeSale,
+  saveNativeSettings,
+  saveNativeSupplier,
+  saveNativeSupplierPayment,
+  updateNativeSale,
+  voidNativeCustomerReceipt,
+  type NativeConnectionStatus
+} from "./lib/tauri";
 import { SectionContent } from "./sections/SectionContent";
 import { DashboardContent } from "./sections/dashboard/DashboardContent";
 import {
@@ -31,7 +63,10 @@ import type {
   CreditNoteRecord,
   CreditNoteStatus,
   CustomerReceiptRecord,
+  InventoryAdjustmentRecord,
+  InventoryAdjustmentType,
   ProductRecord,
+  PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
   ReceivableRecord,
@@ -191,7 +226,8 @@ const defaultSettings: AppSettings = {
       "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real.",
     observations: "Observaciones: factura generada desde Moneta para impresion.",
     title: "REMISION"
-  }
+  },
+  sellers: []
 };
 
 function formatOccurredAtLabel(date: Date): string {
@@ -269,12 +305,67 @@ function getReceivableStatus(paidAmountMinor: number): ReceivableRecord["status"
   return paidAmountMinor > 0 ? "partial" : "pending";
 }
 
+function getSaleQuantityByProduct(sale: SaleRecord): Map<string, number> {
+  return sale.lines.reduce((total, line) => {
+    total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
+    return total;
+  }, new Map<string, number>());
+}
+
+function getSaleStockAdjustments(input: {
+  previousSale: SaleRecord | null;
+  nextSale: SaleRecord | null;
+}): Array<{ productId: string; quantityDelta: number }> {
+  const previousQuantityByProduct = input.previousSale
+    ? getSaleQuantityByProduct(input.previousSale)
+    : new Map<string, number>();
+  const nextQuantityByProduct = input.nextSale
+    ? getSaleQuantityByProduct(input.nextSale)
+    : new Map<string, number>();
+  const productIds = new Set([
+    ...previousQuantityByProduct.keys(),
+    ...nextQuantityByProduct.keys()
+  ]);
+
+  return Array.from(productIds)
+    .map((productId) => ({
+      productId,
+      quantityDelta:
+        (previousQuantityByProduct.get(productId) ?? 0) -
+        (nextQuantityByProduct.get(productId) ?? 0)
+    }))
+    .filter((adjustment) => adjustment.quantityDelta !== 0);
+}
+
 function isLowStock(product: ProductRecord): boolean {
-  return product.stock <= product.minimumStock;
+  return product.active && product.stock <= product.minimumStock;
+}
+
+function formatNativePersistenceError(
+  fallbackMessage: string,
+  error: unknown
+): string {
+  if (typeof error === "string" && error.trim() !== "") {
+    return `${fallbackMessage} ${error}`;
+  }
+
+  if (error instanceof Error && error.message.trim() !== "") {
+    return `${fallbackMessage} ${error.message}`;
+  }
+
+  return fallbackMessage;
 }
 
 export function App() {
+  const [nativeConnectionStatus, setNativeConnectionStatus] =
+    useState<NativeConnectionStatus>({
+      kind: "web",
+      message: "Modo web: Tauri no esta disponible."
+    });
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [inventoryAdjustments, setInventoryAdjustments] = useState<
+    InventoryAdjustmentRecord[]
+  >([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
   const [sales, setSales] = useState<SaleRecord[]>([]);
@@ -295,6 +386,118 @@ export function App() {
       navigationItems[0]!,
     [activeSectionId]
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    checkNativeConnection().then(async (status) => {
+      if (isMounted) {
+        setNativeConnectionStatus(status);
+      }
+
+      if (status.kind !== "connected") {
+        return;
+      }
+
+      try {
+        await createNativeAutomaticDatabaseBackup();
+      } catch {
+        if (isMounted) {
+          setNativeConnectionStatus({
+            kind: "error",
+            message: "No se pudo crear el backup automatico."
+          });
+        }
+      }
+
+      try {
+        const [
+          storedSettings,
+          storedProducts,
+          storedInventoryAdjustments,
+          storedCustomers,
+          storedSales,
+          storedReceivables,
+          storedCustomerReceipts,
+          storedCreditNotes,
+          storedSuppliers,
+          storedPurchases,
+          storedSupplierPayables,
+          storedSupplierPayments
+        ] = await Promise.all([
+          loadNativeSettings(),
+          loadNativeProducts(),
+          loadNativeInventoryAdjustments(),
+          loadNativeCustomers(),
+          loadNativeSales(),
+          loadNativeReceivables(),
+          loadNativeCustomerReceipts(),
+          loadNativeCreditNotes(),
+          loadNativeSuppliers(),
+          loadNativePurchases(),
+          loadNativeSupplierPayables(),
+          loadNativeSupplierPayments()
+        ]);
+
+        if (isMounted && storedSettings) {
+          setSettings(storedSettings);
+        }
+        if (isMounted && storedProducts) {
+          setProducts(storedProducts);
+        }
+        if (isMounted && storedInventoryAdjustments) {
+          setInventoryAdjustments(storedInventoryAdjustments);
+        }
+        if (isMounted && storedCustomers) {
+          setCustomers(storedCustomers);
+        }
+        if (isMounted && storedSales) {
+          setSales(storedSales);
+        }
+        if (isMounted && storedReceivables) {
+          setReceivables(storedReceivables);
+        }
+        if (isMounted && storedCustomerReceipts) {
+          setCustomerReceipts(storedCustomerReceipts);
+        }
+        if (isMounted && storedCreditNotes) {
+          setCreditNotes(storedCreditNotes);
+        }
+        if (isMounted && storedSuppliers) {
+          setSuppliers(storedSuppliers);
+        }
+        if (isMounted && storedPurchases) {
+          setPurchases(storedPurchases);
+        }
+        if (isMounted && storedSupplierPayables) {
+          setSupplierPayables(storedSupplierPayables);
+        }
+        if (isMounted && storedSupplierPayments) {
+          setSupplierPayments(storedSupplierPayments);
+        }
+      } catch {
+        if (isMounted) {
+          setNativeConnectionStatus({
+            kind: "error",
+            message: "No se pudieron cargar los datos locales."
+          });
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function updateSettings(nextSettings: AppSettings) {
+    setSettings(nextSettings);
+    void saveNativeSettings(nextSettings);
+  }
+
+  async function createBackup() {
+    return createNativeDatabaseBackup();
+  }
 
   const lowStockProducts = products.filter(isLowStock);
   const today = new Date();
@@ -379,11 +582,110 @@ export function App() {
     openSection(activeSection.id);
   }
 
-  function createProduct(product: ProductRecord) {
-    setProducts((currentProducts) => [...currentProducts, product]);
+  async function saveProductInSession(product: ProductRecord): Promise<boolean> {
+    try {
+      await saveNativeProduct(product);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el producto local."
+      });
+      return false;
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.some((currentProduct) => currentProduct.id === product.id)
+        ? currentProducts.map((currentProduct) =>
+            currentProduct.id === product.id ? product : currentProduct
+          )
+        : [...currentProducts, product]
+    );
+    return true;
   }
 
-  function createCustomer(input: CustomerFormState): CustomerRecord {
+  async function createProduct(product: ProductRecord): Promise<boolean> {
+    return saveProductInSession(product);
+  }
+
+  async function registerInventoryAdjustment(input: {
+    productId: string;
+    adjustmentType: InventoryAdjustmentType;
+    quantity: number;
+    reason: string;
+  }): Promise<string | null> {
+    const product = products.find(
+      (currentProduct) => currentProduct.id === input.productId
+    );
+
+    if (!product || !product.active) {
+      return "Selecciona un producto activo para ajustar inventario.";
+    }
+
+    if (input.quantity < 0) {
+      return "La cantidad debe ser cero o mayor.";
+    }
+
+    if (input.adjustmentType !== "set" && input.quantity <= 0) {
+      return "La cantidad del ajuste debe ser mayor a cero.";
+    }
+
+    const nextStock =
+      input.adjustmentType === "entry"
+        ? product.stock + input.quantity
+        : input.adjustmentType === "exit"
+          ? product.stock - input.quantity
+          : input.quantity;
+
+    if (nextStock < 0) {
+      return "El inventario no puede quedar negativo.";
+    }
+
+    const occurredAtMs = Date.now();
+    const occurredAt = new Date(occurredAtMs);
+    const updatedProduct = { ...product, stock: nextStock };
+    const adjustment: InventoryAdjustmentRecord = {
+      adjustmentType: input.adjustmentType,
+      id: `inventory-adjustment-${occurredAtMs}`,
+      nextStock,
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      occurredAtMs,
+      previousStock: product.stock,
+      productId: product.id,
+      productName: product.name,
+      quantity: input.quantity,
+      reason: input.reason.trim(),
+      unit: product.unit
+    };
+
+    try {
+      await saveNativeInventoryAdjustment({
+        adjustment,
+        product: updatedProduct
+      });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el ajuste de inventario local."
+      });
+      return "No se pudo guardar el ajuste de inventario local.";
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.map((currentProduct) =>
+        currentProduct.id === product.id ? updatedProduct : currentProduct
+      )
+    );
+    setInventoryAdjustments((currentAdjustments) => [
+      adjustment,
+      ...currentAdjustments
+    ]);
+
+    return null;
+  }
+
+  async function createCustomer(
+    input: CustomerFormState
+  ): Promise<CustomerRecord | null> {
     const customer = {
       address: input.address.trim(),
       active: true,
@@ -394,34 +696,86 @@ export function App() {
       name: input.name.trim()
     };
 
+    try {
+      await saveNativeCustomer(customer);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el cliente local."
+      });
+      return null;
+    }
+
     setCustomers((currentCustomers) => [...currentCustomers, customer]);
 
     return customer;
   }
 
-  function updateCustomer(customerId: string, input: CustomerFormState) {
+  async function updateCustomer(
+    customerId: string,
+    input: CustomerFormState
+  ): Promise<boolean> {
+    const currentCustomer = customers.find((customer) => customer.id === customerId);
+
+    if (!currentCustomer) {
+      return false;
+    }
+
+    const updatedCustomer = {
+      ...currentCustomer,
+      address: input.address.trim(),
+      city: input.city.trim(),
+      document: input.document.trim(),
+      email: input.email.trim(),
+      name: input.name.trim()
+    };
+
+    try {
+      await saveNativeCustomer(updatedCustomer);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el cliente local."
+      });
+      return false;
+    }
+
     setCustomers((currentCustomers) =>
       currentCustomers.map((customer) =>
-        customer.id === customerId
-          ? {
-              ...customer,
-              address: input.address.trim(),
-              city: input.city.trim(),
-              document: input.document.trim(),
-              email: input.email.trim(),
-              name: input.name.trim()
-            }
-          : customer
+        customer.id === customerId ? updatedCustomer : customer
       )
     );
+    return true;
   }
 
-  function setCustomerActive(customerId: string, active: boolean) {
+  async function setCustomerActive(
+    customerId: string,
+    active: boolean
+  ): Promise<boolean> {
+    const currentCustomer = customers.find((customer) => customer.id === customerId);
+
+    if (!currentCustomer) {
+      return false;
+    }
+
+    const updatedCustomer = { ...currentCustomer, active };
+
+    try {
+      await saveNativeCustomer(updatedCustomer);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el estado del cliente local."
+      });
+      return false;
+    }
+
     setCustomers((currentCustomers) =>
       currentCustomers.map((customer) =>
-        customer.id === customerId ? { ...customer, active } : customer
+        customer.id === customerId ? updatedCustomer : customer
       )
     );
+    return true;
   }
 
   function validateCustomer(
@@ -431,7 +785,9 @@ export function App() {
     return validateCustomerForm(input, { customers, currentCustomerId });
   }
 
-  function createSupplier(input: SupplierFormState): SupplierRecord {
+  async function createSupplier(
+    input: SupplierFormState
+  ): Promise<SupplierRecord | null> {
     const supplier = {
       active: true,
       address: input.address.trim(),
@@ -444,39 +800,91 @@ export function App() {
       phone: input.phone.trim()
     };
 
+    try {
+      await saveNativeSupplier(supplier);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el proveedor local."
+      });
+      return null;
+    }
+
     setSuppliers((currentSuppliers) => [...currentSuppliers, supplier]);
 
     return supplier;
   }
 
-  function updateSupplier(supplierId: string, input: SupplierFormState) {
+  async function updateSupplier(
+    supplierId: string,
+    input: SupplierFormState
+  ): Promise<boolean> {
+    const currentSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+
+    if (!currentSupplier) {
+      return false;
+    }
+
+    const updatedSupplier = {
+      ...currentSupplier,
+      address: input.address.trim(),
+      city: input.city.trim(),
+      department: input.department.trim() || "Antioquia",
+      document: input.document.trim(),
+      email: input.email.trim(),
+      name: input.name.trim(),
+      phone: input.phone.trim()
+    };
+
+    try {
+      await saveNativeSupplier(updatedSupplier);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el proveedor local."
+      });
+      return false;
+    }
+
     setSuppliers((currentSuppliers) =>
       currentSuppliers.map((supplier) =>
-        supplier.id === supplierId
-          ? {
-              ...supplier,
-              address: input.address.trim(),
-              city: input.city.trim(),
-              department: input.department.trim() || "Antioquia",
-              document: input.document.trim(),
-              email: input.email.trim(),
-              name: input.name.trim(),
-              phone: input.phone.trim()
-            }
-          : supplier
+        supplier.id === supplierId ? updatedSupplier : supplier
       )
     );
+    return true;
   }
 
-  function setSupplierActive(supplierId: string, active: boolean) {
+  async function setSupplierActive(
+    supplierId: string,
+    active: boolean
+  ): Promise<boolean> {
+    const currentSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+
+    if (!currentSupplier) {
+      return false;
+    }
+
+    const updatedSupplier = { ...currentSupplier, active };
+
+    try {
+      await saveNativeSupplier(updatedSupplier);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el estado del proveedor local."
+      });
+      return false;
+    }
+
     setSuppliers((currentSuppliers) =>
       currentSuppliers.map((supplier) =>
-        supplier.id === supplierId ? { ...supplier, active } : supplier
+        supplier.id === supplierId ? updatedSupplier : supplier
       )
     );
+    return true;
   }
 
-  function registerPurchaseInSession(input: {
+  async function registerPurchaseInSession(input: {
     supplier: SupplierRecord;
     branch: string;
     prefix: string;
@@ -484,6 +892,7 @@ export function App() {
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
+    expenseCategory: PurchaseExpenseCategory;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -496,7 +905,7 @@ export function App() {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) {
+  }): Promise<boolean> {
     const occurredAt = new Date();
     const purchaseId = `purchase-${Date.now()}`;
     const lines = input.lines.map((line, index) => ({
@@ -516,6 +925,55 @@ export function App() {
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
     const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
     const firstLine = lines[0]!;
+    const purchase: PurchaseRecord = {
+      dueAt: input.dueAt,
+      branch: input.branch,
+      concept: input.concept,
+      currency: "COP",
+      expenseCategory: input.expenseCategory,
+      id: purchaseId,
+      invoiceNumber: input.invoiceNumber,
+      issuedAt: input.issuedAt,
+      lines,
+      occurredAtMs: occurredAt.getTime(),
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      paymentStatus: input.paymentStatus,
+      prefix: input.prefix,
+      productId: firstLine.productId,
+      productName:
+        lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+      quantity: totalQuantity,
+      supplierId: input.supplier.id,
+      supplierName: input.supplier.name,
+      totalMinor,
+      unitCostMinor: firstLine.unitCostMinor
+    };
+    const supplierPayable: SupplierPayableRecord | null =
+      input.paymentStatus === "pending"
+        ? {
+            balanceMinor: totalMinor,
+            dueAt: input.dueAt,
+            expenseCategory: input.expenseCategory,
+            id: `payable-${purchaseId}`,
+            invoiceNumber: input.invoiceNumber,
+            originalAmountMinor: totalMinor,
+            paidAmountMinor: 0,
+            purchaseId,
+            status: "pending",
+            supplierId: input.supplier.id,
+            supplierName: input.supplier.name
+          }
+        : null;
+
+    try {
+      await saveNativePurchase({ purchase, supplierPayable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la compra local."
+      });
+      return false;
+    }
 
     setProducts((currentProducts) =>
       currentProducts.map((product) => {
@@ -537,96 +995,78 @@ export function App() {
           : product;
       })
     );
-    setPurchases((currentPurchases) => [
-      {
-        dueAt: input.dueAt,
-        branch: input.branch,
-        concept: input.concept,
-        currency: "COP",
-        id: purchaseId,
-        invoiceNumber: input.invoiceNumber,
-        issuedAt: input.issuedAt,
-        lines,
-        occurredAtMs: occurredAt.getTime(),
-        occurredAtLabel: formatOccurredAtLabel(occurredAt),
-        paymentStatus: input.paymentStatus,
-        prefix: input.prefix,
-        productId: firstLine.productId,
-        productName:
-          lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
-        quantity: totalQuantity,
-        supplierId: input.supplier.id,
-        supplierName: input.supplier.name,
-        totalMinor,
-        unitCostMinor: firstLine.unitCostMinor
-      },
-      ...currentPurchases
-    ]);
+    setPurchases((currentPurchases) => [purchase, ...currentPurchases]);
 
-    if (input.paymentStatus === "pending") {
-      setSupplierPayables((currentPayables) => [
-        {
-          balanceMinor: totalMinor,
-          dueAt: input.dueAt,
-          id: `payable-${purchaseId}`,
-          invoiceNumber: input.invoiceNumber,
-          originalAmountMinor: totalMinor,
-          paidAmountMinor: 0,
-          purchaseId,
-          status: "pending",
-          supplierId: input.supplier.id,
-          supplierName: input.supplier.name
-        },
-        ...currentPayables
-      ]);
+    if (supplierPayable) {
+      setSupplierPayables((currentPayables) => [supplierPayable, ...currentPayables]);
     }
+
+    return true;
   }
 
-  function registerSupplierPayment(input: { payableId: string; amountMinor: number }) {
+  async function registerSupplierPayment(input: {
+    payableId: string;
+    amountMinor: number;
+  }): Promise<boolean> {
     const selectedPayable =
       supplierPayables.find((payable) => payable.id === input.payableId) ?? null;
 
-    if (selectedPayable) {
-      const paidAt = new Date();
-
-      setSupplierPayments((currentPayments) => [
-        {
-          amountMinor: input.amountMinor,
-          id: `supplier-payment-${Date.now()}`,
-          paidAtLabel: formatOccurredAtLabel(paidAt),
-          paidAtMs: paidAt.getTime(),
-          payableId: selectedPayable.id,
-          purchaseId: selectedPayable.purchaseId,
-          supplierId: selectedPayable.supplierId,
-          supplierName: selectedPayable.supplierName
-        },
-        ...currentPayments
-      ]);
+    if (
+      !selectedPayable ||
+      input.amountMinor <= 0 ||
+      input.amountMinor > selectedPayable.balanceMinor
+    ) {
+      return false;
     }
 
-    setSupplierPayables((currentPayables) =>
-      currentPayables.map((payable) => {
-        if (payable.id !== input.payableId) {
-          return payable;
-        }
-
-        const paidAmountMinor = payable.paidAmountMinor + input.amountMinor;
-        const balanceMinor = Math.max(payable.originalAmountMinor - paidAmountMinor, 0);
-
-        return {
-          ...payable,
-          balanceMinor,
-          paidAmountMinor,
-          status: getSupplierPayableStatus({
-            originalAmountMinor: payable.originalAmountMinor,
-            paidAmountMinor
-          })
-        };
-      })
+    const paidAt = new Date();
+    const paidAmountMinor = selectedPayable.paidAmountMinor + input.amountMinor;
+    const balanceMinor = Math.max(
+      selectedPayable.originalAmountMinor - paidAmountMinor,
+      0
     );
+    const supplierPayable: SupplierPayableRecord = {
+      ...selectedPayable,
+      balanceMinor,
+      paidAmountMinor,
+      status: getSupplierPayableStatus({
+        originalAmountMinor: selectedPayable.originalAmountMinor,
+        paidAmountMinor
+      })
+    };
+    const payment: SupplierPaymentRecord = {
+      amountMinor: input.amountMinor,
+      expenseCategory: selectedPayable.expenseCategory,
+      id: `supplier-payment-${Date.now()}`,
+      paidAtLabel: formatOccurredAtLabel(paidAt),
+      paidAtMs: paidAt.getTime(),
+      payableId: selectedPayable.id,
+      purchaseId: selectedPayable.purchaseId,
+      supplierId: selectedPayable.supplierId,
+      supplierName: selectedPayable.supplierName
+    };
+
+    try {
+      await saveNativeSupplierPayment({ payment, supplierPayable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el pago a proveedor local."
+      });
+      return false;
+    }
+
+    setSupplierPayments((currentPayments) => [payment, ...currentPayments]);
+    setSupplierPayables((currentPayables) =>
+      currentPayables.map((payable) =>
+        payable.id === input.payableId ? supplierPayable : payable
+      )
+    );
+
+    return true;
   }
 
-  function registerSaleInSession(input: {
+  async function registerSaleInSession(input: {
     customer: CustomerRecord;
     branch: string;
     prefix: string;
@@ -652,7 +1092,7 @@ export function App() {
       totalMinor: number;
     }>;
     paymentStatus: "paid" | "pending";
-  }): string | null {
+  }): Promise<string | null> {
     const occurredAtMs = Date.now();
     const occurredAt = new Date(occurredAtMs);
     const requestedByProduct = input.lines.reduce((requested, line) => {
@@ -692,6 +1132,58 @@ export function App() {
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
     const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
     const firstLine = lines[0]!;
+    const sale: SaleRecord = {
+      branch: input.branch,
+      concept: input.concept,
+      currency: "COP",
+      customer: input.customer,
+      customerId: input.customer.id,
+      customerName: input.customer.name,
+      id: saleId,
+      invoiceNumber: input.invoiceNumber,
+      issuedAt: input.issuedAt,
+      lines,
+      occurredAtMs,
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      paymentStatus: input.paymentStatus,
+      prefix: input.prefix,
+      productId: firstLine.productId,
+      productName:
+        lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+      quantity: totalQuantity,
+      seller: input.seller,
+      totalMinor,
+      unitPriceMinor: firstLine.unitPriceMinor
+    };
+    const receivable: ReceivableRecord | null =
+      input.paymentStatus === "pending"
+        ? {
+            amountMinor: totalMinor,
+            balanceMinor: totalMinor,
+            customerId: input.customer.id,
+            customerName: input.customer.name,
+            dueAt: input.dueAt ?? "",
+            id: `receivable-${saleId}`,
+            originalAmountMinor: totalMinor,
+            paidAmountMinor: 0,
+            saleId,
+            status: "pending"
+          }
+        : null;
+
+    try {
+      await saveNativeSale({ receivable, sale });
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo guardar la venta local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
 
     setProducts((currentProducts) =>
       currentProducts.map((product) => ({
@@ -699,49 +1191,10 @@ export function App() {
         stock: product.stock - (requestedByProduct.get(product.id) ?? 0)
       }))
     );
-    setSales((currentSales) => [
-      {
-        branch: input.branch,
-        concept: input.concept,
-        currency: "COP",
-        customer: input.customer,
-        customerId: input.customer.id,
-        customerName: input.customer.name,
-        id: saleId,
-        invoiceNumber: input.invoiceNumber,
-        issuedAt: input.issuedAt,
-        lines,
-        occurredAtMs,
-        occurredAtLabel: formatOccurredAtLabel(occurredAt),
-        paymentStatus: input.paymentStatus,
-        prefix: input.prefix,
-        productId: firstLine.productId,
-        productName:
-          lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
-        quantity: totalQuantity,
-        seller: input.seller,
-        totalMinor,
-        unitPriceMinor: firstLine.unitPriceMinor,
-      },
-      ...currentSales
-    ]);
+    setSales((currentSales) => [sale, ...currentSales]);
 
-    if (input.paymentStatus === "pending") {
-      setReceivables((currentReceivables) => [
-        {
-          amountMinor: totalMinor,
-          balanceMinor: totalMinor,
-          customerId: input.customer.id,
-          customerName: input.customer.name,
-          dueAt: input.dueAt ?? "",
-          id: `receivable-${saleId}`,
-          originalAmountMinor: totalMinor,
-          paidAmountMinor: 0,
-          saleId,
-          status: "pending"
-        },
-        ...currentReceivables
-      ]);
+    if (receivable) {
+      setReceivables((currentReceivables) => [receivable, ...currentReceivables]);
     }
 
     return null;
@@ -771,7 +1224,7 @@ export function App() {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }): string | null {
+  }): Promise<string | null> {
     return registerSaleInSession({
       branch: input.branch,
       concept: input.concept,
@@ -810,7 +1263,7 @@ export function App() {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }): string | null {
+  }): Promise<string | null> {
     return registerSaleInSession({
       branch: input.branch,
       concept: input.concept,
@@ -825,24 +1278,24 @@ export function App() {
     });
   }
 
-  function updateSaleInSession(input: {
+  async function updateSaleInSession(input: {
     sale: SaleRecord;
     dueAt: string;
-  }): string | null {
+  }): Promise<string | null> {
     const previousSale = sales.find((sale) => sale.id === input.sale.id);
 
     if (!previousSale) {
       return "La venta que intentas modificar ya no existe.";
     }
+    if (
+      customerReceipts.some((receipt) => receipt.saleId === input.sale.id) ||
+      creditNotes.some((creditNote) => creditNote.saleId === input.sale.id)
+    ) {
+      return "La venta tiene recibos o notas credito asociados y no se puede modificar.";
+    }
 
-    const previousQuantityByProduct = previousSale.lines.reduce((total, line) => {
-      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
-      return total;
-    }, new Map<string, number>());
-    const nextQuantityByProduct = input.sale.lines.reduce((total, line) => {
-      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
-      return total;
-    }, new Map<string, number>());
+    const previousQuantityByProduct = getSaleQuantityByProduct(previousSale);
+    const nextQuantityByProduct = getSaleQuantityByProduct(input.sale);
     const invalidProduct = input.sale.lines.some(
       (line) => !products.some((product) => product.id === line.productId)
     );
@@ -857,6 +1310,40 @@ export function App() {
     }
     if (insufficientProduct) {
       return "No hay inventario suficiente para guardar los cambios.";
+    }
+
+    const receivable: ReceivableRecord | null =
+      input.sale.paymentStatus === "pending"
+        ? {
+            amountMinor: input.sale.totalMinor,
+            balanceMinor: input.sale.totalMinor,
+            customerId: input.sale.customerId,
+            customerName: input.sale.customerName,
+            dueAt: input.dueAt,
+            id: `receivable-${input.sale.id}`,
+            originalAmountMinor: input.sale.totalMinor,
+            paidAmountMinor: 0,
+            saleId: input.sale.id,
+            status: "pending"
+          }
+        : null;
+    const productStockAdjustments = getSaleStockAdjustments({
+      nextSale: input.sale,
+      previousSale
+    });
+
+    try {
+      await updateNativeSale({
+        productStockAdjustments,
+        receivable,
+        sale: input.sale
+      });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la edicion de venta local."
+      });
+      return "No se pudo guardar la edicion de venta local.";
     }
 
     setProducts((currentProducts) =>
@@ -880,39 +1367,40 @@ export function App() {
         (receivable) => receivable.saleId !== input.sale.id
       );
 
-      return input.sale.paymentStatus === "pending"
-        ? [
-            {
-              amountMinor: input.sale.totalMinor,
-              balanceMinor: input.sale.totalMinor,
-              customerId: input.sale.customerId,
-              customerName: input.sale.customerName,
-              dueAt: input.dueAt,
-              id: `receivable-${input.sale.id}`,
-              originalAmountMinor: input.sale.totalMinor,
-              paidAmountMinor: 0,
-              saleId: input.sale.id,
-              status: "pending"
-            },
-            ...remaining
-          ]
-        : remaining;
+      return receivable ? [receivable, ...remaining] : remaining;
     });
 
     return null;
   }
 
-  function deleteSaleInSession(saleId: string) {
+  async function deleteSaleInSession(saleId: string): Promise<string | null> {
     const sale = sales.find((currentSale) => currentSale.id === saleId);
 
     if (!sale) {
-      return;
+      return null;
+    }
+    if (
+      customerReceipts.some((receipt) => receipt.saleId === saleId) ||
+      creditNotes.some((creditNote) => creditNote.saleId === saleId)
+    ) {
+      return "La venta tiene recibos o notas credito asociados y no se puede eliminar.";
     }
 
-    const soldQuantityByProduct = sale.lines.reduce((total, line) => {
-      total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
-      return total;
-    }, new Map<string, number>());
+    const soldQuantityByProduct = getSaleQuantityByProduct(sale);
+    const productStockAdjustments = getSaleStockAdjustments({
+      nextSale: null,
+      previousSale: sale
+    });
+
+    try {
+      await deleteNativeSale({ productStockAdjustments, saleId });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo eliminar la venta local."
+      });
+      return "No se pudo eliminar la venta local.";
+    }
 
     setProducts((currentProducts) =>
       currentProducts.map((product) => ({
@@ -930,9 +1418,11 @@ export function App() {
     setCreditNotes((currentCreditNotes) =>
       currentCreditNotes.filter((creditNote) => creditNote.saleId !== saleId)
     );
+
+    return null;
   }
 
-  function registerCreditNoteInSession(input: {
+  async function registerCreditNoteInSession(input: {
     sale: SaleRecord;
     adjustmentType: CreditNoteAdjustmentType;
     issuedAt: string;
@@ -942,7 +1432,7 @@ export function App() {
       saleLineId: string;
       quantity: number;
     }>;
-  }): string | null {
+  }): Promise<string | null> {
     const creditedQuantityByLine = creditNotes.reduce((totals, creditNote) => {
       if (creditNote.saleId !== input.sale.id || creditNote.status === "void") {
         return totals;
@@ -1026,36 +1516,44 @@ export function App() {
       unitPriceMinor: saleLine.unitPriceMinor
     }));
     const totalMinor = lines.reduce((total, line) => total + line.totalMinor, 0);
+    const creditNote: CreditNoteRecord = {
+      adjustmentType: input.adjustmentType,
+      confirmedAtLabel: "",
+      confirmedAtMs: 0,
+      customer: input.sale.customer,
+      customerId: input.sale.customerId,
+      customerName: input.sale.customerName,
+      id: creditNoteId,
+      invoiceNumber: input.sale.invoiceNumber,
+      issuedAt: input.issuedAt,
+      lines,
+      number: `NC-${String(creditNotes.length + 1).padStart(3, "0")}`,
+      occurredAtLabel: formatOccurredAtLabel(occurredAt),
+      occurredAtMs,
+      receivableDueAt:
+        receivables.find((receivable) => receivable.saleId === input.sale.id)?.dueAt ??
+        "",
+      reason:
+        input.reason.trim() ||
+        "Devolución de parte de los bienes; no aceptación de partes del servicio",
+      saleId: input.sale.id,
+      status: "draft",
+      totalMinor,
+      voidedAtLabel: "",
+      voidedAtMs: 0
+    };
 
-    setCreditNotes((currentCreditNotes) => [
-      {
-        adjustmentType: input.adjustmentType,
-        confirmedAtLabel: "",
-        confirmedAtMs: 0,
-        customer: input.sale.customer,
-        customerId: input.sale.customerId,
-        customerName: input.sale.customerName,
-        id: creditNoteId,
-        invoiceNumber: input.sale.invoiceNumber,
-        issuedAt: input.issuedAt,
-        lines,
-        number: `NC-${String(currentCreditNotes.length + 1).padStart(3, "0")}`,
-        occurredAtLabel: formatOccurredAtLabel(occurredAt),
-        occurredAtMs,
-        receivableDueAt:
-          receivables.find((receivable) => receivable.saleId === input.sale.id)?.dueAt ??
-          "",
-        reason:
-          input.reason.trim() ||
-          "Devolución de parte de los bienes; no aceptación de partes del servicio",
-        saleId: input.sale.id,
-        status: "draft",
-        totalMinor,
-        voidedAtLabel: "",
-        voidedAtMs: 0
-      },
-      ...currentCreditNotes
-    ]);
+    try {
+      await saveNativeCreditNote(creditNote);
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar la nota credito local."
+      });
+      return "No se pudo guardar la nota credito local.";
+    }
+
+    setCreditNotes((currentCreditNotes) => [creditNote, ...currentCreditNotes]);
 
     return null;
   }
@@ -1170,12 +1668,103 @@ export function App() {
     });
   }
 
-  function registerCustomerReceipt(input: {
+  function getCreditNoteProductStockAdjustments(
+    creditNote: CreditNoteRecord,
+    direction: "apply" | "reverse"
+  ): Array<{ productId: string; quantityDelta: number }> {
+    if (creditNote.adjustmentType !== "return") {
+      return [];
+    }
+
+    const multiplier = direction === "apply" ? 1 : -1;
+    const quantityByProduct = creditNote.lines.reduce((totals, line) => {
+      totals.set(line.productId, (totals.get(line.productId) ?? 0) + line.quantity);
+      return totals;
+    }, new Map<string, number>());
+
+    return Array.from(quantityByProduct.entries())
+      .filter(([, quantity]) => quantity > 0)
+      .map(([productId, quantity]) => ({
+        productId,
+        quantityDelta: quantity * multiplier
+      }));
+  }
+
+  function getAppliedCreditNoteReceivable(
+    creditNote: CreditNoteRecord
+  ): ReceivableRecord | null {
+    const receivable =
+      receivables.find((currentReceivable) => currentReceivable.saleId === creditNote.saleId) ??
+      null;
+
+    if (!receivable) {
+      return null;
+    }
+
+    const originalAmountMinor = Math.max(
+      receivable.originalAmountMinor - creditNote.totalMinor,
+      0
+    );
+    const balanceMinor = Math.max(
+      originalAmountMinor - receivable.paidAmountMinor,
+      0
+    );
+
+    return {
+      ...receivable,
+      amountMinor: balanceMinor,
+      balanceMinor,
+      originalAmountMinor,
+      status: getReceivableStatus(receivable.paidAmountMinor)
+    };
+  }
+
+  function getReversedCreditNoteReceivable(
+    creditNote: CreditNoteRecord
+  ): ReceivableRecord | null {
+    const sale = sales.find((currentSale) => currentSale.id === creditNote.saleId);
+
+    if (sale?.paymentStatus !== "pending") {
+      return null;
+    }
+
+    const receivable =
+      receivables.find((currentReceivable) => currentReceivable.saleId === creditNote.saleId) ??
+      null;
+
+    if (!receivable) {
+      return {
+        amountMinor: creditNote.totalMinor,
+        balanceMinor: creditNote.totalMinor,
+        customerId: creditNote.customerId,
+        customerName: creditNote.customerName,
+        dueAt: creditNote.receivableDueAt,
+        id: `receivable-${creditNote.saleId}`,
+        originalAmountMinor: creditNote.totalMinor,
+        paidAmountMinor: 0,
+        saleId: creditNote.saleId,
+        status: "pending"
+      };
+    }
+
+    const originalAmountMinor = receivable.originalAmountMinor + creditNote.totalMinor;
+    const balanceMinor = Math.max(originalAmountMinor - receivable.paidAmountMinor, 0);
+
+    return {
+      ...receivable,
+      amountMinor: balanceMinor,
+      balanceMinor,
+      originalAmountMinor,
+      status: getReceivableStatus(receivable.paidAmountMinor)
+    };
+  }
+
+  async function registerCustomerReceipt(input: {
     receivableId: string;
     amountMinor: number;
     concept: string;
     receivedAt: string;
-  }): string | null {
+  }): Promise<string | null> {
     const selectedReceivable =
       receivables.find((receivable) => receivable.id === input.receivableId) ?? null;
 
@@ -1191,52 +1780,136 @@ export function App() {
 
     const receivedAtMs = parseLocalDate(input.receivedAt)?.getTime() ?? Date.now();
     const receivedAtDate = new Date(receivedAtMs);
+    const paidAmountMinor = selectedReceivable.paidAmountMinor + input.amountMinor;
+    const balanceMinor = Math.max(
+      selectedReceivable.originalAmountMinor - paidAmountMinor,
+      0
+    );
+    const receivable: ReceivableRecord = {
+      ...selectedReceivable,
+      amountMinor: balanceMinor,
+      balanceMinor,
+      paidAmountMinor,
+      status: getReceivableStatus(paidAmountMinor)
+    };
+    const receipt: CustomerReceiptRecord = {
+      active: true,
+      amountMinor: input.amountMinor,
+      concept: input.concept.trim() || "Abono cartera cliente",
+      customerId: selectedReceivable.customerId,
+      customerName: selectedReceivable.customerName,
+      id: `cash-receipt-${receivedAtMs}`,
+      number: `RC-${String(customerReceipts.length + 1).padStart(3, "0")}`,
+      receivableBalanceMinorBefore: selectedReceivable.balanceMinor,
+      receivableDueAt: selectedReceivable.dueAt,
+      receivableId: selectedReceivable.id,
+      receivableOriginalAmountMinor: selectedReceivable.originalAmountMinor,
+      receivablePaidAmountMinorBefore: selectedReceivable.paidAmountMinor,
+      receivedAt: input.receivedAt,
+      receivedAtLabel: formatOccurredAtLabel(receivedAtDate),
+      receivedAtMs,
+      saleId: selectedReceivable.saleId,
+      voidedAtLabel: "",
+      voidedAtMs: 0
+    };
 
-    setCustomerReceipts((currentReceipts) => [
-      {
-        amountMinor: input.amountMinor,
-        concept: input.concept.trim() || "Abono cartera cliente",
-        customerId: selectedReceivable.customerId,
-        customerName: selectedReceivable.customerName,
-        id: `cash-receipt-${receivedAtMs}`,
-        number: `RC-${String(currentReceipts.length + 1).padStart(3, "0")}`,
-        receivableId: selectedReceivable.id,
-        receivedAt: input.receivedAt,
-        receivedAtLabel: formatOccurredAtLabel(receivedAtDate),
-        receivedAtMs,
-        saleId: selectedReceivable.saleId
-      },
-      ...currentReceipts
-    ]);
+    try {
+      await saveNativeCustomerReceipt({ receipt, receivable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo guardar el recibo de caja local."
+      });
+      return "No se pudo guardar el recibo de caja local.";
+    }
 
+    setCustomerReceipts((currentReceipts) => [receipt, ...currentReceipts]);
     setReceivables((currentReceivables) =>
       currentReceivables
-        .map((receivable) => {
-          if (receivable.id !== input.receivableId) {
-            return receivable;
-          }
-
-          const paidAmountMinor = receivable.paidAmountMinor + input.amountMinor;
-          const balanceMinor = Math.max(
-            receivable.originalAmountMinor - paidAmountMinor,
-            0
-          );
-
-          return {
-            ...receivable,
-            amountMinor: balanceMinor,
-            balanceMinor,
-            paidAmountMinor,
-            status: getReceivableStatus(paidAmountMinor)
-          };
-        })
-        .filter((receivable) => receivable.balanceMinor > 0)
+        .map((currentReceivable) =>
+          currentReceivable.id === input.receivableId
+            ? receivable
+            : currentReceivable
+        )
+        .filter((currentReceivable) => currentReceivable.balanceMinor > 0)
     );
 
     return null;
   }
 
-  function setCreditNoteStatus(creditNoteId: string, status: CreditNoteStatus) {
+  async function voidCustomerReceipt(receiptId: string): Promise<string | null> {
+    const selectedReceipt =
+      customerReceipts.find((receipt) => receipt.id === receiptId) ?? null;
+
+    if (!selectedReceipt) {
+      return "El recibo de caja ya no esta disponible.";
+    }
+    if (!selectedReceipt.active) {
+      return "El recibo de caja ya esta anulado.";
+    }
+
+    const voidedAt = new Date();
+    const fallbackSale = sales.find((sale) => sale.id === selectedReceipt.saleId) ?? null;
+    const originalAmountMinor =
+      selectedReceipt.receivableOriginalAmountMinor > 0
+        ? selectedReceipt.receivableOriginalAmountMinor
+        : fallbackSale?.totalMinor ?? selectedReceipt.amountMinor;
+    const paidAmountMinor =
+      selectedReceipt.receivableOriginalAmountMinor > 0
+        ? selectedReceipt.receivablePaidAmountMinorBefore
+        : Math.max(originalAmountMinor - selectedReceipt.amountMinor, 0);
+    const balanceMinor =
+      selectedReceipt.receivableOriginalAmountMinor > 0
+        ? selectedReceipt.receivableBalanceMinorBefore
+        : Math.max(originalAmountMinor - paidAmountMinor, 0);
+    const receivable: ReceivableRecord = {
+      amountMinor: balanceMinor,
+      balanceMinor,
+      customerId: selectedReceipt.customerId,
+      customerName: selectedReceipt.customerName,
+      dueAt: selectedReceipt.receivableDueAt,
+      id: selectedReceipt.receivableId,
+      originalAmountMinor,
+      paidAmountMinor,
+      saleId: selectedReceipt.saleId,
+      status: getReceivableStatus(paidAmountMinor)
+    };
+    const voidedReceipt: CustomerReceiptRecord = {
+      ...selectedReceipt,
+      active: false,
+      voidedAtLabel: formatOccurredAtLabel(voidedAt),
+      voidedAtMs: voidedAt.getTime()
+    };
+
+    try {
+      await voidNativeCustomerReceipt({ receipt: voidedReceipt, receivable });
+    } catch {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: "No se pudo anular el recibo de caja local."
+      });
+      return "No se pudo anular el recibo de caja local.";
+    }
+
+    setCustomerReceipts((currentReceipts) =>
+      currentReceipts.map((currentReceipt) =>
+        currentReceipt.id === receiptId ? voidedReceipt : currentReceipt
+      )
+    );
+    setReceivables((currentReceivables) => [
+      receivable,
+      ...currentReceivables.filter(
+        (currentReceivable) => currentReceivable.id !== receivable.id
+      )
+    ]);
+
+    return null;
+  }
+
+  async function setCreditNoteStatus(
+    creditNoteId: string,
+    status: CreditNoteStatus
+  ): Promise<void> {
     const selectedCreditNote =
       creditNotes.find((creditNote) => creditNote.id === creditNoteId) ?? null;
 
@@ -1247,34 +1920,76 @@ export function App() {
     const occurredAt = new Date();
 
     if (status === "confirmed" && selectedCreditNote.status === "draft") {
+      const updatedCreditNote: CreditNoteRecord = {
+        ...selectedCreditNote,
+        confirmedAtLabel: formatOccurredAtLabel(occurredAt),
+        confirmedAtMs: occurredAt.getTime(),
+        status: "confirmed"
+      };
+      const receivable = getAppliedCreditNoteReceivable(selectedCreditNote);
+      const productStockAdjustments = getCreditNoteProductStockAdjustments(
+        selectedCreditNote,
+        "apply"
+      );
+
+      try {
+        await saveNativeCreditNoteStatus({
+          creditNote: updatedCreditNote,
+          productStockAdjustments,
+          receivable
+        });
+      } catch {
+        setNativeConnectionStatus({
+          kind: "error",
+          message: "No se pudo confirmar la nota credito local."
+        });
+        return;
+      }
+
       applyCreditNoteEffects(selectedCreditNote);
       setCreditNotes((currentCreditNotes) =>
-        currentCreditNotes.map((creditNote) =>
-          creditNote.id === creditNoteId
-            ? {
-                ...creditNote,
-                confirmedAtLabel: formatOccurredAtLabel(occurredAt),
-                confirmedAtMs: occurredAt.getTime(),
-                status: "confirmed"
-              }
-            : creditNote
+        currentCreditNotes.map((currentCreditNote) =>
+          currentCreditNote.id === creditNoteId
+            ? updatedCreditNote
+            : currentCreditNote
         )
       );
       return;
     }
 
     if (status === "void" && selectedCreditNote.status === "confirmed") {
+      const updatedCreditNote: CreditNoteRecord = {
+        ...selectedCreditNote,
+        status: "void",
+        voidedAtLabel: formatOccurredAtLabel(occurredAt),
+        voidedAtMs: occurredAt.getTime()
+      };
+      const receivable = getReversedCreditNoteReceivable(selectedCreditNote);
+      const productStockAdjustments = getCreditNoteProductStockAdjustments(
+        selectedCreditNote,
+        "reverse"
+      );
+
+      try {
+        await saveNativeCreditNoteStatus({
+          creditNote: updatedCreditNote,
+          productStockAdjustments,
+          receivable
+        });
+      } catch {
+        setNativeConnectionStatus({
+          kind: "error",
+          message: "No se pudo anular la nota credito local."
+        });
+        return;
+      }
+
       reverseCreditNoteEffects(selectedCreditNote);
       setCreditNotes((currentCreditNotes) =>
-        currentCreditNotes.map((creditNote) =>
-          creditNote.id === creditNoteId
-            ? {
-                ...creditNote,
-                status: "void",
-                voidedAtLabel: formatOccurredAtLabel(occurredAt),
-                voidedAtMs: occurredAt.getTime()
-              }
-            : creditNote
+        currentCreditNotes.map((currentCreditNote) =>
+          currentCreditNote.id === creditNoteId
+            ? updatedCreditNote
+            : currentCreditNote
         )
       );
     }
@@ -1325,6 +2040,18 @@ export function App() {
       </aside>
 
       <section className="workspace">
+        <div
+          className={`native-status native-status-${nativeConnectionStatus.kind}`}
+          title={
+            nativeConnectionStatus.kind === "connected"
+              ? nativeConnectionStatus.databasePath
+              : undefined
+          }
+          role="status"
+        >
+          {nativeConnectionStatus.message}
+        </div>
+
         <SectionHeader
           action={activeSection.primaryAction ? (
             <PrimaryActionButton onClick={handlePrimaryAction}>
@@ -1356,6 +2083,7 @@ export function App() {
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
             getDueMetadata={getDueMetadata}
+            inventoryAdjustments={inventoryAdjustments}
             isLowStock={isLowStock}
             onCreateCustomer={createCustomer}
             onCreateProduct={createProduct}
@@ -1367,6 +2095,8 @@ export function App() {
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterCreditNote={registerCreditNoteInSession}
             onRegisterCustomerReceipt={registerCustomerReceipt}
+            onRegisterInventoryAdjustment={registerInventoryAdjustment}
+            onVoidCustomerReceipt={voidCustomerReceipt}
             onSetCreditNoteStatus={setCreditNoteStatus}
             onUpdateSale={updateSaleInSession}
             onDeleteSale={deleteSaleInSession}
@@ -1376,6 +2106,7 @@ export function App() {
             onSetCustomerActive={setCustomerActive}
             onCloseProductForm={() => setProductFormVisible(false)}
             onCloseSupplierForm={() => setSupplierFormVisible(false)}
+            onUpdateProduct={saveProductInSession}
             parseNonNegativeInteger={parseNonNegativeInteger}
             productFormVisible={productFormVisible}
             supplierFormVisible={supplierFormVisible}
@@ -1387,7 +2118,8 @@ export function App() {
             salesDraft={salesDraft}
             section={activeSection}
             onSalesDraftChange={setSalesDraft}
-            onSettingsChange={setSettings}
+            onCreateBackup={createBackup}
+            onSettingsChange={updateSettings}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}
             suppliers={suppliers}
