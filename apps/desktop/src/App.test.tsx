@@ -2,8 +2,13 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { generateCashReceiptPdf } from "./cash-receipt-pdf";
 import { generateInvoicePdf } from "./invoice-pdf";
 import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
+
+vi.mock("./cash-receipt-pdf", () => ({
+  generateCashReceiptPdf: vi.fn()
+}));
 
 vi.mock("./invoice-pdf", () => ({
   generateInvoicePdf: vi.fn()
@@ -13,6 +18,7 @@ vi.mock("./supplier-payment-pdf", () => ({
   generateSupplierPaymentPdf: vi.fn()
 }));
 
+const generateCashReceiptPdfMock = vi.mocked(generateCashReceiptPdf);
 const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
 const generateSupplierPaymentPdfMock = vi.mocked(generateSupplierPaymentPdf);
 
@@ -108,6 +114,11 @@ async function clickFirstSaleAction(user: UserEvent, actionName: string) {
 
 describe("App navigation", () => {
   beforeEach(() => {
+    generateCashReceiptPdfMock.mockReset();
+    generateCashReceiptPdfMock.mockReturnValue({
+      dataUri: "data:application/pdf;base64,cash-receipt-pdf",
+      fileName: "recibo-caja-RC-001.pdf"
+    });
     generateInvoicePdfMock.mockReset();
     generateInvoicePdfMock.mockReturnValue({
       dataUri: "data:application/pdf;base64,invoice-pdf",
@@ -1320,6 +1331,22 @@ describe("App navigation", () => {
     expect(within(receiptDetail).getByText("Cartera despues")).toBeTruthy();
     expect(within(receiptDetail).getByText("Saldo aplicado por el recibo.")).toBeTruthy();
     await user.click(within(receiptDetail).getByRole("button", { name: "Cerrar" }));
+    await user.click(within(receiptsTable).getByRole("button", { name: "Generar PDF" }));
+    expect(generateCashReceiptPdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receipt: expect.objectContaining({
+          amountMinor: 5000,
+          customerName: "Carlos Ruiz",
+          number: "RC-001"
+        })
+      })
+    );
+    expect(
+      screen.getByTitle("Vista previa de recibo de caja PDF").getAttribute("src")
+    ).toBe("data:application/pdf;base64,cash-receipt-pdf");
+    expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
+      "data:application/pdf;base64,cash-receipt-pdf"
+    );
     await user.click(within(receiptsTable).getByRole("button", { name: "Anular" }));
     expect(within(receiptsTable).getByText(/Anulado/)).toBeTruthy();
 

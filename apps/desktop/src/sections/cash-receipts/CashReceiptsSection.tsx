@@ -19,6 +19,7 @@ import type {
   SupplierPayableStatus,
   SupplierPaymentRecord
 } from "../../types";
+import type { CashReceiptPdfResult } from "../../cash-receipt-pdf";
 import type { SupplierPaymentPdfResult } from "../../supplier-payment-pdf";
 
 type CashReceiptFormState = {
@@ -281,6 +282,7 @@ export function CashReceiptsSection({
             formatCurrency={formatCurrency}
             onVoidReceipt={voidReceipt}
             receiptActionError={receiptActionError}
+            settings={settings}
           />
         </>
       ) : (
@@ -462,14 +464,35 @@ function CashReceiptsTable({
   customerReceipts,
   formatCurrency,
   onVoidReceipt,
-  receiptActionError
+  receiptActionError,
+  settings
 }: {
   customerReceipts: CustomerReceiptRecord[];
   formatCurrency: (minor: number) => string;
   onVoidReceipt: (receiptId: string) => Promise<void>;
   receiptActionError: string | null;
+  settings: AppSettings;
 }) {
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<CashReceiptPdfResult | null>(
+    null
+  );
+  const [receiptPdfError, setReceiptPdfError] = useState<string | null>(null);
+
+  async function generateReceiptPdf(receipt: CustomerReceiptRecord) {
+    try {
+      const { generateCashReceiptPdf } = await import("../../cash-receipt-pdf");
+      const pdf = generateCashReceiptPdf({
+        receipt,
+        settings
+      });
+      setReceiptPreview(pdf);
+      setReceiptPdfError(null);
+    } catch {
+      setReceiptPreview(null);
+      setReceiptPdfError("No se pudo generar el PDF del recibo.");
+    }
+  }
 
   if (customerReceipts.length === 0) {
     return (
@@ -530,6 +553,12 @@ function CashReceiptsTable({
                         Anular
                       </SecondaryActionButton>
                     ) : null}
+                    <SecondaryActionButton
+                      onClick={() => void generateReceiptPdf(receipt)}
+                      variant="compact"
+                    >
+                      Generar PDF
+                    </SecondaryActionButton>
                   </td>
                 </tr>
                 {isSelected ? (
@@ -548,6 +577,21 @@ function CashReceiptsTable({
           })}
         </tbody>
       </DataTable>
+      {receiptPreview ? (
+        <section className="invoice-preview" aria-label="PDF de recibo de caja">
+          <div className="invoice-preview-header">
+            <strong>Recibo generado</strong>
+            <a download={receiptPreview.fileName} href={receiptPreview.dataUri}>
+              Descargar PDF
+            </a>
+          </div>
+          <iframe
+            src={receiptPreview.dataUri}
+            title="Vista previa de recibo de caja PDF"
+          />
+        </section>
+      ) : null}
+      {receiptPdfError ? <p className="form-error">{receiptPdfError}</p> : null}
     </>
   );
 }
