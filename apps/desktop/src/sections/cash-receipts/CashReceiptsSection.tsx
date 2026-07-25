@@ -7,7 +7,19 @@ import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
-import type { CustomerReceiptRecord, ReceivableRecord } from "../../types";
+import { PayablesTable } from "../../components/PayablesTable";
+import { ViewSwitch } from "../../components/ViewSwitch";
+import type { DueMetadata } from "../../lib/dates";
+import type {
+  CustomerReceiptRecord,
+  AppSettings,
+  PurchaseExpenseCategory,
+  ReceivableRecord,
+  SupplierPayableRecord,
+  SupplierPayableStatus,
+  SupplierPaymentRecord
+} from "../../types";
+import type { SupplierPaymentPdfResult } from "../../supplier-payment-pdf";
 
 type CashReceiptFormState = {
   amount: string;
@@ -23,19 +35,31 @@ type CashReceiptFormErrors = {
   submit?: string | undefined;
 };
 
+type TreasuryView = "cash-receipts" | "supplier-payments";
+
 type CashReceiptsSectionProps = {
+  compareDueDates: (leftDueAt: string, rightDueAt: string) => number;
   customerReceipts: CustomerReceiptRecord[];
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
+  formatPayableStatus: (status: SupplierPayableStatus) => string;
+  getDueMetadata: (dueAt: string) => DueMetadata;
   onRegisterCustomerReceipt: (input: {
     receivableId: string;
     amountMinor: number;
     concept: string;
     receivedAt: string;
   }) => Promise<string | null>;
+  onRegisterSupplierPayment: (input: {
+    payableId: string;
+    amountMinor: number;
+  }) => Promise<boolean>;
   onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
   parseNonNegativeInteger: (value: string) => number | null;
   receivables: ReceivableRecord[];
+  settings: AppSettings;
+  supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
 };
 
 const emptyReceiptForm: CashReceiptFormState = {
@@ -46,14 +70,22 @@ const emptyReceiptForm: CashReceiptFormState = {
 };
 
 export function CashReceiptsSection({
+  compareDueDates,
   customerReceipts,
   formatCurrency,
   formatIntegerInput,
+  formatPayableStatus,
+  getDueMetadata,
   onRegisterCustomerReceipt,
+  onRegisterSupplierPayment,
   onVoidCustomerReceipt,
   parseNonNegativeInteger,
-  receivables
+  receivables,
+  settings,
+  supplierPayables,
+  supplierPayments
 }: CashReceiptsSectionProps) {
+  const [activeView, setActiveView] = useState<TreasuryView>("cash-receipts");
   const [form, setForm] = useState<CashReceiptFormState>(emptyReceiptForm);
   const [errors, setErrors] = useState<CashReceiptFormErrors>({});
   const [receiptActionError, setReceiptActionError] = useState<string | null>(null);
@@ -67,6 +99,23 @@ export function CashReceiptsSection({
   const receiptsTotal = activeReceipts.reduce(
     (total, receipt) => total + receipt.amountMinor,
     0
+  );
+  const openSupplierPayables = supplierPayables.filter(
+    (payable) => payable.balanceMinor > 0
+  );
+  const supplierPayablesTotal = openSupplierPayables.reduce(
+    (total, payable) => total + payable.balanceMinor,
+    0
+  );
+  const supplierPaymentsTotal = supplierPayments.reduce(
+    (total, payment) => total + payment.amountMinor,
+    0
+  );
+  const sortedSupplierPayables = [...openSupplierPayables].sort((left, right) =>
+    compareDueDates(left.dueAt, right.dueAt)
+  );
+  const sortedSupplierPayments = [...supplierPayments].sort((left, right) =>
+    right.paidAtMs - left.paidAtMs
   );
 
   function updateField(field: keyof CashReceiptFormState, value: string) {
@@ -128,90 +177,246 @@ export function CashReceiptsSection({
 
   return (
     <section className="cash-receipts-layout">
-      <section className="metric-grid" aria-label="Resumen recibos de caja">
+      <section className="metric-grid" aria-label="Resumen tesoreria">
         <SummaryCard
-          label="Cartera abierta"
+          label="Por cobrar abierto"
           value={formatCurrency(openReceivablesTotal)}
         />
         <SummaryCard
-          label="Recibos activos"
+          label="Recibos de caja"
           value={String(activeReceipts.length)}
         />
         <SummaryCard
           label="Total recibido"
           value={formatCurrency(receiptsTotal)}
         />
+        <SummaryCard
+          label="Por pagar abierto"
+          value={formatCurrency(supplierPayablesTotal)}
+        />
+        <SummaryCard
+          label="Abonos a proveedores"
+          value={formatCurrency(supplierPaymentsTotal)}
+        />
       </section>
 
-      <section className="section-panel">
-        <form className="document-form" onSubmit={submitReceipt}>
-          <label className="field" htmlFor="cash-receipt-receivable">
-            <span>Cuenta por cobrar</span>
-            <select
-              aria-label="Cuenta por cobrar"
-              id="cash-receipt-receivable"
-              onChange={(event) => updateField("receivableId", event.target.value)}
-              value={form.receivableId}
-            >
-              <option value="">Selecciona una cuenta</option>
-              {receivables.map((receivable) => (
-                <option key={receivable.id} value={receivable.id}>
-                  {receivable.customerName} - {receivable.saleId} -{" "}
-                  {formatCurrency(receivable.balanceMinor)}
-                </option>
-              ))}
-            </select>
-            {errors.receivableId ? (
-              <small className="field-error">{errors.receivableId}</small>
-            ) : null}
-          </label>
-
-          <TextField
-            error={errors.receivedAt}
-            label="Fecha recibo"
-            onChange={(value) => updateField("receivedAt", value)}
-            type="date"
-            value={form.receivedAt}
-          />
-          <TextField
-            error={errors.amount}
-            inputMode="numeric"
-            label="Valor recibido"
-            onChange={(value) => updateField("amount", value)}
-            value={form.amount}
-          />
-          <TextField
-            label="Concepto"
-            onChange={(value) => updateField("concept", value)}
-            value={form.concept}
-          />
-
-          {selectedReceivable ? (
-            <SummaryCard compact>
-              <span>{selectedReceivable.customerName}</span>
-              <strong>Saldo {formatCurrency(selectedReceivable.balanceMinor)}</strong>
-            </SummaryCard>
-          ) : null}
-
-          {errors.submit ? <p className="form-error">{errors.submit}</p> : null}
-
-          <FormActions>
-            <PrimaryActionButton type="submit">Guardar recibo</PrimaryActionButton>
-          </FormActions>
-        </form>
+      <section className="cartera-view-switch-shell" aria-label="Selector tesoreria">
+        <ViewSwitch
+          ariaLabel="Vistas de tesoreria"
+          onSelect={setActiveView}
+          options={[
+            { label: "Recibos de caja", value: "cash-receipts" },
+            { label: "Abonos a proveedores", value: "supplier-payments" }
+          ]}
+          selectedValue={activeView}
+        />
       </section>
 
-      <OpenReceivablesTable
-        formatCurrency={formatCurrency}
-        receivables={receivables}
-      />
-      <CashReceiptsTable
-        customerReceipts={customerReceipts}
-        formatCurrency={formatCurrency}
-        onVoidReceipt={voidReceipt}
-        receiptActionError={receiptActionError}
-      />
+      {activeView === "cash-receipts" ? (
+        <>
+          <section className="section-panel">
+            <form className="document-form" onSubmit={submitReceipt}>
+              <label className="field" htmlFor="cash-receipt-receivable">
+                <span>Cuenta por cobrar</span>
+                <select
+                  aria-label="Cuenta por cobrar"
+                  id="cash-receipt-receivable"
+                  onChange={(event) => updateField("receivableId", event.target.value)}
+                  value={form.receivableId}
+                >
+                  <option value="">Selecciona una cuenta</option>
+                  {receivables.map((receivable) => (
+                    <option key={receivable.id} value={receivable.id}>
+                      {receivable.customerName} - {receivable.saleId} -{" "}
+                      {formatCurrency(receivable.balanceMinor)}
+                    </option>
+                  ))}
+                </select>
+                {errors.receivableId ? (
+                  <small className="field-error">{errors.receivableId}</small>
+                ) : null}
+              </label>
+
+              <TextField
+                error={errors.receivedAt}
+                label="Fecha recibo"
+                onChange={(value) => updateField("receivedAt", value)}
+                type="date"
+                value={form.receivedAt}
+              />
+              <TextField
+                error={errors.amount}
+                inputMode="numeric"
+                label="Valor recibido"
+                onChange={(value) => updateField("amount", value)}
+                value={form.amount}
+              />
+              <TextField
+                label="Concepto"
+                onChange={(value) => updateField("concept", value)}
+                value={form.concept}
+              />
+
+              {selectedReceivable ? (
+                <SummaryCard compact>
+                  <span>{selectedReceivable.customerName}</span>
+                  <strong>Saldo {formatCurrency(selectedReceivable.balanceMinor)}</strong>
+                </SummaryCard>
+              ) : null}
+
+              {errors.submit ? <p className="form-error">{errors.submit}</p> : null}
+
+              <FormActions>
+                <PrimaryActionButton type="submit">Guardar recibo</PrimaryActionButton>
+              </FormActions>
+            </form>
+          </section>
+
+          <OpenReceivablesTable
+            formatCurrency={formatCurrency}
+            receivables={receivables}
+          />
+          <CashReceiptsTable
+            customerReceipts={customerReceipts}
+            formatCurrency={formatCurrency}
+            onVoidReceipt={voidReceipt}
+            receiptActionError={receiptActionError}
+          />
+        </>
+      ) : (
+        <section
+          className="section-panel cartera-content cartera-content-payables"
+          aria-label="Abonos a proveedores"
+        >
+          <PayablesTable
+            formatCurrency={formatCurrency}
+            formatIntegerInput={formatIntegerInput}
+            formatPayableStatus={formatPayableStatus}
+            getDueMetadata={getDueMetadata}
+            onRegisterSupplierPayment={onRegisterSupplierPayment}
+            parseNonNegativeInteger={parseNonNegativeInteger}
+            supplierPayables={sortedSupplierPayables}
+            tableLabel="Abonos a proveedores"
+          />
+          <SupplierPaymentsHistory
+            formatCurrency={formatCurrency}
+            settings={settings}
+            supplierPayables={supplierPayables}
+            supplierPayments={sortedSupplierPayments}
+          />
+        </section>
+      )}
     </section>
+  );
+}
+
+function formatExpenseCategory(category: PurchaseExpenseCategory): string {
+  const labels: Record<PurchaseExpenseCategory, string> = {
+    inventory: "Inventario",
+    other: "Otros",
+    payroll: "Nomina",
+    rent: "Arriendo",
+    services: "Servicios",
+    taxes: "Impuestos",
+    transport: "Transporte"
+  };
+
+  return labels[category];
+}
+
+function SupplierPaymentsHistory({
+  formatCurrency,
+  settings,
+  supplierPayables,
+  supplierPayments
+}: {
+  formatCurrency: (minor: number) => string;
+  settings: AppSettings;
+  supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
+}) {
+  const [paymentPreview, setPaymentPreview] = useState<SupplierPaymentPdfResult | null>(
+    null
+  );
+  const [paymentPdfError, setPaymentPdfError] = useState<string | null>(null);
+
+  async function generatePaymentPdf(payment: SupplierPaymentRecord) {
+    const payable =
+      supplierPayables.find((item) => item.id === payment.payableId) ?? null;
+
+    try {
+      const { generateSupplierPaymentPdf } = await import("../../supplier-payment-pdf");
+      const pdf = generateSupplierPaymentPdf({
+        payable,
+        payment,
+        settings
+      });
+      setPaymentPreview(pdf);
+      setPaymentPdfError(null);
+    } catch {
+      setPaymentPreview(null);
+      setPaymentPdfError("No se pudo generar el PDF del abono.");
+    }
+  }
+
+  if (supplierPayments.length === 0) {
+    return (
+      <EmptyState
+        body="Los abonos guardados contra facturas de proveedores quedaran aqui."
+        className="section-empty"
+        title="Sin abonos a proveedores"
+      />
+    );
+  }
+
+  return (
+    <>
+      <DataTable ariaLabel="Abonos a proveedores registrados">
+        <DataTableHeader
+          labels={["Fecha", "Proveedor", "Factura", "Categoria", "Valor", "Accion"]}
+        />
+        <tbody>
+          {supplierPayments.map((payment) => {
+            const payable =
+              supplierPayables.find((item) => item.id === payment.payableId) ?? null;
+
+            return (
+              <tr key={payment.id}>
+                <td>{payment.paidAtLabel}</td>
+                <td>{payment.supplierName}</td>
+                <td>{payable?.invoiceNumber ?? payment.purchaseId}</td>
+                <td>{formatExpenseCategory(payment.expenseCategory)}</td>
+                <td>{formatCurrency(payment.amountMinor)}</td>
+                <td>
+                  <SecondaryActionButton
+                    onClick={() => void generatePaymentPdf(payment)}
+                    variant="compact"
+                  >
+                    Generar PDF
+                  </SecondaryActionButton>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </DataTable>
+
+      {paymentPreview ? (
+        <section className="invoice-preview" aria-label="PDF de abono a proveedor">
+          <div className="invoice-preview-header">
+            <strong>Abono generado</strong>
+            <a download={paymentPreview.fileName} href={paymentPreview.dataUri}>
+              Descargar PDF
+            </a>
+          </div>
+          <iframe
+            src={paymentPreview.dataUri}
+            title="Vista previa de abono a proveedor PDF"
+          />
+        </section>
+      ) : null}
+      {paymentPdfError ? <p className="form-error">{paymentPdfError}</p> : null}
+    </>
   );
 }
 

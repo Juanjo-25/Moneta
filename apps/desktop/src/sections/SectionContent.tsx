@@ -352,13 +352,20 @@ export function SectionContent({
   if (section.id === "cash-receipts") {
     return (
       <CashReceiptsSection
+        compareDueDates={compareDueDates}
         customerReceipts={customerReceipts}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
+        formatPayableStatus={formatPayableStatus}
+        getDueMetadata={getDueMetadata}
         onRegisterCustomerReceipt={onRegisterCustomerReceipt}
+        onRegisterSupplierPayment={onRegisterSupplierPayment}
         onVoidCustomerReceipt={onVoidCustomerReceipt}
         parseNonNegativeInteger={parseNonNegativeInteger}
         receivables={receivables}
+        settings={settings}
+        supplierPayables={supplierPayables}
+        supplierPayments={supplierPayments}
       />
     );
   }

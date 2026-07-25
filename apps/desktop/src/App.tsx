@@ -159,11 +159,11 @@ const navigationItems: SectionConfig[] = [
   },
   {
     id: "cash-receipts",
-    label: "Recibos de caja",
-    title: "Recibos de caja",
-    description: "Abonos y pagos recibidos de clientes",
-    emptyTitle: "Sin recibos registrados",
-    emptyBody: "Los pagos de cartera de clientes apareceran aqui."
+    label: "Tesoreria",
+    title: "Tesoreria",
+    description: "Recibos de caja y abonos a proveedores",
+    emptyTitle: "Sin movimientos de tesoreria",
+    emptyBody: "Los recibos de clientes y abonos a proveedores apareceran aqui."
   },
   {
     id: "customers",

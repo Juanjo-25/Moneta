@@ -3,12 +3,18 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { generateInvoicePdf } from "./invoice-pdf";
+import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
 
 vi.mock("./invoice-pdf", () => ({
   generateInvoicePdf: vi.fn()
 }));
 
+vi.mock("./supplier-payment-pdf", () => ({
+  generateSupplierPaymentPdf: vi.fn()
+}));
+
 const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
+const generateSupplierPaymentPdfMock = vi.mocked(generateSupplierPaymentPdf);
 
 function setTauriInvoke(
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>
@@ -106,6 +112,11 @@ describe("App navigation", () => {
     generateInvoicePdfMock.mockReturnValue({
       dataUri: "data:application/pdf;base64,invoice-pdf",
       fileName: "factura-FE-sale-1.pdf"
+    });
+    generateSupplierPaymentPdfMock.mockReset();
+    generateSupplierPaymentPdfMock.mockReturnValue({
+      dataUri: "data:application/pdf;base64,supplier-payment-pdf",
+      fileName: "abono-proveedor-supplier-payment-1.pdf"
     });
   });
 
@@ -1287,7 +1298,7 @@ describe("App navigation", () => {
     await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-20");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
-    await user.click(screen.getByRole("button", { name: "Recibos de caja" }));
+    await user.click(screen.getByRole("button", { name: "Tesoreria" }));
     await user.selectOptions(
       screen.getByLabelText("Cuenta por cobrar"),
       screen.getByRole("option", { name: /Carlos Ruiz - sale-/ })
@@ -1341,7 +1352,7 @@ describe("App navigation", () => {
     await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-20");
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
-    await user.click(screen.getByRole("button", { name: "Recibos de caja" }));
+    await user.click(screen.getByRole("button", { name: "Tesoreria" }));
     await user.selectOptions(
       screen.getByLabelText("Cuenta por cobrar"),
       screen.getByRole("option", { name: /Carlos Ruiz - sale-/ })
@@ -2910,6 +2921,56 @@ describe("App navigation", () => {
     expect(within(payablesTable).getByText("Abonada")).toBeTruthy();
     expect(within(payablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
     expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
+  });
+
+  it("registers supplier payments from tesoreria", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Tesoreria" }));
+    await user.click(screen.getByRole("radio", { name: "Abonos a proveedores" }));
+
+    const payablesTable = screen.getByRole("table", { name: "Abonos a proveedores" });
+    await user.click(within(payablesTable).getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "5000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+
+    expect(within(payablesTable).getByText("Abonada")).toBeTruthy();
+    expect(within(payablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
+    expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
+
+    const paymentsHistory = screen.getByRole("table", {
+      name: "Abonos a proveedores registrados"
+    });
+    expect(within(paymentsHistory).getByText("Proveedor Central")).toBeTruthy();
+    expect(within(paymentsHistory).getByText("001")).toBeTruthy();
+    expect(within(paymentsHistory).getByText("Inventario")).toBeTruthy();
+    expect(within(paymentsHistory).getByText(/\$\s*5\.000/)).toBeTruthy();
+
+    await user.click(within(paymentsHistory).getByRole("button", { name: "Generar PDF" }));
+
+    expect(generateSupplierPaymentPdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: expect.objectContaining({
+          amountMinor: 5000,
+          supplierName: "Proveedor Central"
+        }),
+        payable: expect.objectContaining({
+          invoiceNumber: "001",
+          balanceMinor: 10000
+        })
+      })
+    );
+    expect(
+      screen
+        .getByTitle("Vista previa de abono a proveedor PDF")
+        .getAttribute("src")
+    ).toBe("data:application/pdf;base64,supplier-payment-pdf");
+    expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
+      "data:application/pdf;base64,supplier-payment-pdf"
+    );
   });
 
   it("registers a full supplier payment and marks payable as pagada", async () => {
