@@ -254,6 +254,8 @@ button,
 
 .topbar-action {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: flex-start;
   justify-content: flex-end;
 }
@@ -872,6 +874,33 @@ button,
   gap: 18px;
 }
 
+.product-delete-confirmation h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.product-delete-confirmation span {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.product-delete-confirmation {
+  display: grid;
+  gap: 12px;
+  border-color: #fecaca;
+  background: var(--danger-soft);
+  padding: 16px 18px;
+}
+
+.product-delete-confirmation p {
+  margin: 0;
+  color: #7f1d1d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .product-create-shell {
   display: grid;
   gap: 0;
@@ -1293,9 +1322,27 @@ button,
   color: var(--text-primary);
 }
 
+.secondary-action.danger-action {
+  border-color: #fecaca;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.secondary-action.danger-action:hover,
+.secondary-action.danger-action:focus-visible {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .secondary-action:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgb(15 118 110 / 12%);
+}
+
+.secondary-action.danger-action:focus-visible {
+  border-color: #fca5a5;
+  box-shadow: 0 0 0 4px rgb(220 38 38 / 12%);
 }
 
 .invoice-preview {

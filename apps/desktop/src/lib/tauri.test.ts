@@ -3,6 +3,7 @@ import {
   checkNativeConnection,
   createNativeAutomaticDatabaseBackup,
   createNativeDatabaseBackup,
+  deleteNativeProducts,
   deleteNativeSale,
   loadNativeCreditNotes,
   loadNativeCustomers,
@@ -246,6 +247,7 @@ describe("native product persistence", () => {
 
     await expect(loadNativeProducts()).resolves.toBeNull();
     await expect(saveNativeProduct(product)).resolves.toBe(false);
+    await expect(deleteNativeProducts(["product-1"])).resolves.toBeNull();
   });
 
   it("loads products through Tauri", async () => {
@@ -262,6 +264,22 @@ describe("native product persistence", () => {
 
     await expect(saveNativeProduct(product)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_product", { product });
+  });
+
+  it("deletes products through Tauri", async () => {
+    const result = {
+      blockedCount: 1,
+      deletedProductIds: ["product-1"]
+    };
+    const invoke = vi.fn().mockResolvedValue(result);
+    setTauriInvoke(invoke);
+
+    await expect(deleteNativeProducts(["product-1", "product-2"])).resolves.toEqual(
+      result
+    );
+    expect(invoke).toHaveBeenCalledWith("delete_products", {
+      input: { productIds: ["product-1", "product-2"] }
+    });
   });
 });
 

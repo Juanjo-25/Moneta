@@ -62,6 +62,18 @@ type InventoryMovementRecord = {
   occurredAtMs: number;
   occurredAtLabel: string;
 };
+type ProductDeleteDraft =
+  | {
+      kind: "all";
+    }
+  | {
+      kind: "product";
+      productId: string;
+    };
+type ProductDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
+};
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -97,6 +109,7 @@ const inventoryMovementSourceLabels: Record<InventoryMovementSource, string> = {
 
 type ProductsSectionProps = {
   creditNotes: CreditNoteRecord[];
+  deleteAllProductsRequestId: number;
   formVisible: boolean;
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
@@ -104,6 +117,13 @@ type ProductsSectionProps = {
   isLowStock: (product: ProductRecord) => boolean;
   onCloseForm: () => void;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onDeleteAllProducts: () => Promise<{
+    blockedCount: number;
+    deletedCount: number;
+    deletedProductIds: string[];
+    error: string | null;
+  }>;
+  onDeleteProduct: (productId: string) => Promise<string | null>;
   onRegisterInventoryAdjustment: (input: {
     productId: string;
     adjustmentType: InventoryAdjustmentType;
@@ -119,6 +139,7 @@ type ProductsSectionProps = {
 
 export function ProductsSection({
   creditNotes,
+  deleteAllProductsRequestId,
   formVisible,
   formatCurrency,
   formatIntegerInput,
@@ -126,6 +147,8 @@ export function ProductsSection({
   isLowStock,
   onCloseForm,
   onCreateProduct,
+  onDeleteAllProducts,
+  onDeleteProduct,
   onRegisterInventoryAdjustment,
   onUpdateProduct,
   parseNonNegativeInteger,
@@ -151,9 +174,16 @@ export function ProductsSection({
   const [importMessage, setImportMessage] = useState("");
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importingProducts, setImportingProducts] = useState(false);
+  const [deleteDraft, setDeleteDraft] = useState<ProductDeleteDraft | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<ProductDeleteNotice | null>(null);
   const editFormRef = useRef<HTMLFormElement | null>(null);
+  const previousDeleteAllProductsRequestId = useRef(deleteAllProductsRequestId);
   const editingProduct =
     products.find((product) => product.id === editingProductId) ?? null;
+  const deleteDraftProduct =
+    deleteDraft?.kind === "product"
+      ? products.find((product) => product.id === deleteDraft.productId) ?? null
+      : null;
   const activeProducts = products.filter((product) => product.active);
   const selectedAdjustmentProduct =
     products.find((product) => product.id === adjustmentForm.productId) ?? null;
@@ -195,6 +225,16 @@ export function ProductsSection({
       block: "start"
     });
   }, [editingProduct, editForm]);
+
+  useEffect(() => {
+    if (deleteAllProductsRequestId === previousDeleteAllProductsRequestId.current) {
+      return;
+    }
+
+    previousDeleteAllProductsRequestId.current = deleteAllProductsRequestId;
+    setDeleteDraft({ kind: "all" });
+    setDeleteNotice(null);
+  }, [deleteAllProductsRequestId]);
 
   function updateField(
     field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
@@ -328,6 +368,99 @@ export function ProductsSection({
 
   async function setProductActive(product: ProductRecord, active: boolean) {
     await onUpdateProduct({ ...product, active });
+  }
+
+  function clearDeletedProductReferences(productIds: string[]) {
+    if (productIds.length === 0) {
+      return;
+    }
+
+    if (productIds.includes(editingProductId ?? "")) {
+      setEditingProductId(null);
+      setEditForm(null);
+      setEditErrors({});
+    }
+
+    if (productIds.includes(adjustmentForm.productId)) {
+      setAdjustmentForm(emptyInventoryAdjustmentForm);
+      setAdjustmentErrors({});
+      setAdjustmentMessage("");
+    }
+
+    if (productIds.includes(movementProductFilter)) {
+      setMovementProductFilter("");
+    }
+  }
+
+  function startProductDeletion(product: ProductRecord) {
+    setDeleteDraft({ kind: "product", productId: product.id });
+    setDeleteNotice(null);
+  }
+
+  async function confirmProductDeletion() {
+    if (!deleteDraft) {
+      return;
+    }
+
+    if (deleteDraft.kind === "product") {
+      const product = deleteDraftProduct;
+
+      if (!product) {
+        setDeleteDraft(null);
+        setDeleteNotice({
+          kind: "error",
+          message: "No se encontro el producto."
+        });
+        return;
+      }
+
+      const error = await onDeleteProduct(product.id);
+      setDeleteDraft(null);
+
+      if (error) {
+        setDeleteNotice({ kind: "error", message: error });
+        return;
+      }
+
+      clearDeletedProductReferences([product.id]);
+      setDeleteNotice({
+        kind: "success",
+        message: `${product.name} eliminado del inventario.`
+      });
+      return;
+    }
+
+    const result = await onDeleteAllProducts();
+    setDeleteDraft(null);
+
+    if (result.error) {
+      setDeleteNotice({ kind: "error", message: result.error });
+      return;
+    }
+
+    clearDeletedProductReferences(result.deletedProductIds);
+
+    if (result.deletedCount === 0 && result.blockedCount > 0) {
+      setDeleteNotice({
+        kind: "error",
+        message:
+          "No se elimino ningun producto. Revisa si el inventario cambio antes de confirmar."
+      });
+      return;
+    }
+
+    if (result.blockedCount > 0) {
+      setDeleteNotice({
+        kind: "success",
+        message: `Se eliminaron ${result.deletedCount} productos. ${result.blockedCount} no se encontraron al confirmar.`
+      });
+      return;
+    }
+
+    setDeleteNotice({
+      kind: "success",
+      message: `Inventario eliminado: ${result.deletedCount} productos.`
+    });
   }
 
   async function submitProduct(event: FormEvent<HTMLFormElement>) {
@@ -492,6 +625,45 @@ export function ProductsSection({
 
   return (
     <section className="products-layout">
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteDraft ? (
+        <section
+          aria-labelledby="confirmar-borrado-productos"
+          className="product-delete-confirmation section-surface"
+          role="alertdialog"
+        >
+          <div>
+            <h2 id="confirmar-borrado-productos">Confirmar eliminacion</h2>
+            <span>
+              {deleteDraft.kind === "all"
+                ? "Eliminar todo el inventario"
+                : deleteDraftProduct?.name ?? "Producto"}
+            </span>
+          </div>
+          <p>
+            {deleteDraft.kind === "all"
+              ? "Se quitara el inventario visible y los documentos anteriores se conservan."
+              : "Se quitara del inventario visible y sus documentos anteriores se conservan."}
+          </p>
+          <FormActions>
+            <SecondaryActionButton onClick={() => setDeleteDraft(null)}>
+              Cancelar
+            </SecondaryActionButton>
+            <SecondaryActionButton className="danger-action" onClick={confirmProductDeletion}>
+              Confirmar eliminacion
+            </SecondaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+
       {formVisible ? (
         <section className="product-create-shell">
           <form className="product-form section-form-shell" onSubmit={submitProduct}>
@@ -755,6 +927,7 @@ export function ProductsSection({
           <ProductTable
             formatCurrency={formatCurrency}
             isLowStock={isLowStock}
+            onDeleteProduct={startProductDeletion}
             onEditProduct={startEditProduct}
             onSetProductActive={setProductActive}
             products={products}
@@ -1045,6 +1218,7 @@ function formatInventoryAdjustmentQuantity(
 type ProductTableProps = {
   formatCurrency: (minor: number) => string;
   isLowStock: (product: ProductRecord) => boolean;
+  onDeleteProduct: (product: ProductRecord) => void;
   onEditProduct: (product: ProductRecord) => void;
   onSetProductActive: (product: ProductRecord, active: boolean) => void;
   products: ProductRecord[];
@@ -1053,6 +1227,7 @@ type ProductTableProps = {
 function ProductTable({
   formatCurrency,
   isLowStock,
+  onDeleteProduct,
   onEditProduct,
   onSetProductActive,
   products
@@ -1133,6 +1308,16 @@ function ProductTable({
                     variant="compact"
                   >
                     {product.active ? "Inactivar" : "Reactivar"}
+                  </SecondaryActionButton>
+                  <SecondaryActionButton
+                    className="danger-action"
+                    onClick={() => {
+                      onDeleteProduct(product);
+                      setOpenActionsProductId(null);
+                    }}
+                    variant="compact"
+                  >
+                    Eliminar
                   </SecondaryActionButton>
                 </div>
               ) : null}

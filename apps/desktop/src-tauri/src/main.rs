@@ -71,6 +71,19 @@ struct ProductRecord {
     active: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductDeleteInput {
+    product_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductDeleteResult {
+    deleted_product_ids: Vec<String>,
+    blocked_count: usize,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InventoryAdjustmentRecord {
@@ -605,6 +618,7 @@ fn list_products(app: tauri::AppHandle) -> Result<Vec<ProductRecord>, String> {
             "
             SELECT id, sku, name, unit, cost_minor, sale_price_minor, minimum_stock, stock, active
             FROM products
+            WHERE deleted_at = ''
             ORDER BY name COLLATE NOCASE ASC
             ",
         )
@@ -680,6 +694,109 @@ fn save_product(app: tauri::AppHandle, product: ProductRecord) -> Result<(), Str
         .map_err(|error| format!("No se pudo guardar el producto: {error}"))?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn delete_products(
+    app: tauri::AppHandle,
+    input: ProductDeleteInput,
+) -> Result<ProductDeleteResult, String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    delete_products_in_connection(&mut connection, input.product_ids)
+}
+
+fn delete_products_in_connection(
+    connection: &mut Connection,
+    input_product_ids: Vec<String>,
+) -> Result<ProductDeleteResult, String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar el borrado de productos: {error}"))?;
+    let mut product_ids: Vec<String> = Vec::new();
+
+    for product_id in input_product_ids {
+        let product_id = product_id.trim().to_string();
+
+        if !product_id.is_empty() && !product_ids.iter().any(|existing| existing == &product_id) {
+            product_ids.push(product_id);
+        }
+    }
+
+    let mut deleted_product_ids = Vec::new();
+    let mut blocked_count = 0;
+
+    for product_id in product_ids {
+        if product_has_history(&transaction, &product_id)? {
+            let updated = transaction
+                .execute(
+                    "
+                    UPDATE products
+                    SET
+                      sku = sku || '__deleted__' || id,
+                      active = 0,
+                      deleted_at = CURRENT_TIMESTAMP,
+                      updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?1 AND deleted_at = ''
+                    ",
+                    params![product_id],
+                )
+                .map_err(|error| format!("No se pudo eliminar el producto: {error}"))?;
+
+            if updated > 0 {
+                deleted_product_ids.push(product_id);
+            } else {
+                blocked_count += 1;
+            }
+            continue;
+        }
+
+        let deleted = transaction
+            .execute("DELETE FROM products WHERE id = ?1", params![product_id])
+            .map_err(|error| format!("No se pudo eliminar el producto: {error}"))?;
+
+        if deleted > 0 {
+            deleted_product_ids.push(product_id);
+        }
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el borrado de productos: {error}"))?;
+
+    Ok(ProductDeleteResult {
+        deleted_product_ids,
+        blocked_count,
+    })
+}
+
+fn product_has_history(connection: &Connection, product_id: &str) -> Result<bool, String> {
+    let reference_checks = [
+        ("inventory_adjustments", "product_id"),
+        ("sale_lines", "product_id"),
+        ("sales", "product_id"),
+        ("credit_note_lines", "product_id"),
+        ("purchase_lines", "product_id"),
+        ("purchases", "product_id"),
+    ];
+
+    for (table, column) in reference_checks {
+        let count: i64 = connection
+            .query_row(
+                &format!("SELECT COUNT(1) FROM {table} WHERE {column} = ?1"),
+                params![product_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("No se pudo revisar el historial del producto: {error}"))?;
+
+        if count > 0 {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 #[tauri::command]
@@ -3132,6 +3249,12 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
     )?;
     ensure_column(
         connection,
+        "products",
+        "deleted_at",
+        "ALTER TABLE products ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        connection,
         "customer_receipts",
         "active",
         "ALTER TABLE customer_receipts ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
@@ -3220,6 +3343,132 @@ fn ensure_column(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_connection() -> Connection {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .expect("enable foreign keys");
+        apply_migrations(&connection).expect("apply migrations");
+        connection
+    }
+
+    fn insert_product(connection: &Connection, product_id: &str, sku: &str) {
+        connection
+            .execute(
+                "
+                INSERT INTO products (
+                  id,
+                  sku,
+                  name,
+                  unit,
+                  cost_minor,
+                  sale_price_minor,
+                  minimum_stock,
+                  stock,
+                  active
+                )
+                VALUES (?1, ?2, 'Arroz libra', 'Unidad', 3200, 4500, 1, 4, 1)
+                ",
+                params![product_id, sku],
+            )
+            .expect("insert product");
+    }
+
+    #[test]
+    fn deletes_product_without_history() {
+        let mut connection = test_connection();
+        insert_product(&connection, "product-1", "ARZ-001");
+
+        let result = delete_products_in_connection(&mut connection, vec!["product-1".to_string()])
+            .expect("delete product");
+
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM products WHERE id = 'product-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count products");
+
+        assert_eq!(result.deleted_product_ids, vec!["product-1"]);
+        assert_eq!(result.blocked_count, 0);
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn hides_product_with_history_without_removing_movements() {
+        let mut connection = test_connection();
+        insert_product(&connection, "product-1", "ARZ-001");
+        connection
+            .execute(
+                "
+                INSERT INTO inventory_adjustments (
+                  id,
+                  product_id,
+                  product_name,
+                  unit,
+                  adjustment_type,
+                  quantity,
+                  previous_stock,
+                  next_stock,
+                  reason,
+                  occurred_at_ms,
+                  occurred_at_label
+                )
+                VALUES (
+                  'adjustment-1',
+                  'product-1',
+                  'Arroz libra',
+                  'Unidad',
+                  'exit',
+                  1,
+                  4,
+                  3,
+                  'Merma',
+                  1,
+                  '06/08/26, 14:20'
+                )
+                ",
+                [],
+            )
+            .expect("insert adjustment");
+
+        let result = delete_products_in_connection(&mut connection, vec!["product-1".to_string()])
+            .expect("delete product");
+        let deleted_at: String = connection
+            .query_row(
+                "SELECT deleted_at FROM products WHERE id = 'product-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read deleted_at");
+        let visible_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM products WHERE deleted_at = ''",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count visible products");
+        let adjustment_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM inventory_adjustments WHERE product_id = 'product-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count adjustments");
+
+        assert_eq!(result.deleted_product_ids, vec!["product-1"]);
+        assert_eq!(result.blocked_count, 0);
+        assert!(!deleted_at.is_empty());
+        assert_eq!(visible_count, 0);
+        assert_eq!(adjustment_count, 1);
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -3231,6 +3480,7 @@ fn main() {
             create_automatic_database_backup,
             list_products,
             save_product,
+            delete_products,
             list_inventory_adjustments,
             save_inventory_adjustment,
             list_customers,

@@ -57,6 +57,11 @@ export type AutomaticBackupStatus = {
   deletedOldBackups: number;
 };
 
+export type NativeProductDeleteResult = {
+  blockedCount: number;
+  deletedProductIds: string[];
+};
+
 export async function checkNativeConnection(): Promise<NativeConnectionStatus> {
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -148,6 +153,20 @@ export async function saveNativeProduct(product: ProductRecord): Promise<boolean
   await invoke<void>("save_product", { product });
 
   return true;
+}
+
+export async function deleteNativeProducts(
+  productIds: string[]
+): Promise<NativeProductDeleteResult | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<NativeProductDeleteResult>("delete_products", {
+    input: { productIds }
+  });
 }
 
 export async function loadNativeInventoryAdjustments(): Promise<

@@ -4,6 +4,7 @@ import {
   useState
 } from "react";
 import { PrimaryActionButton } from "./components/PrimaryActionButton";
+import { SecondaryActionButton } from "./components/SecondaryActionButton";
 import { SectionHeader } from "./components/SectionHeader";
 import {
   compareDueDates,
@@ -19,6 +20,7 @@ import {
   checkNativeConnection,
   createNativeAutomaticDatabaseBackup,
   createNativeDatabaseBackup,
+  deleteNativeProducts,
   deleteNativeSale,
   loadNativeCreditNotes,
   loadNativeCustomers,
@@ -341,6 +343,13 @@ function isLowStock(product: ProductRecord): boolean {
   return product.active && product.stock <= product.minimumStock;
 }
 
+type ProductBulkDeleteResult = {
+  blockedCount: number;
+  deletedCount: number;
+  deletedProductIds: string[];
+  error: string | null;
+};
+
 function formatNativePersistenceError(
   fallbackMessage: string,
   error: unknown
@@ -378,6 +387,7 @@ export function App() {
   const [supplierPayments, setSupplierPayments] = useState<SupplierPaymentRecord[]>([]);
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [productFormVisible, setProductFormVisible] = useState(false);
+  const [productDeleteAllRequestId, setProductDeleteAllRequestId] = useState(0);
   const [supplierFormVisible, setSupplierFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
@@ -582,6 +592,26 @@ export function App() {
     openSection(activeSection.id);
   }
 
+  const showDeleteInventoryAction = activeSection.id === "products" && products.length > 0;
+  const sectionHeaderAction =
+    activeSection.primaryAction || showDeleteInventoryAction ? (
+      <>
+        {activeSection.primaryAction ? (
+          <PrimaryActionButton onClick={handlePrimaryAction}>
+            {activeSection.primaryAction}
+          </PrimaryActionButton>
+        ) : null}
+        {showDeleteInventoryAction ? (
+          <SecondaryActionButton
+            className="danger-action"
+            onClick={() => setProductDeleteAllRequestId((currentId) => currentId + 1)}
+          >
+            Eliminar todo el inventario
+          </SecondaryActionButton>
+        ) : null}
+      </>
+    ) : null;
+
   async function saveProductInSession(product: ProductRecord): Promise<boolean> {
     try {
       await saveNativeProduct(product);
@@ -605,6 +635,111 @@ export function App() {
 
   async function createProduct(product: ProductRecord): Promise<boolean> {
     return saveProductInSession(product);
+  }
+
+  function removeDeletedProductsFromDrafts(productIds: string[]) {
+    if (productIds.length === 0) {
+      return;
+    }
+
+    setSalesDraft((currentDraft) => ({
+      form: productIds.includes(currentDraft.form.productId)
+        ? {
+            ...currentDraft.form,
+            productId: "",
+            quantity: "",
+            unit: "Unidad",
+            unitPrice: ""
+          }
+        : currentDraft.form,
+      saleLines: currentDraft.saleLines.filter(
+        (line) => !productIds.includes(line.product.id)
+      )
+    }));
+  }
+
+  async function deleteProductInSession(productId: string): Promise<string | null> {
+    const product = products.find((currentProduct) => currentProduct.id === productId);
+
+    if (!product) {
+      return "No se encontro el producto.";
+    }
+
+    try {
+      const nativeResult = await deleteNativeProducts([productId]);
+      const deletedProductIds = nativeResult?.deletedProductIds ?? [productId];
+
+      if (nativeResult && deletedProductIds.length === 0) {
+        return "No se encontro el producto en la base de datos local.";
+      }
+
+      setProducts((currentProducts) =>
+        currentProducts.filter(
+          (currentProduct) => !deletedProductIds.includes(currentProduct.id)
+        )
+      );
+      removeDeletedProductsFromDrafts(deletedProductIds);
+      return null;
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar el producto local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
+  }
+
+  async function deleteAllProductsInSession(): Promise<ProductBulkDeleteResult> {
+    const deletableProductIds = products.map((product) => product.id);
+
+    if (deletableProductIds.length === 0) {
+      return {
+        blockedCount: 0,
+        deletedCount: 0,
+        deletedProductIds: [],
+        error: null
+      };
+    }
+
+    try {
+      const nativeResult = await deleteNativeProducts(deletableProductIds);
+      const deletedProductIds = nativeResult?.deletedProductIds ?? deletableProductIds;
+      const blockedCount = nativeResult?.blockedCount ?? 0;
+
+      setProducts((currentProducts) =>
+        currentProducts.filter(
+          (currentProduct) => !deletedProductIds.includes(currentProduct.id)
+        )
+      );
+      removeDeletedProductsFromDrafts(deletedProductIds);
+
+      return {
+        blockedCount,
+        deletedCount: deletedProductIds.length,
+        deletedProductIds,
+        error: null
+      };
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar el inventario local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+
+      return {
+        blockedCount: 0,
+        deletedCount: 0,
+        deletedProductIds: [],
+        error: message
+      };
+    }
   }
 
   async function registerInventoryAdjustment(input: {
@@ -2053,11 +2188,7 @@ export function App() {
         </div>
 
         <SectionHeader
-          action={activeSection.primaryAction ? (
-            <PrimaryActionButton onClick={handlePrimaryAction}>
-              {activeSection.primaryAction}
-            </PrimaryActionButton>
-          ) : null}
+          action={sectionHeaderAction}
           description={activeSection.description}
           eyebrow={activeSection.label}
           title={activeSection.title}
@@ -2088,6 +2219,8 @@ export function App() {
             onCreateCustomer={createCustomer}
             onCreateProduct={createProduct}
             onCreateSupplier={createSupplier}
+            onDeleteAllProducts={deleteAllProductsInSession}
+            onDeleteProduct={deleteProductInSession}
             onUpdateSupplier={updateSupplier}
             onSetSupplierActive={setSupplierActive}
             onRegisterPurchase={registerPurchaseInSession}
@@ -2108,6 +2241,7 @@ export function App() {
             onCloseSupplierForm={() => setSupplierFormVisible(false)}
             onUpdateProduct={saveProductInSession}
             parseNonNegativeInteger={parseNonNegativeInteger}
+            productDeleteAllRequestId={productDeleteAllRequestId}
             productFormVisible={productFormVisible}
             supplierFormVisible={supplierFormVisible}
             products={products}

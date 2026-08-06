@@ -887,6 +887,88 @@ describe("App navigation", () => {
     expect(screen.queryByRole("option", { name: "Arroz premium" })).toBeNull();
   });
 
+  it("deletes a product without historical movements", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    await user.click(
+      within(productsTable).getByRole("button", { name: "Acciones de Arroz libra" })
+    );
+    await user.click(within(productsTable).getByRole("button", { name: "Eliminar" }));
+    expect(screen.getByRole("heading", { name: "Confirmar eliminacion" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Confirmar eliminacion" }));
+
+    expect(screen.getByText("Arroz libra eliminado del inventario.")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Productos registrados" })).toBeNull();
+    expect(screen.getByText("Sin productos registrados")).toBeTruthy();
+  });
+
+  it("removes a product with history from inventory and keeps its movement record", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await selectFirstInventoryAdjustmentProduct(user);
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.type(screen.getByLabelText("Motivo"), "Merma bodega");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+    await createSecondProductFixture(user);
+
+    let productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    await user.click(
+      within(productsTable).getByRole("button", { name: "Acciones de Arroz libra" })
+    );
+    await user.click(within(productsTable).getByRole("button", { name: "Eliminar" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar eliminacion" }));
+
+    expect(screen.getByText("Arroz libra eliminado del inventario.")).toBeTruthy();
+    productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).queryByRole("cell", { name: "Arroz libra" })).toBeNull();
+    expect(within(productsTable).getByRole("cell", { name: "Panela unidad" })).toBeTruthy();
+
+    const adjustmentsTable = screen.getByRole("table", {
+      name: "Ajustes de inventario"
+    });
+    expect(within(adjustmentsTable).getByRole("cell", { name: "Arroz libra" })).toBeTruthy();
+  });
+
+  it("deletes all visible products while keeping historical records available", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await selectFirstInventoryAdjustmentProduct(user);
+    await user.selectOptions(screen.getByLabelText("Tipo de ajuste"), "exit");
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.type(screen.getByLabelText("Motivo"), "Merma bodega");
+    await user.click(screen.getByRole("button", { name: "Registrar ajuste" }));
+    await createSecondProductFixture(user);
+
+    const productHeaderActions = screen
+      .getByRole("button", { name: "Nuevo producto" })
+      .closest(".topbar-action");
+    expect(productHeaderActions).toBeTruthy();
+
+    await user.click(
+      within(productHeaderActions as HTMLElement).getByRole("button", {
+        name: "Eliminar todo el inventario"
+      })
+    );
+    await user.click(screen.getByRole("button", { name: "Confirmar eliminacion" }));
+
+    expect(screen.getByText("Inventario eliminado: 2 productos.")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Productos registrados" })).toBeNull();
+    expect(screen.getByText("Sin productos registrados")).toBeTruthy();
+  });
+
   it("registers an inventory adjustment and keeps a movement history", async () => {
     const user = userEvent.setup();
 

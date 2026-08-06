@@ -65,6 +65,13 @@ type SectionContentProps = {
   isLowStock: (product: ProductRecord) => boolean;
   onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onDeleteAllProducts: () => Promise<{
+    blockedCount: number;
+    deletedCount: number;
+    deletedProductIds: string[];
+    error: string | null;
+  }>;
+  onDeleteProduct: (productId: string) => Promise<string | null>;
   onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
   onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
   onUpdateSupplier: (
@@ -194,6 +201,7 @@ type SectionContentProps = {
   onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
   onSettingsChange: (settings: AppSettings) => void;
   parseNonNegativeInteger: (value: string) => number | null;
+  productDeleteAllRequestId: number;
   productFormVisible: boolean;
   supplierFormVisible: boolean;
   products: ProductRecord[];
@@ -222,6 +230,8 @@ export function SectionContent({
   isLowStock,
   onCreateCustomer,
   onCreateProduct,
+  onDeleteAllProducts,
+  onDeleteProduct,
   onUpdateProduct,
   onCreateSupplier,
   onUpdateSupplier,
@@ -246,6 +256,7 @@ export function SectionContent({
   onCreateBackup,
   onSettingsChange,
   parseNonNegativeInteger,
+  productDeleteAllRequestId,
   productFormVisible,
   supplierFormVisible,
   products,
@@ -270,9 +281,12 @@ export function SectionContent({
         isLowStock={isLowStock}
         onCloseForm={onCloseProductForm}
         onCreateProduct={onCreateProduct}
+        onDeleteAllProducts={onDeleteAllProducts}
+        onDeleteProduct={onDeleteProduct}
         onRegisterInventoryAdjustment={onRegisterInventoryAdjustment}
         onUpdateProduct={onUpdateProduct}
         parseNonNegativeInteger={parseNonNegativeInteger}
+        deleteAllProductsRequestId={productDeleteAllRequestId}
         products={products}
         purchases={purchases}
         sales={sales}
