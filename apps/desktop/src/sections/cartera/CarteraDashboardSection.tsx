@@ -2,7 +2,10 @@ import { useState } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
 import { PayablesTable } from "../../components/PayablesTable";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { ViewSwitch } from "../../components/ViewSwitch";
 import type { DueMetadata } from "../../lib/dates";
@@ -30,6 +33,8 @@ type CarteraDashboardSectionProps = {
   formatIntegerInput: (value: string) => string;
   formatPayableStatus: (status: SupplierPayableStatus) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
+  onDeleteReceivable: (receivableId: string) => Promise<string | null>;
+  onDeleteSupplierPayable: (payableId: string) => Promise<string | null>;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
@@ -49,6 +54,8 @@ export function CarteraDashboardSection({
   formatIntegerInput,
   formatPayableStatus,
   getDueMetadata,
+  onDeleteReceivable,
+  onDeleteSupplierPayable,
   onRegisterSupplierPayment,
   parseNonNegativeInteger,
   receivables,
@@ -138,6 +145,7 @@ export function CarteraDashboardSection({
           <ReceivablesTable
             formatCurrency={formatCurrency}
             getDueMetadata={getDueMetadata}
+            onDeleteReceivable={onDeleteReceivable}
             receivables={sortedReceivables}
           />
         </section>
@@ -151,6 +159,7 @@ export function CarteraDashboardSection({
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
             getDueMetadata={getDueMetadata}
+            onDeleteSupplierPayable={onDeleteSupplierPayable}
             onRegisterSupplierPayment={onRegisterSupplierPayment}
             parseNonNegativeInteger={parseNonNegativeInteger}
             supplierPayables={sortedPayables}
@@ -199,58 +208,154 @@ function CarteraAlerts({
 type ReceivablesTableProps = {
   formatCurrency: (minor: number) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
+  onDeleteReceivable: (receivableId: string) => Promise<string | null>;
   receivables: ReceivableRecord[];
+};
+
+type ReceivableDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 function ReceivablesTable({
   formatCurrency,
   getDueMetadata,
+  onDeleteReceivable,
   receivables
 }: ReceivablesTableProps) {
+  const [deleteCandidate, setDeleteCandidate] = useState<ReceivableRecord | null>(
+    null
+  );
+  const [deleteNotice, setDeleteNotice] = useState<ReceivableDeleteNotice | null>(
+    null
+  );
+
+  async function confirmReceivableDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedReceivable = deleteCandidate;
+    const deleteError = await onDeleteReceivable(deletedReceivable.id);
+
+    if (deleteError) {
+      setDeleteNotice({ kind: "error", message: deleteError });
+      return;
+    }
+
+    setDeleteCandidate(null);
+    setDeleteNotice({
+      kind: "success",
+      message: `Cuenta por cobrar ${deletedReceivable.saleId} eliminada.`
+    });
+  }
+
   if (receivables.length === 0) {
     return (
-      <EmptyState
-        body="Las ventas pendientes de pago apareceran aqui."
-        className="section-empty"
-        title="Sin cartera por cobrar"
-      />
+      <>
+        {deleteNotice ? (
+          <p
+            className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+            role={deleteNotice.kind === "error" ? "alert" : "status"}
+          >
+            {deleteNotice.message}
+          </p>
+        ) : null}
+        <EmptyState
+          body="Las ventas pendientes de pago apareceran aqui."
+          className="section-empty"
+          title="Sin cartera por cobrar"
+        />
+      </>
     );
   }
 
   return (
-    <DataTable ariaLabel="Cartera por cobrar">
-      <DataTableHeader
-        labels={[
-          "Cliente",
-          "Venta",
-          "Vence",
-          "Original",
-          "Recibido",
-          "Saldo",
-          "Rango",
-          "Alerta",
-          "Estado"
-        ]}
-      />
-      <tbody>
-        {receivables.map((receivable) => {
-          const dueMetadata = getDueMetadata(receivable.dueAt);
+    <>
+      <DataTable ariaLabel="Cartera por cobrar">
+        <DataTableHeader
+          labels={[
+            "Cliente",
+            "Venta",
+            "Vence",
+            "Original",
+            "Recibido",
+            "Saldo",
+            "Rango",
+            "Alerta",
+            "Estado",
+            "Acciones"
+          ]}
+        />
+        <tbody>
+          {receivables.map((receivable) => {
+            const dueMetadata = getDueMetadata(receivable.dueAt);
 
-          return (
-            <tr key={receivable.id}>
-              <td>{receivable.customerName}</td>
-              <td>{receivable.saleId}</td>
-              <td>{receivable.dueAt || "Sin vencimiento"}</td>
-              <td>{formatCurrency(receivable.originalAmountMinor)}</td>
-              <td>{formatCurrency(receivable.paidAmountMinor)}</td>
-              <td>{formatCurrency(receivable.balanceMinor)}</td>
-              <td>{dueMetadata.bucketLabel}</td>
-              <td>{dueMetadata.alertLabel}</td>
-              <td>{receivable.status === "partial" ? "Abonada" : "Pendiente"}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </DataTable>
+            return (
+              <tr key={receivable.id}>
+                <td>{receivable.customerName}</td>
+                <td>{receivable.saleId}</td>
+                <td>{receivable.dueAt || "Sin vencimiento"}</td>
+                <td>{formatCurrency(receivable.originalAmountMinor)}</td>
+                <td>{formatCurrency(receivable.paidAmountMinor)}</td>
+                <td>{formatCurrency(receivable.balanceMinor)}</td>
+                <td>{dueMetadata.bucketLabel}</td>
+                <td>{dueMetadata.alertLabel}</td>
+                <td>{receivable.status === "partial" ? "Abonada" : "Pendiente"}</td>
+                <td>
+                  <SecondaryActionButton
+                    className="danger-action"
+                    onClick={() => {
+                      setDeleteCandidate(receivable);
+                      setDeleteNotice(null);
+                    }}
+                    variant="compact"
+                  >
+                    Eliminar cartera
+                  </SecondaryActionButton>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </DataTable>
+
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de cuenta por cobrar"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              Se quitara la venta {deleteCandidate.saleId} de cartera por cobrar.
+              La venta historica seguira registrada. Si ya tiene recibos de caja,
+              no se eliminara.
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmReceivableDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+    </>
   );
 }

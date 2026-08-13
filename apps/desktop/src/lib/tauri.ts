@@ -57,9 +57,25 @@ export type AutomaticBackupStatus = {
   deletedOldBackups: number;
 };
 
+export type ExportFileStatus = {
+  fileName: string;
+  path: string;
+  sizeBytes: number;
+};
+
 export type NativeProductDeleteResult = {
   blockedCount: number;
   deletedProductIds: string[];
+};
+
+export type NativeCustomerDeleteResult = {
+  blockedCount: number;
+  deletedCustomerIds: string[];
+};
+
+export type NativeSupplierDeleteResult = {
+  blockedCount: number;
+  deletedSupplierIds: string[];
 };
 
 export async function checkNativeConnection(): Promise<NativeConnectionStatus> {
@@ -131,6 +147,19 @@ export async function createNativeAutomaticDatabaseBackup(): Promise<
   }
 
   return invoke<AutomaticBackupStatus>("create_automatic_database_backup");
+}
+
+export async function saveNativeExcelExport(input: {
+  contents: string;
+  fileName: string;
+}): Promise<ExportFileStatus | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<ExportFileStatus>("save_excel_export", { input });
 }
 
 export async function loadNativeProducts(): Promise<ProductRecord[] | null> {
@@ -218,6 +247,20 @@ export async function saveNativeCustomer(customer: CustomerRecord): Promise<bool
   return true;
 }
 
+export async function deleteNativeCustomers(
+  customerIds: string[]
+): Promise<NativeCustomerDeleteResult | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<NativeCustomerDeleteResult>("delete_customers", {
+    input: { customerIds }
+  });
+}
+
 export async function loadNativeSales(): Promise<SaleRecord[] | null> {
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -302,6 +345,20 @@ export async function deleteNativeSale(input: {
   return true;
 }
 
+export async function deleteNativeReceivable(input: {
+  receivableId: string;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("delete_receivable", { input });
+
+  return true;
+}
+
 export async function saveNativeCustomerReceipt(input: {
   receipt: CustomerReceiptRecord;
   receivable: ReceivableRecord;
@@ -375,6 +432,25 @@ export async function saveNativeCreditNoteStatus(input: {
   return true;
 }
 
+export async function deleteNativeCreditNote(input: {
+  creditNoteId: string;
+  receivable: ReceivableRecord | null;
+  productStockAdjustments: Array<{
+    productId: string;
+    quantityDelta: number;
+  }>;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("delete_credit_note", { input });
+
+  return true;
+}
+
 export async function loadNativeSuppliers(): Promise<SupplierRecord[] | null> {
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -395,6 +471,20 @@ export async function saveNativeSupplier(supplier: SupplierRecord): Promise<bool
   await invoke<void>("save_supplier", { supplier });
 
   return true;
+}
+
+export async function deleteNativeSuppliers(
+  supplierIds: string[]
+): Promise<NativeSupplierDeleteResult | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<NativeSupplierDeleteResult>("delete_suppliers", {
+    input: { supplierIds }
+  });
 }
 
 export async function loadNativePurchases(): Promise<PurchaseRecord[] | null> {
@@ -442,6 +532,38 @@ export async function saveNativePurchase(input: {
   }
 
   await invoke<void>("save_purchase", { input });
+
+  return true;
+}
+
+export async function deleteNativePurchase(input: {
+  purchaseId: string;
+  productStockAdjustments: Array<{
+    productId: string;
+    quantityDelta: number;
+  }>;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("delete_purchase", { input });
+
+  return true;
+}
+
+export async function deleteNativeSupplierPayable(input: {
+  payableId: string;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("delete_supplier_payable", { input });
 
   return true;
 }

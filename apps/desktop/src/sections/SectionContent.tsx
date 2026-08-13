@@ -79,6 +79,7 @@ type SectionContentProps = {
     input: SupplierFormState
   ) => Promise<boolean>;
   onSetSupplierActive: (supplierId: string, active: boolean) => Promise<boolean>;
+  onDeleteSupplier: (supplierId: string) => Promise<string | null>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -101,6 +102,7 @@ type SectionContentProps = {
     }>;
     paymentStatus: PurchasePaymentStatus;
   }) => Promise<boolean>;
+  onDeletePurchase: (purchaseId: string) => Promise<string | null>;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -163,6 +165,7 @@ type SectionContentProps = {
       quantity: number;
     }>;
   }) => Promise<string | null>;
+  onDeleteCreditNote: (creditNoteId: string) => Promise<string | null>;
   onRegisterCustomerReceipt: (input: {
     receivableId: string;
     amountMinor: number;
@@ -176,6 +179,7 @@ type SectionContentProps = {
     reason: string;
   }) => Promise<string | null>;
   onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
+  onDeleteReceivable: (receivableId: string) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
@@ -186,6 +190,7 @@ type SectionContentProps = {
     payableId: string;
     amountMinor: number;
   }) => Promise<boolean>;
+  onDeleteSupplierPayable: (payableId: string) => Promise<string | null>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -195,6 +200,7 @@ type SectionContentProps = {
     input: CustomerFormState
   ) => Promise<boolean>;
   onSetCustomerActive: (customerId: string, active: boolean) => Promise<boolean>;
+  onDeleteCustomer: (customerId: string) => Promise<string | null>;
   onCloseProductForm: () => void;
   onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
@@ -236,20 +242,26 @@ export function SectionContent({
   onCreateSupplier,
   onUpdateSupplier,
   onSetSupplierActive,
+  onDeleteSupplier,
   onRegisterPurchase,
+  onDeletePurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
   onRegisterCreditNote,
+  onDeleteCreditNote,
   onRegisterCustomerReceipt,
   onRegisterInventoryAdjustment,
   onVoidCustomerReceipt,
+  onDeleteReceivable,
   onSetCreditNoteStatus,
   onUpdateSale,
   onDeleteSale,
   onRegisterSupplierPayment,
+  onDeleteSupplierPayable,
   onValidateCustomer,
   onUpdateCustomer,
   onSetCustomerActive,
+  onDeleteCustomer,
   onCloseProductForm,
   onCloseSupplierForm,
   onSalesDraftChange,
@@ -301,6 +313,7 @@ export function SectionContent({
         formatIntegerInput={formatIntegerInput}
         onCreateProduct={onCreateProduct}
         onCreateSupplier={onCreateSupplier}
+        onDeletePurchase={onDeletePurchase}
         onRegisterPurchase={onRegisterPurchase}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
@@ -340,6 +353,7 @@ export function SectionContent({
         customers={customers}
         formatCurrency={formatCurrency}
         onCreateCustomer={onCreateCustomer}
+        onDeleteCustomer={onDeleteCustomer}
         onSetCustomerActive={onSetCustomerActive}
         onUpdateCustomer={onUpdateCustomer}
         onValidateCustomer={onValidateCustomer}
@@ -355,6 +369,7 @@ export function SectionContent({
         creditNotes={creditNotes}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
+        onDeleteCreditNote={onDeleteCreditNote}
         onRegisterCreditNote={onRegisterCreditNote}
         onSetCreditNoteStatus={onSetCreditNoteStatus}
         parseNonNegativeInteger={parseNonNegativeInteger}
@@ -392,6 +407,8 @@ export function SectionContent({
         formatIntegerInput={formatIntegerInput}
         formatPayableStatus={formatPayableStatus}
         getDueMetadata={getDueMetadata}
+        onDeleteReceivable={onDeleteReceivable}
+        onDeleteSupplierPayable={onDeleteSupplierPayable}
         onRegisterSupplierPayment={onRegisterSupplierPayment}
         parseNonNegativeInteger={parseNonNegativeInteger}
         receivables={receivables}
@@ -406,6 +423,7 @@ export function SectionContent({
         formVisible={supplierFormVisible}
         onCloseForm={onCloseSupplierForm}
         onCreateSupplier={onCreateSupplier}
+        onDeleteSupplier={onDeleteSupplier}
         onSetSupplierActive={onSetSupplierActive}
         onUpdateSupplier={onUpdateSupplier}
         renderPayablesTable={({ supplierPayables, tableLabel }) => (
@@ -414,6 +432,7 @@ export function SectionContent({
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
             getDueMetadata={getDueMetadata}
+            onDeleteSupplierPayable={onDeleteSupplierPayable}
             onRegisterSupplierPayment={onRegisterSupplierPayment}
             parseNonNegativeInteger={parseNonNegativeInteger}
             supplierPayables={supplierPayables}

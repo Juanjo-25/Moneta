@@ -20,8 +20,14 @@ import {
   checkNativeConnection,
   createNativeAutomaticDatabaseBackup,
   createNativeDatabaseBackup,
+  deleteNativeCustomers,
+  deleteNativeCreditNote,
   deleteNativeProducts,
+  deleteNativePurchase,
+  deleteNativeReceivable,
   deleteNativeSale,
+  deleteNativeSupplierPayable,
+  deleteNativeSuppliers,
   loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
@@ -197,7 +203,6 @@ const navigationItems: SectionConfig[] = [
     label: "Reportes",
     title: "Reportes",
     description: "Resumenes y actividad",
-    primaryAction: "Exportar",
     emptyTitle: "Sin reportes disponibles",
     emptyBody: "Los reportes se activaran cuando existan movimientos."
   }
@@ -309,6 +314,13 @@ function getReceivableStatus(paidAmountMinor: number): ReceivableRecord["status"
 
 function getSaleQuantityByProduct(sale: SaleRecord): Map<string, number> {
   return sale.lines.reduce((total, line) => {
+    total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
+    return total;
+  }, new Map<string, number>());
+}
+
+function getPurchaseQuantityByProduct(purchase: PurchaseRecord): Map<string, number> {
+  return purchase.lines.reduce((total, line) => {
     total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
     return total;
   }, new Map<string, number>());
@@ -913,6 +925,51 @@ export function App() {
     return true;
   }
 
+  async function deleteCustomer(customerId: string): Promise<string | null> {
+    const currentCustomer = customers.find((customer) => customer.id === customerId);
+
+    if (!currentCustomer) {
+      return "No se encontro el cliente.";
+    }
+
+    try {
+      const nativeResult = await deleteNativeCustomers([customerId]);
+      const deletedCustomerIds = nativeResult?.deletedCustomerIds ?? [customerId];
+
+      if (nativeResult && deletedCustomerIds.length === 0) {
+        return "No se encontro el cliente en la base de datos local.";
+      }
+
+      setCustomers((currentCustomers) =>
+        currentCustomers.filter(
+          (customer) => !deletedCustomerIds.includes(customer.id)
+        )
+      );
+      setSalesDraft((currentDraft) =>
+        deletedCustomerIds.includes(currentDraft.form.customerId)
+          ? {
+              ...currentDraft,
+              form: {
+                ...currentDraft.form,
+                customerId: ""
+              }
+            }
+          : currentDraft
+      );
+      return null;
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar el cliente local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
+  }
+
   function validateCustomer(
     input: CustomerFormState,
     currentCustomerId?: string | undefined
@@ -1017,6 +1074,40 @@ export function App() {
       )
     );
     return true;
+  }
+
+  async function deleteSupplier(supplierId: string): Promise<string | null> {
+    const currentSupplier = suppliers.find((supplier) => supplier.id === supplierId);
+
+    if (!currentSupplier) {
+      return "No se encontro el proveedor.";
+    }
+
+    try {
+      const nativeResult = await deleteNativeSuppliers([supplierId]);
+      const deletedSupplierIds = nativeResult?.deletedSupplierIds ?? [supplierId];
+
+      if (nativeResult && deletedSupplierIds.length === 0) {
+        return "No se encontro el proveedor en la base de datos local.";
+      }
+
+      setSuppliers((currentSuppliers) =>
+        currentSuppliers.filter(
+          (supplier) => !deletedSupplierIds.includes(supplier.id)
+        )
+      );
+      return null;
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar el proveedor local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
   }
 
   async function registerPurchaseInSession(input: {
@@ -1139,6 +1230,73 @@ export function App() {
     return true;
   }
 
+  async function deletePurchaseInSession(purchaseId: string): Promise<string | null> {
+    const purchase = purchases.find((currentPurchase) => currentPurchase.id === purchaseId);
+
+    if (!purchase) {
+      return "No se encontro la compra.";
+    }
+
+    const linkedPayable =
+      supplierPayables.find((payable) => payable.purchaseId === purchaseId) ?? null;
+
+    if (
+      supplierPayments.some((payment) => payment.purchaseId === purchaseId) ||
+      (linkedPayable?.paidAmountMinor ?? 0) > 0
+    ) {
+      return "La compra tiene abonos a proveedor asociados y no se puede eliminar.";
+    }
+
+    const purchasedQuantityByProduct = getPurchaseQuantityByProduct(purchase);
+    const insufficientProduct = products.find(
+      (product) =>
+        (purchasedQuantityByProduct.get(product.id) ?? 0) > product.stock
+    );
+
+    if (insufficientProduct) {
+      return "No hay inventario suficiente para reversar esta compra.";
+    }
+
+    const productStockAdjustments = Array.from(
+      purchasedQuantityByProduct.entries()
+    ).map(([productId, quantity]) => ({
+      productId,
+      quantityDelta: -quantity
+    }));
+
+    try {
+      await deleteNativePurchase({
+        productStockAdjustments,
+        purchaseId
+      });
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar la compra local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) => ({
+        ...product,
+        stock: product.stock - (purchasedQuantityByProduct.get(product.id) ?? 0)
+      }))
+    );
+    setPurchases((currentPurchases) =>
+      currentPurchases.filter((currentPurchase) => currentPurchase.id !== purchaseId)
+    );
+    setSupplierPayables((currentPayables) =>
+      currentPayables.filter((payable) => payable.purchaseId !== purchaseId)
+    );
+
+    return null;
+  }
+
   async function registerSupplierPayment(input: {
     payableId: string;
     amountMinor: number;
@@ -1199,6 +1357,43 @@ export function App() {
     );
 
     return true;
+  }
+
+  async function deleteSupplierPayableInSession(
+    payableId: string
+  ): Promise<string | null> {
+    const selectedPayable =
+      supplierPayables.find((payable) => payable.id === payableId) ?? null;
+
+    if (!selectedPayable) {
+      return "No se encontro la cuenta por pagar.";
+    }
+    if (
+      supplierPayments.some((payment) => payment.payableId === payableId) ||
+      selectedPayable.paidAmountMinor > 0
+    ) {
+      return "La cuenta por pagar tiene abonos registrados y no se puede eliminar.";
+    }
+
+    try {
+      await deleteNativeSupplierPayable({ payableId });
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar la cuenta por pagar local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
+
+    setSupplierPayables((currentPayables) =>
+      currentPayables.filter((payable) => payable.id !== payableId)
+    );
+
+    return null;
   }
 
   async function registerSaleInSession(input: {
@@ -2041,6 +2236,99 @@ export function App() {
     return null;
   }
 
+  async function deleteReceivableInSession(
+    receivableId: string
+  ): Promise<string | null> {
+    const selectedReceivable =
+      receivables.find((receivable) => receivable.id === receivableId) ?? null;
+
+    if (!selectedReceivable) {
+      return "No se encontro la cuenta por cobrar.";
+    }
+    if (customerReceipts.some((receipt) => receipt.receivableId === receivableId)) {
+      return "La cuenta por cobrar tiene recibos de caja asociados y no se puede eliminar.";
+    }
+
+    try {
+      await deleteNativeReceivable({ receivableId });
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar la cuenta por cobrar local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
+
+    setReceivables((currentReceivables) =>
+      currentReceivables.filter((receivable) => receivable.id !== receivableId)
+    );
+
+    return null;
+  }
+
+  async function deleteCreditNoteInSession(
+    creditNoteId: string
+  ): Promise<string | null> {
+    const selectedCreditNote =
+      creditNotes.find((creditNote) => creditNote.id === creditNoteId) ?? null;
+
+    if (!selectedCreditNote) {
+      return "No se encontro la nota credito.";
+    }
+
+    const shouldReverseEffects = selectedCreditNote.status === "confirmed";
+    const productStockAdjustments = shouldReverseEffects
+      ? getCreditNoteProductStockAdjustments(selectedCreditNote, "reverse")
+      : [];
+    const insufficientProduct = products.find((product) => {
+      const adjustment = productStockAdjustments.find(
+        (currentAdjustment) => currentAdjustment.productId === product.id
+      );
+
+      return adjustment ? product.stock + adjustment.quantityDelta < 0 : false;
+    });
+
+    if (insufficientProduct) {
+      return "No hay inventario suficiente para reversar esta nota credito.";
+    }
+
+    const receivable = shouldReverseEffects
+      ? getReversedCreditNoteReceivable(selectedCreditNote)
+      : null;
+
+    try {
+      await deleteNativeCreditNote({
+        creditNoteId,
+        productStockAdjustments,
+        receivable
+      });
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo eliminar la nota credito local.",
+        error
+      );
+      setNativeConnectionStatus({
+        kind: "error",
+        message
+      });
+      return message;
+    }
+
+    if (shouldReverseEffects) {
+      reverseCreditNoteEffects(selectedCreditNote);
+    }
+
+    setCreditNotes((currentCreditNotes) =>
+      currentCreditNotes.filter((creditNote) => creditNote.id !== creditNoteId)
+    );
+
+    return null;
+  }
+
   async function setCreditNoteStatus(
     creditNoteId: string,
     status: CreditNoteStatus
@@ -2223,20 +2511,26 @@ export function App() {
             onDeleteProduct={deleteProductInSession}
             onUpdateSupplier={updateSupplier}
             onSetSupplierActive={setSupplierActive}
+            onDeleteSupplier={deleteSupplier}
             onRegisterPurchase={registerPurchaseInSession}
+            onDeletePurchase={deletePurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}
             onRegisterCreditNote={registerCreditNoteInSession}
+            onDeleteCreditNote={deleteCreditNoteInSession}
             onRegisterCustomerReceipt={registerCustomerReceipt}
             onRegisterInventoryAdjustment={registerInventoryAdjustment}
             onVoidCustomerReceipt={voidCustomerReceipt}
+            onDeleteReceivable={deleteReceivableInSession}
             onSetCreditNoteStatus={setCreditNoteStatus}
             onUpdateSale={updateSaleInSession}
             onDeleteSale={deleteSaleInSession}
             onRegisterSupplierPayment={registerSupplierPayment}
+            onDeleteSupplierPayable={deleteSupplierPayableInSession}
             onValidateCustomer={validateCustomer}
             onUpdateCustomer={updateCustomer}
             onSetCustomerActive={setCustomerActive}
+            onDeleteCustomer={deleteCustomer}
             onCloseProductForm={() => setProductFormVisible(false)}
             onCloseSupplierForm={() => setSupplierFormVisible(false)}
             onUpdateProduct={saveProductInSession}

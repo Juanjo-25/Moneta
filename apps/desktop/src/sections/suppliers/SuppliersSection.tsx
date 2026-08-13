@@ -5,6 +5,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
+import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
 import type {
   SupplierFormErrors,
@@ -17,6 +18,7 @@ type SuppliersSectionProps = {
   formVisible: boolean;
   onCloseForm: () => void;
   onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
+  onDeleteSupplier: (supplierId: string) => Promise<string | null>;
   onSetSupplierActive: (supplierId: string, active: boolean) => Promise<boolean>;
   onUpdateSupplier: (
     supplierId: string,
@@ -28,6 +30,11 @@ type SuppliersSectionProps = {
   }) => ReactNode;
   supplierPayables: SupplierPayableRecord[];
   suppliers: SupplierRecord[];
+};
+
+type SupplierDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 const emptySupplierForm: SupplierFormState = {
@@ -172,6 +179,7 @@ export function SuppliersSection({
   formVisible,
   onCloseForm,
   onCreateSupplier,
+  onDeleteSupplier,
   onSetSupplierActive,
   onUpdateSupplier,
   renderPayablesTable,
@@ -181,6 +189,8 @@ export function SuppliersSection({
   const [form, setForm] = useState<SupplierFormState>(emptySupplierForm);
   const [errors, setErrors] = useState<SupplierFormErrors>({});
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<SupplierRecord | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<SupplierDeleteNotice | null>(null);
   const editingSupplier =
     suppliers.find((supplier) => supplier.id === editingSupplierId) ?? null;
 
@@ -214,6 +224,14 @@ export function SuppliersSection({
   function startEditingSupplier(supplier: SupplierRecord) {
     setEditingSupplierId(supplier.id);
     setForm(getSupplierFormState(supplier));
+    setErrors({});
+    setDeleteCandidate(null);
+  }
+
+  function startDeletingSupplier(supplier: SupplierRecord) {
+    setDeleteCandidate(supplier);
+    setDeleteNotice(null);
+    setEditingSupplierId(null);
     setErrors({});
   }
 
@@ -252,6 +270,34 @@ export function SuppliersSection({
 
     setForm(emptySupplierForm);
     setErrors({});
+  }
+
+  async function confirmSupplierDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedSupplier = deleteCandidate;
+    const error = await onDeleteSupplier(deletedSupplier.id);
+
+    if (error) {
+      setDeleteNotice({
+        kind: "error",
+        message: error
+      });
+      return;
+    }
+
+    if (editingSupplierId === deletedSupplier.id) {
+      setEditingSupplierId(null);
+      setErrors({});
+    }
+
+    setDeleteCandidate(null);
+    setDeleteNotice({
+      kind: "success",
+      message: `${deletedSupplier.name} eliminado de proveedores.`
+    });
   }
 
   return (
@@ -328,70 +374,161 @@ export function SuppliersSection({
         </form>
       ) : null}
 
-      {suppliers.length > 0 ? (
-        <DataTable ariaLabel="Proveedores registrados">
-          <DataTableHeader
-            labels={[
-              "Proveedor",
-              "Documento",
-              "Telefono",
-              "Email",
-              "Departamento",
-              "Municipio",
-              "Estado",
-              "Accion"
-            ]}
-          />
-          <tbody>
-            {suppliers.map((supplier) => (
-              <tr key={supplier.id}>
-                <td>{supplier.name}</td>
-                <td>{supplier.document || "Sin documento"}</td>
-                <td>{supplier.phone || "Sin telefono"}</td>
-                <td>{supplier.email || "Sin email"}</td>
-                <td>{supplier.department || "Antioquia"}</td>
-                <td>{supplier.city || "Sin municipio"}</td>
-                <td>{supplier.active ? "Activo" : "Inactivo"}</td>
-                <td>
-                  <SecondaryActionButton
-                    onClick={() => startEditingSupplier(supplier)}
-                    variant="compact"
-                  >
-                    Editar proveedor {supplier.name}
-                  </SecondaryActionButton>
-                  <SecondaryActionButton
-                    onClick={() => {
-                      void onSetSupplierActive(supplier.id, !supplier.active);
-                    }}
-                    variant="compact"
-                  >
-                    {supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"}
-                  </SecondaryActionButton>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
-      ) : (
-        <EmptyState
-          body="Crea proveedores para asociarlos a tus compras."
-          className="section-empty"
-          title="Sin proveedores registrados"
-        />
-      )}
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
 
-      {supplierPayables.length > 0 ? (
-        renderPayablesTable({
-          supplierPayables,
-          tableLabel: "Cuentas por pagar"
-        })
-      ) : (
-        <EmptyState
-          body="Las facturas pendientes de proveedor apareceran aqui."
-          className="section-empty"
-          title="Sin cuentas por pagar"
-        />
-      )}
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de proveedor"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              Se quitara {deleteCandidate.name} del catalogo activo de proveedores.
+              Las compras, cuentas por pagar y abonos historicos conservaran sus
+              datos guardados.
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmSupplierDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+
+      <section
+        aria-labelledby="suppliers-directory-title"
+        className="suppliers-block suppliers-directory-block"
+      >
+        <div className="suppliers-block-header">
+          <div>
+            <h2 id="suppliers-directory-title">Directorio de proveedores</h2>
+            <p>Contactos activos para compras y pagos.</p>
+          </div>
+          <span className="suppliers-count-pill">
+            {suppliers.length} {suppliers.length === 1 ? "proveedor" : "proveedores"}
+          </span>
+        </div>
+
+        {suppliers.length > 0 ? (
+          <DataTable ariaLabel="Proveedores registrados" className="suppliers-directory-table">
+            <DataTableHeader
+              labels={[
+                "Proveedor",
+                "Documento",
+                "Telefono",
+                "Email",
+                "Ubicacion",
+                "Estado",
+                "Acciones"
+              ]}
+            />
+            <tbody>
+              {suppliers.map((supplier) => (
+                <tr key={supplier.id}>
+                  <td>{supplier.name}</td>
+                  <td>{supplier.document || "Sin documento"}</td>
+                  <td>{supplier.phone || "Sin telefono"}</td>
+                  <td>{supplier.email || "Sin email"}</td>
+                  <td>
+                    <span className="supplier-location-cell">
+                      <span>{supplier.department || "Antioquia"}</span>
+                      <small>{supplier.city || "Sin municipio"}</small>
+                    </span>
+                  </td>
+                  <td>
+                    <StatusBadge
+                      tone={supplier.active ? "active" : "inactive"}
+                      variant="pill"
+                    >
+                      {supplier.active ? "Activo" : "Inactivo"}
+                    </StatusBadge>
+                  </td>
+                  <td className="supplier-actions-cell">
+                    <div className="supplier-row-actions">
+                      <SecondaryActionButton
+                        aria-label={`Editar proveedor ${supplier.name}`}
+                        onClick={() => startEditingSupplier(supplier)}
+                        variant="compact"
+                      >
+                        Editar
+                      </SecondaryActionButton>
+                      <SecondaryActionButton
+                        aria-label={
+                          supplier.active ? "Desactivar proveedor" : "Reactivar proveedor"
+                        }
+                        onClick={() => {
+                          void onSetSupplierActive(supplier.id, !supplier.active);
+                        }}
+                        variant="compact"
+                      >
+                        {supplier.active ? "Desactivar" : "Reactivar"}
+                      </SecondaryActionButton>
+                      <SecondaryActionButton
+                        className="danger-action"
+                        onClick={() => startDeletingSupplier(supplier)}
+                        variant="compact"
+                      >
+                        Eliminar
+                      </SecondaryActionButton>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        ) : (
+          <EmptyState
+            body="Crea proveedores para asociarlos a tus compras."
+            className="section-empty suppliers-empty-state"
+            title="Sin proveedores registrados"
+          />
+        )}
+      </section>
+
+      <section
+        aria-labelledby="suppliers-payables-title"
+        className="suppliers-block suppliers-payables-block"
+      >
+        <div className="suppliers-block-header">
+          <div>
+            <h2 id="suppliers-payables-title">Cuentas por pagar</h2>
+            <p>Facturas pendientes asociadas a proveedores.</p>
+          </div>
+          <span className="suppliers-count-pill">
+            {supplierPayables.length}{" "}
+            {supplierPayables.length === 1 ? "cuenta" : "cuentas"}
+          </span>
+        </div>
+
+        {supplierPayables.length > 0 ? (
+          renderPayablesTable({
+            supplierPayables,
+            tableLabel: "Cuentas por pagar"
+          })
+        ) : (
+          <EmptyState
+            body="Las facturas pendientes de proveedor apareceran aqui."
+            className="section-empty suppliers-empty-state"
+            title="Sin cuentas por pagar"
+          />
+        )}
+      </section>
     </section>
   );
 }

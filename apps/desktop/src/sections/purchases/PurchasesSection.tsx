@@ -87,6 +87,7 @@ type PurchasesSectionProps = {
   formatIntegerInput: (value: string) => string;
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
   onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
+  onDeletePurchase: (purchaseId: string) => Promise<string | null>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -113,6 +114,11 @@ type PurchasesSectionProps = {
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   suppliers: SupplierRecord[];
+};
+
+type PurchaseDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 const emptySupplierForm: SupplierFormState = {
@@ -179,6 +185,7 @@ export function PurchasesSection({
   formatIntegerInput,
   onCreateProduct,
   onCreateSupplier,
+  onDeletePurchase,
   onRegisterPurchase,
   parseNonNegativeInteger,
   products,
@@ -196,6 +203,8 @@ export function PurchasesSection({
     useState<PurchaseProductFormState>(emptyPurchaseProductForm);
   const [productErrors, setProductErrors] = useState<PurchaseProductFormErrors>({});
   const [purchaseLines, setPurchaseLines] = useState<PurchaseDraftLine[]>([]);
+  const [deleteCandidate, setDeleteCandidate] = useState<PurchaseRecord | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<PurchaseDeleteNotice | null>(null);
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
@@ -551,6 +560,26 @@ export function PurchasesSection({
     setForm(emptyPurchaseForm);
   }
 
+  async function confirmPurchaseDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedPurchase = deleteCandidate;
+    const deleteError = await onDeletePurchase(deletedPurchase.id);
+
+    if (deleteError) {
+      setDeleteNotice({ kind: "error", message: deleteError });
+      return;
+    }
+
+    setDeleteCandidate(null);
+    setDeleteNotice({
+      kind: "success",
+      message: `Compra ${deletedPurchase.invoiceNumber} eliminada.`
+    });
+  }
+
   return (
     <section className="purchases-layout">
       <form className="purchase-form section-form-shell" onSubmit={submitPurchase}>
@@ -706,6 +735,43 @@ export function PurchasesSection({
         </FormActions>
       </form>
 
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de compra"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              Se eliminara la compra {deleteCandidate.invoiceNumber} y se
+              descontara del inventario lo que ingreso con esta factura. Si ya
+              tiene abonos de proveedor, no se eliminara.
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmPurchaseDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+
       {purchases.length > 0 ? (
         <DataTable ariaLabel="Compras registradas">
           <DataTableHeader
@@ -717,7 +783,8 @@ export function PurchasesSection({
               "Producto",
               "Cantidad",
               "Estado",
-              "Total"
+              "Total",
+              "Acciones"
             ]}
           />
           <tbody>
@@ -731,6 +798,18 @@ export function PurchasesSection({
                 <td>{purchase.quantity}</td>
                 <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                 <td>{formatCurrency(purchase.totalMinor)}</td>
+                <td>
+                  <SecondaryActionButton
+                    className="danger-action"
+                    onClick={() => {
+                      setDeleteCandidate(purchase);
+                      setDeleteNotice(null);
+                    }}
+                    variant="compact"
+                  >
+                    Eliminar
+                  </SecondaryActionButton>
+                </td>
               </tr>
             ))}
           </tbody>

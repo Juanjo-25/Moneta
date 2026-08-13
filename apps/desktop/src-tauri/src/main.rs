@@ -28,6 +28,21 @@ struct AutomaticBackupStatus {
     deleted_old_backups: usize,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportFileInput {
+    file_name: String,
+    contents: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportFileStatus {
+    file_name: String,
+    path: String,
+    size_bytes: u64,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CompanySettings {
@@ -110,6 +125,19 @@ struct CustomerRecord {
     active: bool,
     city: String,
     email: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomerDeleteInput {
+    customer_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomerDeleteResult {
+    deleted_customer_ids: Vec<String>,
+    blocked_count: usize,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -253,6 +281,19 @@ struct SupplierRecord {
     phone: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupplierDeleteInput {
+    supplier_ids: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SupplierDeleteResult {
+    deleted_supplier_ids: Vec<String>,
+    blocked_count: usize,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PurchaseLineRecord {
@@ -341,6 +382,19 @@ struct SupplierPaymentPersistence {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct PurchaseDeletePersistence {
+    purchase_id: String,
+    product_stock_adjustments: Vec<ProductStockAdjustment>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SupplierPayableDeletePersistence {
+    payable_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SalePersistence {
     sale: SaleRecord,
     receivable: Option<ReceivableRecord>,
@@ -381,6 +435,20 @@ struct CreditNoteStatusPersistence {
     credit_note: CreditNoteRecord,
     receivable: Option<ReceivableRecord>,
     product_stock_adjustments: Vec<ProductStockAdjustment>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreditNoteDeletePersistence {
+    credit_note_id: String,
+    receivable: Option<ReceivableRecord>,
+    product_stock_adjustments: Vec<ProductStockAdjustment>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceivableDeletePersistence {
+    receivable_id: String,
 }
 
 #[derive(Deserialize)]
@@ -503,6 +571,100 @@ fn create_automatic_database_backup(
         created: true,
         deleted_old_backups,
     })
+}
+
+#[tauri::command]
+fn save_excel_export(
+    app: tauri::AppHandle,
+    input: ExportFileInput,
+) -> Result<ExportFileStatus, String> {
+    let export_dir = app
+        .path()
+        .download_dir()
+        .map(|downloads_dir| downloads_dir.join("Moneta Exportaciones"))
+        .map_err(|_| "No se pudo ubicar la carpeta de descargas.".to_string())?;
+    let safe_file_name = sanitize_export_file_name(&input.file_name);
+    let export_path = unique_export_path(&export_dir, &safe_file_name);
+
+    fs::create_dir_all(&export_dir)
+        .map_err(|error| format!("No se pudo crear la carpeta de exportaciones: {error}"))?;
+    fs::write(&export_path, input.contents)
+        .map_err(|error| format!("No se pudo guardar la exportacion: {error}"))?;
+
+    let size_bytes = fs::metadata(&export_path)
+        .map_err(|error| format!("No se pudo leer la exportacion creada: {error}"))?
+        .len();
+    let file_name = export_path
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or(safe_file_name);
+
+    Ok(ExportFileStatus {
+        file_name,
+        path: export_path.to_string_lossy().to_string(),
+        size_bytes,
+    })
+}
+
+fn sanitize_export_file_name(file_name: &str) -> String {
+    let path_file_name = PathBuf::from(file_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "moneta-exportacion.xls".to_string());
+    let sanitized = path_file_name
+        .chars()
+        .map(|character| {
+            if character.is_control()
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
+            {
+                '-'
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let trimmed = sanitized.trim().trim_matches('.').to_string();
+    let safe_name = if trimmed.is_empty() {
+        "moneta-exportacion".to_string()
+    } else {
+        trimmed
+    };
+
+    if safe_name.to_lowercase().ends_with(".xls") {
+        safe_name
+    } else {
+        format!("{safe_name}.xls")
+    }
+}
+
+fn unique_export_path(export_dir: &PathBuf, file_name: &str) -> PathBuf {
+    let candidate = export_dir.join(file_name);
+
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let stem = file_name
+        .strip_suffix(".xls")
+        .or_else(|| file_name.strip_suffix(".XLS"))
+        .unwrap_or(file_name);
+
+    for index in 2..1000 {
+        let candidate_name = format!("{stem}-{index}.xls");
+        let candidate = export_dir.join(candidate_name);
+
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    export_dir.join(format!(
+        "{stem}-{}.xls",
+        current_epoch_seconds().unwrap_or(0)
+    ))
 }
 
 fn backup_directory(app: &tauri::AppHandle, database_path: &PathBuf) -> Result<PathBuf, String> {
@@ -983,6 +1145,7 @@ fn list_customers(app: tauri::AppHandle) -> Result<Vec<CustomerRecord>, String> 
             "
             SELECT id, name, document, address, active, city, email
             FROM customers
+            WHERE deleted_at = ''
             ORDER BY name COLLATE NOCASE ASC
             ",
         )
@@ -1050,6 +1213,110 @@ fn save_customer(app: tauri::AppHandle, customer: CustomerRecord) -> Result<(), 
         .map_err(|error| format!("No se pudo guardar el cliente: {error}"))?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn delete_customers(
+    app: tauri::AppHandle,
+    input: CustomerDeleteInput,
+) -> Result<CustomerDeleteResult, String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    delete_customers_in_connection(&mut connection, input.customer_ids)
+}
+
+fn delete_customers_in_connection(
+    connection: &mut Connection,
+    input_customer_ids: Vec<String>,
+) -> Result<CustomerDeleteResult, String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar el borrado de clientes: {error}"))?;
+    let mut customer_ids: Vec<String> = Vec::new();
+
+    for customer_id in input_customer_ids {
+        let customer_id = customer_id.trim().to_string();
+
+        if !customer_id.is_empty() && !customer_ids.iter().any(|existing| existing == &customer_id)
+        {
+            customer_ids.push(customer_id);
+        }
+    }
+
+    let mut deleted_customer_ids = Vec::new();
+    let mut blocked_count = 0;
+
+    for customer_id in customer_ids {
+        if customer_has_history(&transaction, &customer_id)? {
+            let updated = transaction
+                .execute(
+                    "
+                    UPDATE customers
+                    SET
+                      document = document || '__deleted__' || id,
+                      active = 0,
+                      deleted_at = CURRENT_TIMESTAMP,
+                      updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?1 AND deleted_at = ''
+                    ",
+                    params![customer_id],
+                )
+                .map_err(|error| format!("No se pudo eliminar el cliente: {error}"))?;
+
+            if updated > 0 {
+                deleted_customer_ids.push(customer_id);
+            } else {
+                blocked_count += 1;
+            }
+            continue;
+        }
+
+        let deleted = transaction
+            .execute("DELETE FROM customers WHERE id = ?1", params![customer_id])
+            .map_err(|error| format!("No se pudo eliminar el cliente: {error}"))?;
+
+        if deleted > 0 {
+            deleted_customer_ids.push(customer_id);
+        } else {
+            blocked_count += 1;
+        }
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el borrado de clientes: {error}"))?;
+
+    Ok(CustomerDeleteResult {
+        deleted_customer_ids,
+        blocked_count,
+    })
+}
+
+fn customer_has_history(connection: &Connection, customer_id: &str) -> Result<bool, String> {
+    let reference_checks = [
+        ("sales", "customer_id"),
+        ("receivables", "customer_id"),
+        ("customer_receipts", "customer_id"),
+        ("credit_notes", "customer_id"),
+    ];
+
+    for (table, column) in reference_checks {
+        let count: i64 = connection
+            .query_row(
+                &format!("SELECT COUNT(1) FROM {table} WHERE {column} = ?1"),
+                params![customer_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("No se pudo revisar el historial del cliente: {error}"))?;
+
+        if count > 0 {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 #[tauri::command]
@@ -1885,6 +2152,51 @@ fn void_customer_receipt(
 }
 
 #[tauri::command]
+fn delete_receivable(
+    app: tauri::AppHandle,
+    input: ReceivableDeletePersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de cartera: {error}"))?;
+
+    let receipt_count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM customer_receipts WHERE receivable_id = ?1",
+            [&input.receivable_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudieron validar recibos de caja: {error}"))?;
+
+    if receipt_count > 0 {
+        return Err(
+            "La cuenta por cobrar tiene recibos de caja asociados y no se puede eliminar."
+                .to_string(),
+        );
+    }
+
+    let affected = transaction
+        .execute("DELETE FROM receivables WHERE id = ?1", [&input.receivable_id])
+        .map_err(|error| format!("No se pudo eliminar la cuenta por cobrar: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!(
+            "La cuenta por cobrar {} no existe en SQLite.",
+            input.receivable_id
+        ));
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la eliminacion de cartera: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn list_credit_notes(app: tauri::AppHandle) -> Result<Vec<CreditNoteRecord>, String> {
     let database_path = database_path(&app)?;
     let connection = open_database(&database_path)?;
@@ -2190,6 +2502,99 @@ fn save_credit_note_status(
 }
 
 #[tauri::command]
+fn delete_credit_note(
+    app: tauri::AppHandle,
+    input: CreditNoteDeletePersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| {
+            format!("No se pudo iniciar la transaccion de eliminacion de nota credito: {error}")
+        })?;
+
+    let note_count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM credit_notes WHERE id = ?1",
+            [&input.credit_note_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudo validar la nota credito: {error}"))?;
+
+    if note_count == 0 {
+        return Err(format!(
+            "La nota credito {} no existe en SQLite.",
+            input.credit_note_id
+        ));
+    }
+
+    for adjustment in &input.product_stock_adjustments {
+        apply_product_stock_adjustment(&transaction, adjustment)?;
+    }
+
+    if let Some(receivable) = &input.receivable {
+        transaction
+            .execute(
+                "
+                INSERT INTO receivables (
+                  id,
+                  customer_id,
+                  customer_name,
+                  sale_id,
+                  amount_minor,
+                  original_amount_minor,
+                  paid_amount_minor,
+                  balance_minor,
+                  due_at,
+                  status,
+                  updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, CURRENT_TIMESTAMP)
+                ON CONFLICT(id) DO UPDATE SET
+                  amount_minor = excluded.amount_minor,
+                  original_amount_minor = excluded.original_amount_minor,
+                  paid_amount_minor = excluded.paid_amount_minor,
+                  balance_minor = excluded.balance_minor,
+                  due_at = excluded.due_at,
+                  status = excluded.status,
+                  updated_at = CURRENT_TIMESTAMP
+                ",
+                params![
+                    &receivable.id,
+                    &receivable.customer_id,
+                    &receivable.customer_name,
+                    &receivable.sale_id,
+                    receivable.amount_minor,
+                    receivable.original_amount_minor,
+                    receivable.paid_amount_minor,
+                    receivable.balance_minor,
+                    &receivable.due_at,
+                    &receivable.status,
+                ],
+            )
+            .map_err(|error| format!("No se pudo actualizar la cuenta por cobrar: {error}"))?;
+    }
+
+    transaction
+        .execute(
+            "DELETE FROM credit_note_lines WHERE credit_note_id = ?1",
+            [&input.credit_note_id],
+        )
+        .map_err(|error| format!("No se pudieron eliminar las lineas de nota credito: {error}"))?;
+    transaction
+        .execute("DELETE FROM credit_notes WHERE id = ?1", [&input.credit_note_id])
+        .map_err(|error| format!("No se pudo eliminar la nota credito: {error}"))?;
+
+    transaction.commit().map_err(|error| {
+        format!("No se pudo confirmar la eliminacion de nota credito: {error}")
+    })?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn list_suppliers(app: tauri::AppHandle) -> Result<Vec<SupplierRecord>, String> {
     let database_path = database_path(&app)?;
     let connection = open_database(&database_path)?;
@@ -2200,6 +2605,7 @@ fn list_suppliers(app: tauri::AppHandle) -> Result<Vec<SupplierRecord>, String> 
             "
             SELECT id, active, address, city, department, document, email, name, phone
             FROM suppliers
+            WHERE deleted_at = ''
             ORDER BY name COLLATE NOCASE ASC
             ",
         )
@@ -2275,6 +2681,109 @@ fn save_supplier(app: tauri::AppHandle, supplier: SupplierRecord) -> Result<(), 
         .map_err(|error| format!("No se pudo guardar el proveedor: {error}"))?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn delete_suppliers(
+    app: tauri::AppHandle,
+    input: SupplierDeleteInput,
+) -> Result<SupplierDeleteResult, String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    delete_suppliers_in_connection(&mut connection, input.supplier_ids)
+}
+
+fn delete_suppliers_in_connection(
+    connection: &mut Connection,
+    input_supplier_ids: Vec<String>,
+) -> Result<SupplierDeleteResult, String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar el borrado de proveedores: {error}"))?;
+    let mut supplier_ids: Vec<String> = Vec::new();
+
+    for supplier_id in input_supplier_ids {
+        let supplier_id = supplier_id.trim().to_string();
+
+        if !supplier_id.is_empty() && !supplier_ids.iter().any(|existing| existing == &supplier_id)
+        {
+            supplier_ids.push(supplier_id);
+        }
+    }
+
+    let mut deleted_supplier_ids = Vec::new();
+    let mut blocked_count = 0;
+
+    for supplier_id in supplier_ids {
+        if supplier_has_history(&transaction, &supplier_id)? {
+            let updated = transaction
+                .execute(
+                    "
+                    UPDATE suppliers
+                    SET
+                      document = document || '__deleted__' || id,
+                      active = 0,
+                      deleted_at = CURRENT_TIMESTAMP,
+                      updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?1 AND deleted_at = ''
+                    ",
+                    params![supplier_id],
+                )
+                .map_err(|error| format!("No se pudo eliminar el proveedor: {error}"))?;
+
+            if updated > 0 {
+                deleted_supplier_ids.push(supplier_id);
+            } else {
+                blocked_count += 1;
+            }
+            continue;
+        }
+
+        let deleted = transaction
+            .execute("DELETE FROM suppliers WHERE id = ?1", params![supplier_id])
+            .map_err(|error| format!("No se pudo eliminar el proveedor: {error}"))?;
+
+        if deleted > 0 {
+            deleted_supplier_ids.push(supplier_id);
+        } else {
+            blocked_count += 1;
+        }
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el borrado de proveedores: {error}"))?;
+
+    Ok(SupplierDeleteResult {
+        deleted_supplier_ids,
+        blocked_count,
+    })
+}
+
+fn supplier_has_history(connection: &Connection, supplier_id: &str) -> Result<bool, String> {
+    let reference_checks = [
+        ("purchases", "supplier_id"),
+        ("supplier_payables", "supplier_id"),
+        ("supplier_payments", "supplier_id"),
+    ];
+
+    for (table, column) in reference_checks {
+        let count: i64 = connection
+            .query_row(
+                &format!("SELECT COUNT(1) FROM {table} WHERE {column} = ?1"),
+                params![supplier_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("No se pudo revisar el historial del proveedor: {error}"))?;
+
+        if count > 0 {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 
 #[tauri::command]
@@ -2620,6 +3129,102 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
 }
 
 #[tauri::command]
+fn delete_purchase(app: tauri::AppHandle, input: PurchaseDeletePersistence) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| {
+            format!("No se pudo iniciar la transaccion de eliminacion de compra: {error}")
+        })?;
+
+    ensure_purchase_has_no_supplier_payments(&transaction, &input.purchase_id)?;
+
+    for adjustment in &input.product_stock_adjustments {
+        apply_product_stock_adjustment(&transaction, adjustment)?;
+    }
+
+    transaction
+        .execute(
+            "DELETE FROM supplier_payables WHERE purchase_id = ?1",
+            [&input.purchase_id],
+        )
+        .map_err(|error| format!("No se pudo eliminar la cuenta por pagar: {error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM purchase_lines WHERE purchase_id = ?1",
+            [&input.purchase_id],
+        )
+        .map_err(|error| format!("No se pudieron eliminar las lineas de compra: {error}"))?;
+
+    let affected = transaction
+        .execute("DELETE FROM purchases WHERE id = ?1", [&input.purchase_id])
+        .map_err(|error| format!("No se pudo eliminar la compra: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!("La compra {} no existe en SQLite.", input.purchase_id));
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la eliminacion de compra: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_supplier_payable(
+    app: tauri::AppHandle,
+    input: SupplierPayableDeletePersistence,
+) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la transaccion de cartera: {error}"))?;
+
+    let payment_count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM supplier_payments WHERE payable_id = ?1",
+            [&input.payable_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudieron validar abonos a proveedor: {error}"))?;
+    let paid_amount: i64 = transaction
+        .query_row(
+            "SELECT COALESCE(MAX(paid_amount_minor), 0) FROM supplier_payables WHERE id = ?1",
+            [&input.payable_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudo validar la cuenta por pagar: {error}"))?;
+
+    if payment_count > 0 || paid_amount > 0 {
+        return Err(
+            "La cuenta por pagar tiene abonos registrados y no se puede eliminar.".to_string(),
+        );
+    }
+
+    let affected = transaction
+        .execute("DELETE FROM supplier_payables WHERE id = ?1", [&input.payable_id])
+        .map_err(|error| format!("No se pudo eliminar la cuenta por pagar: {error}"))?;
+
+    if affected == 0 {
+        return Err(format!(
+            "La cuenta por pagar {} no existe en SQLite.",
+            input.payable_id
+        ));
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la eliminacion de cartera: {error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 fn save_supplier_payment(
     app: tauri::AppHandle,
     input: SupplierPaymentPersistence,
@@ -2772,6 +3377,38 @@ fn ensure_sale_has_no_dependent_documents(
     if receipt_count > 0 || credit_note_count > 0 {
         return Err(
             "La venta tiene recibos o notas credito asociados y no se puede modificar.".to_string(),
+        );
+    }
+
+    Ok(())
+}
+
+fn ensure_purchase_has_no_supplier_payments(
+    connection: &Connection,
+    purchase_id: &str,
+) -> Result<(), String> {
+    let payment_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM supplier_payments WHERE purchase_id = ?1",
+            [purchase_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudieron validar abonos a proveedor: {error}"))?;
+    let paid_amount: i64 = connection
+        .query_row(
+            "
+            SELECT COALESCE(MAX(paid_amount_minor), 0)
+            FROM supplier_payables
+            WHERE purchase_id = ?1
+            ",
+            [purchase_id],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("No se pudo validar la cuenta por pagar: {error}"))?;
+
+    if payment_count > 0 || paid_amount > 0 {
+        return Err(
+            "La compra tiene abonos a proveedor asociados y no se puede eliminar.".to_string(),
         );
     }
 
@@ -2963,6 +3600,7 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               active INTEGER NOT NULL DEFAULT 1,
               city TEXT NOT NULL DEFAULT '',
               email TEXT NOT NULL DEFAULT '',
+              deleted_at TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -2977,6 +3615,7 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
               email TEXT NOT NULL DEFAULT '',
               name TEXT NOT NULL,
               phone TEXT NOT NULL DEFAULT '',
+              deleted_at TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
               updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -3255,6 +3894,18 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
     )?;
     ensure_column(
         connection,
+        "customers",
+        "deleted_at",
+        "ALTER TABLE customers ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        connection,
+        "suppliers",
+        "deleted_at",
+        "ALTER TABLE suppliers ADD COLUMN deleted_at TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        connection,
         "customer_receipts",
         "active",
         "ALTER TABLE customer_receipts ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
@@ -3378,6 +4029,48 @@ mod tests {
             .expect("insert product");
     }
 
+    fn insert_customer(connection: &Connection, customer_id: &str, document: &str) {
+        connection
+            .execute(
+                "
+                INSERT INTO customers (
+                  id,
+                  name,
+                  document,
+                  address,
+                  active,
+                  city,
+                  email
+                )
+                VALUES (?1, 'Ana Perez', ?2, 'Calle 10', 1, 'Medellin', 'ana@test.com')
+                ",
+                params![customer_id, document],
+            )
+            .expect("insert customer");
+    }
+
+    fn insert_supplier(connection: &Connection, supplier_id: &str, document: &str) {
+        connection
+            .execute(
+                "
+                INSERT INTO suppliers (
+                  id,
+                  active,
+                  address,
+                  city,
+                  department,
+                  document,
+                  email,
+                  name,
+                  phone
+                )
+                VALUES (?1, 1, 'Calle 20', 'Medellin', 'Antioquia', ?2, 'proveedor@test.com', 'Distribuidora Norte', '300')
+                ",
+                params![supplier_id, document],
+            )
+            .expect("insert supplier");
+    }
+
     #[test]
     fn deletes_product_without_history() {
         let mut connection = test_connection();
@@ -3467,6 +4160,253 @@ mod tests {
         assert_eq!(visible_count, 0);
         assert_eq!(adjustment_count, 1);
     }
+
+    #[test]
+    fn deletes_customer_without_history() {
+        let mut connection = test_connection();
+        insert_customer(&connection, "customer-1", "123456789");
+
+        let result =
+            delete_customers_in_connection(&mut connection, vec!["customer-1".to_string()])
+                .expect("delete customer");
+
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM customers WHERE id = 'customer-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count customers");
+
+        assert_eq!(result.deleted_customer_ids, vec!["customer-1"]);
+        assert_eq!(result.blocked_count, 0);
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn hides_customer_with_history_without_removing_sales() {
+        let mut connection = test_connection();
+        insert_customer(&connection, "customer-1", "123456789");
+        connection
+            .execute(
+                "
+                INSERT INTO sales (
+                  id,
+                  customer_json,
+                  customer_id,
+                  customer_name,
+                  branch,
+                  prefix,
+                  invoice_number,
+                  seller,
+                  currency,
+                  concept,
+                  issued_at,
+                  product_id,
+                  product_name,
+                  quantity,
+                  unit_price_minor,
+                  total_minor,
+                  payment_status,
+                  occurred_at_ms,
+                  occurred_at_label
+                )
+                VALUES (
+                  'sale-1',
+                  '{}',
+                  'customer-1',
+                  'Ana Perez',
+                  'Principal',
+                  '',
+                  '001',
+                  'Sin asignar',
+                  'COP',
+                  'Factura de venta',
+                  '2026-08-13',
+                  'product-1',
+                  'Arroz libra',
+                  1,
+                  4500,
+                  4500,
+                  'paid',
+                  1,
+                  '13/08/26, 10:00'
+                )
+                ",
+                [],
+            )
+            .expect("insert sale");
+
+        let result =
+            delete_customers_in_connection(&mut connection, vec!["customer-1".to_string()])
+                .expect("delete customer");
+        let deleted_at: String = connection
+            .query_row(
+                "SELECT deleted_at FROM customers WHERE id = 'customer-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read deleted_at");
+        let visible_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM customers WHERE deleted_at = ''",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count visible customers");
+        let sale_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM sales WHERE customer_id = 'customer-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count sales");
+
+        assert_eq!(result.deleted_customer_ids, vec!["customer-1"]);
+        assert_eq!(result.blocked_count, 0);
+        assert!(!deleted_at.is_empty());
+        assert_eq!(visible_count, 0);
+        assert_eq!(sale_count, 1);
+    }
+
+    #[test]
+    fn deletes_supplier_without_history() {
+        let mut connection = test_connection();
+        insert_supplier(&connection, "supplier-1", "900123");
+
+        let result =
+            delete_suppliers_in_connection(&mut connection, vec!["supplier-1".to_string()])
+                .expect("delete supplier");
+
+        let remaining: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM suppliers WHERE id = 'supplier-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count suppliers");
+
+        assert_eq!(result.deleted_supplier_ids, vec!["supplier-1"]);
+        assert_eq!(result.blocked_count, 0);
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn hides_supplier_with_history_without_removing_purchases() {
+        let mut connection = test_connection();
+        insert_supplier(&connection, "supplier-1", "900123");
+        connection
+            .execute(
+                "
+                INSERT INTO purchases (
+                  id,
+                  supplier_id,
+                  supplier_name,
+                  expense_category,
+                  branch,
+                  prefix,
+                  currency,
+                  concept,
+                  invoice_number,
+                  issued_at,
+                  due_at,
+                  occurred_at_ms,
+                  product_id,
+                  product_name,
+                  quantity,
+                  unit_cost_minor,
+                  total_minor,
+                  payment_status,
+                  occurred_at_label
+                )
+                VALUES (
+                  'purchase-1',
+                  'supplier-1',
+                  'Distribuidora Norte',
+                  'inventory',
+                  'Principal',
+                  '',
+                  'COP',
+                  'Factura de compra',
+                  '001',
+                  '2026-08-13',
+                  '',
+                  1,
+                  'product-1',
+                  'Arroz libra',
+                  1,
+                  3200,
+                  3200,
+                  'paid',
+                  '13/08/26, 10:00'
+                )
+                ",
+                [],
+            )
+            .expect("insert purchase");
+
+        let result =
+            delete_suppliers_in_connection(&mut connection, vec!["supplier-1".to_string()])
+                .expect("delete supplier");
+        let deleted_at: String = connection
+            .query_row(
+                "SELECT deleted_at FROM suppliers WHERE id = 'supplier-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read deleted_at");
+        let visible_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM suppliers WHERE deleted_at = ''",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count visible suppliers");
+        let purchase_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(1) FROM purchases WHERE supplier_id = 'supplier-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count purchases");
+
+        assert_eq!(result.deleted_supplier_ids, vec!["supplier-1"]);
+        assert_eq!(result.blocked_count, 0);
+        assert!(!deleted_at.is_empty());
+        assert_eq!(visible_count, 0);
+        assert_eq!(purchase_count, 1);
+    }
+
+    #[test]
+    fn sanitizes_export_file_names() {
+        assert_eq!(
+            sanitize_export_file_name("../moneta:flujo?.xls"),
+            "moneta-flujo-.xls"
+        );
+        assert_eq!(sanitize_export_file_name(" reporte "), "reporte.xls");
+        assert_eq!(sanitize_export_file_name("..."), "moneta-exportacion.xls");
+    }
+
+    #[test]
+    fn creates_unique_export_paths_without_overwriting() {
+        let export_dir = std::env::temp_dir().join(format!(
+            "moneta-export-test-{}-{}",
+            std::process::id(),
+            current_epoch_seconds().expect("timestamp")
+        ));
+
+        fs::create_dir_all(&export_dir).expect("create export dir");
+        fs::write(export_dir.join("moneta-rentabilidad.xls"), "uno").expect("seed export");
+
+        let export_path = unique_export_path(&export_dir, "moneta-rentabilidad.xls");
+
+        assert_eq!(
+            export_path.file_name().and_then(|name| name.to_str()),
+            Some("moneta-rentabilidad-2.xls")
+        );
+
+        fs::remove_dir_all(export_dir).expect("remove export dir");
+    }
 }
 
 fn main() {
@@ -3478,6 +4418,7 @@ fn main() {
             save_app_settings,
             create_database_backup,
             create_automatic_database_backup,
+            save_excel_export,
             list_products,
             save_product,
             delete_products,
@@ -3485,6 +4426,7 @@ fn main() {
             save_inventory_adjustment,
             list_customers,
             save_customer,
+            delete_customers,
             list_sales,
             list_receivables,
             list_customer_receipts,
@@ -3493,15 +4435,20 @@ fn main() {
             delete_sale,
             save_customer_receipt,
             void_customer_receipt,
+            delete_receivable,
             list_credit_notes,
             save_credit_note,
             save_credit_note_status,
+            delete_credit_note,
             list_suppliers,
             save_supplier,
+            delete_suppliers,
             list_purchases,
             list_supplier_payables,
             list_supplier_payments,
             save_purchase,
+            delete_purchase,
+            delete_supplier_payable,
             save_supplier_payment
         ])
         .run(tauri::generate_context!())

@@ -9,6 +9,14 @@ import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SubmenuSwitch } from "../../components/SubmenuSwitch";
 import { parseLocalDate } from "../../lib/dates";
+import {
+  buildExcelWorkbookDownload,
+  buildExcelWorkbookXml,
+  type ExcelCellValue,
+  type ExcelWorkbookDownload,
+  type ExcelWorksheet
+} from "../../lib/excel-export";
+import { saveNativeExcelExport } from "../../lib/tauri";
 import type {
   CreditNoteRecord,
   CustomerReceiptRecord,
@@ -167,8 +175,34 @@ type ExpenseOriginRow = {
   participationPercent: number;
 };
 
+type ReportExportConfig = {
+  fileName: string;
+  worksheets: ExcelWorksheet[];
+};
+
+type ReportExportStatus =
+  | {
+      kind: "error" | "success";
+      message: string;
+    }
+  | null;
+
 function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
+}
+
+function roundDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function buildSummaryWorksheet(
+  name: string,
+  rows: Array<{ label: string; value: ExcelCellValue }>
+): ExcelWorksheet {
+  return {
+    name,
+    rows: [["Indicador", "Valor"], ...rows.map((row) => [row.label, row.value])]
+  };
 }
 
 function formatDays(value: number): string {
@@ -993,6 +1027,9 @@ export function ReportsSection({
   const [activeProfitabilityTab, setActiveProfitabilityTab] =
     useState<ProfitabilityTab>("overview");
   const [detailView, setDetailView] = useState<ReportDetailView>(null);
+  const [preparedDownload, setPreparedDownload] =
+    useState<ExcelWorkbookDownload | null>(null);
+  const [exportStatus, setExportStatus] = useState<ReportExportStatus>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
   const summary = buildMarginSummary(sales, creditNotes);
@@ -1063,13 +1100,340 @@ export function ReportsSection({
   function selectReportTab(tab: ReportTab) {
     setActiveReportTab(tab);
     setDetailView(null);
+    setExportStatus(null);
+    setPreparedDownload(null);
     setSelectedSaleId(null);
   }
 
   function selectProfitabilityTab(tab: ProfitabilityTab) {
     setActiveProfitabilityTab(tab);
     setDetailView(null);
+    setExportStatus(null);
+    setPreparedDownload(null);
     setSelectedSaleId(null);
+  }
+
+  function buildReportExport(): ReportExportConfig {
+    if (activeReportTab === "dso") {
+      return {
+        fileName: "moneta-dso.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen DSO", [
+            { label: "DSO global dias", value: roundDecimal(dsoSummary.dsoDays) },
+            { label: "Cartera abierta COP", value: dsoSummary.activeReceivablesMinor },
+            { label: "Clientes con saldo", value: dsoSummary.clientCount },
+            { label: "Facturas abiertas", value: dsoSummary.openInvoiceCount }
+          ]),
+          {
+            name: "Clientes DSO",
+            rows: [
+              [
+                "Cliente",
+                "Saldo pendiente COP",
+                "Participacion %",
+                "DSO cliente dias",
+                "Facturas abiertas"
+              ],
+              ...dsoClientRows.map((row) => [
+                row.customerName,
+                row.receivableMinor,
+                roundDecimal(row.participationPercent),
+                roundDecimal(row.averageOutstandingDays),
+                row.invoiceCount
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    if (activeReportTab === "cashflow") {
+      return {
+        fileName: "moneta-flujo-de-caja.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen flujo caja", [
+            { label: "Entradas reales COP", value: cashflowSummary.realInflowMinor },
+            { label: "Salidas reales COP", value: cashflowSummary.realOutflowMinor },
+            { label: "Flujo neto real COP", value: cashflowSummary.realNetMinor },
+            {
+              label: "Flujo neto proyectado COP",
+              value: cashflowSummary.projectedNetMinor
+            }
+          ]),
+          {
+            name: "Por fecha",
+            rows: [
+              [
+                "Fecha",
+                "Entrada real COP",
+                "Salida real COP",
+                "Neto real COP",
+                "Entrada proyectada COP",
+                "Salida proyectada COP",
+                "Neto proyectado COP"
+              ],
+              ...cashflowPeriodRows.map((row) => [
+                row.dateLabel,
+                row.realInflowMinor,
+                row.realOutflowMinor,
+                row.realNetMinor,
+                row.projectedInflowMinor,
+                row.projectedOutflowMinor,
+                row.projectedNetMinor
+              ])
+            ]
+          },
+          {
+            name: "Detalle",
+            rows: [
+              ["Fecha", "Tipo", "Origen", "Tercero", "Entrada COP", "Salida COP", "Neto COP"],
+              ...cashflowEntries.map((entry) => [
+                entry.dateLabel,
+                entry.typeLabel,
+                entry.originLabel,
+                entry.partyName,
+                entry.inflowMinor,
+                entry.outflowMinor,
+                entry.netMinor
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    if (activeReportTab === "expenses") {
+      return {
+        fileName: "moneta-egresos.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen egresos", [
+            { label: "Egresos reales COP", value: expenseSummary.realExpenseMinor },
+            { label: "Egresos proyectados COP", value: expenseSummary.projectedExpenseMinor },
+            { label: "Compromisos totales COP", value: expenseSummary.totalExpenseMinor },
+            { label: "Proveedores", value: expenseSummary.providerCount }
+          ]),
+          {
+            name: "Por origen",
+            rows: [
+              ["Origen", "Valor COP", "Participacion %", "Movimientos"],
+              ...expenseOriginRows.map((row) => [
+                row.originLabel,
+                row.amountMinor,
+                roundDecimal(row.participationPercent),
+                row.count
+              ])
+            ]
+          },
+          {
+            name: "Detalle",
+            rows: [
+              ["Fecha", "Estado", "Origen", "Proveedor", "Factura", "Valor COP"],
+              ...expenseEntries.map((entry) => [
+                entry.dateLabel,
+                entry.statusLabel,
+                entry.originLabel,
+                entry.partyName,
+                entry.invoiceNumber,
+                entry.amountMinor
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    if (activeReportTab === "variance") {
+      return {
+        fileName: "moneta-utilidades.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen utilidades", [
+            { label: "Utilidad total COP", value: utilitySummary.totalMarginMinor },
+            { label: "Promedio por periodo COP", value: utilitySummary.averageMarginMinor },
+            { label: "Mejor periodo", value: utilitySummary.bestPeriodLabel },
+            {
+              label: "Utilidad mejor periodo COP",
+              value: utilitySummary.bestPeriodMarginMinor
+            },
+            { label: "Peor periodo", value: utilitySummary.worstPeriodLabel },
+            {
+              label: "Utilidad peor periodo COP",
+              value: utilitySummary.worstPeriodMarginMinor
+            }
+          ]),
+          {
+            name: "Por periodo",
+            rows: [
+              ["Periodo", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %", "Ventas"],
+              ...utilityPeriodRows.map((row) => [
+                row.dateLabel,
+                row.revenueMinor,
+                row.costMinor,
+                row.marginMinor,
+                roundDecimal(row.marginPercent),
+                row.salesCount
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    const worksheets: ExcelWorksheet[] = [
+      buildSummaryWorksheet("Resumen rentabilidad", [
+        { label: "Ingresos totales COP", value: summary.revenueMinor },
+        { label: "Costo de ventas COP", value: summary.costMinor },
+        { label: "Margen bruto COP", value: summary.marginMinor },
+        { label: "Margen neto COP", value: netMarginMinor },
+        { label: "Margen %", value: roundDecimal(summary.marginPercent) }
+      ]),
+      {
+        name: "Productos",
+        rows: [
+          ["Producto", "Unidades", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %"],
+          ...productRows.map((row) => [
+            row.productName,
+            row.quantity,
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent)
+          ])
+        ]
+      },
+      {
+        name: "Clientes",
+        rows: [
+          ["Cliente", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %", "Compras"],
+          ...customerRows.map((row) => [
+            row.customerName,
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent),
+            row.purchaseCount
+          ])
+        ]
+      },
+      {
+        name: "Vendedores",
+        rows: [
+          ["Vendedor", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %", "Cantidad"],
+          ...sellerRows.map((row) => [
+            row.sellerName,
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent),
+            row.saleCount
+          ])
+        ]
+      },
+      {
+        name: "Ventas",
+        rows: [
+          ["Venta", "Fecha", "Cliente", "Estado", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %"],
+          ...saleRows.map((row) => [
+            row.saleId,
+            row.occurredAtLabel,
+            row.customerName,
+            row.paymentStatus === "paid" ? "Pagada" : "Pendiente",
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent)
+          ])
+        ]
+      }
+    ];
+
+    if (selectedSale) {
+      worksheets.push({
+        name: "Detalle venta",
+        rows: [
+          [
+            "Producto",
+            "Cantidad",
+            "Precio venta COP",
+            "Ventas COP",
+            "Costo COP",
+            "Utilidad COP",
+            "Margen %"
+          ],
+          ...selectedSale.lines.map((line) => [
+            line.productName,
+            line.quantity,
+            line.unitPriceMinor,
+            line.totalMinor,
+            line.costMinor,
+            line.marginMinor,
+            roundDecimal(line.marginPercent)
+          ])
+        ]
+      });
+    }
+
+    return {
+      fileName: "moneta-rentabilidad.xls",
+      worksheets
+    };
+  }
+
+  async function exportActiveReport() {
+    const reportExport = buildReportExport();
+    const workbookXml = buildExcelWorkbookXml(reportExport);
+    const fallbackDownload = buildExcelWorkbookDownload(reportExport);
+
+    try {
+      const nativeExport = await saveNativeExcelExport({
+        contents: workbookXml,
+        fileName: fallbackDownload.fileName
+      });
+
+      if (nativeExport) {
+        setPreparedDownload(null);
+        setExportStatus({
+          kind: "success",
+          message: `Exportacion guardada en Descargas: ${nativeExport.fileName}`
+        });
+        return;
+      }
+
+      setPreparedDownload(fallbackDownload);
+      setExportStatus({
+        kind: "success",
+        message: "Archivo listo para descargar."
+      });
+    } catch {
+      setPreparedDownload(fallbackDownload);
+      setExportStatus({
+        kind: "error",
+        message: "No se pudo guardar en Descargas. Usa el enlace de descarga."
+      });
+    }
+  }
+
+  function renderExportAction() {
+    return (
+      <section className="reports-export-toolbar" aria-label="Exportacion de reportes">
+        <SecondaryActionButton onClick={() => void exportActiveReport()}>
+          Exportar a Excel
+        </SecondaryActionButton>
+        {preparedDownload ? (
+          <a
+            className="secondary-action"
+            download={preparedDownload.fileName}
+            href={preparedDownload.href}
+          >
+            Descargar archivo Excel
+          </a>
+        ) : null}
+        {exportStatus ? (
+          <span className={`reports-export-status reports-export-status-${exportStatus.kind}`}>
+            {exportStatus.message}
+          </span>
+        ) : null}
+      </section>
+    );
   }
 
   function renderProfitabilitySummary() {
@@ -1089,6 +1453,7 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
+        {renderExportAction()}
         {withSummary ? <ReportSummaryShell>{renderProfitabilitySummary()}</ReportSummaryShell> : null}
         {content}
       </section>
@@ -1143,6 +1508,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen DSO" items={summaryItems} />
         </ReportSummaryShell>
@@ -1206,6 +1572,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen flujo de caja" items={summaryItems} />
         </ReportSummaryShell>
@@ -1304,6 +1671,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen egresos" items={summaryItems} />
         </ReportSummaryShell>
@@ -1402,6 +1770,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen utilidades" items={summaryItems} />
         </ReportSummaryShell>
@@ -1472,6 +1841,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <EmptyState
           body="Este reporte aparecera aqui cuando terminemos su implementacion."
           className="report-placeholder-panel"
@@ -1487,6 +1857,7 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
+        {renderExportAction()}
         <EmptyState
           body="Registra ventas para habilitar los reportes de rentabilidad."
           className="section-empty"

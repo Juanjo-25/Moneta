@@ -3,8 +3,14 @@ import {
   checkNativeConnection,
   createNativeAutomaticDatabaseBackup,
   createNativeDatabaseBackup,
+  deleteNativeCustomers,
+  deleteNativeCreditNote,
   deleteNativeProducts,
+  deleteNativePurchase,
+  deleteNativeReceivable,
   deleteNativeSale,
+  deleteNativeSupplierPayable,
+  deleteNativeSuppliers,
   loadNativeCreditNotes,
   loadNativeCustomers,
   loadNativeCustomerReceipts,
@@ -17,6 +23,7 @@ import {
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
   loadNativeSuppliers,
+  saveNativeExcelExport,
   saveNativeCustomer,
   saveNativeCustomerReceipt,
   saveNativeCreditNote,
@@ -118,6 +125,12 @@ describe("native settings persistence", () => {
     await expect(loadNativeSettings()).resolves.toBeNull();
     await expect(createNativeAutomaticDatabaseBackup()).resolves.toBeNull();
     await expect(createNativeDatabaseBackup()).resolves.toBeNull();
+    await expect(
+      saveNativeExcelExport({
+        contents: "<Workbook />",
+        fileName: "moneta-rentabilidad.xls"
+      })
+    ).resolves.toBeNull();
     await expect(
       saveNativeSettings({
         company: {
@@ -222,6 +235,23 @@ describe("native settings persistence", () => {
       backupStatus
     );
     expect(invoke).toHaveBeenCalledWith("create_automatic_database_backup");
+  });
+
+  it("saves an Excel export through Tauri", async () => {
+    const exportStatus = {
+      fileName: "moneta-rentabilidad.xls",
+      path: "/Users/demo/Downloads/Moneta Exportaciones/moneta-rentabilidad.xls",
+      sizeBytes: 1024
+    };
+    const input = {
+      contents: "<Workbook />",
+      fileName: "moneta-rentabilidad.xls"
+    };
+    const invoke = vi.fn().mockResolvedValue(exportStatus);
+    setTauriInvoke(invoke);
+
+    await expect(saveNativeExcelExport(input)).resolves.toEqual(exportStatus);
+    expect(invoke).toHaveBeenCalledWith("save_excel_export", { input });
   });
 });
 
@@ -366,6 +396,7 @@ describe("native customer persistence", () => {
 
     await expect(loadNativeCustomers()).resolves.toBeNull();
     await expect(saveNativeCustomer(customer)).resolves.toBe(false);
+    await expect(deleteNativeCustomers(["customer-1"])).resolves.toBeNull();
   });
 
   it("loads customers through Tauri", async () => {
@@ -382,6 +413,20 @@ describe("native customer persistence", () => {
 
     await expect(saveNativeCustomer(customer)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_customer", { customer });
+  });
+
+  it("deletes customers through Tauri", async () => {
+    const result = {
+      blockedCount: 0,
+      deletedCustomerIds: ["customer-1"]
+    };
+    const invoke = vi.fn().mockResolvedValue(result);
+    setTauriInvoke(invoke);
+
+    await expect(deleteNativeCustomers(["customer-1"])).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("delete_customers", {
+      input: { customerIds: ["customer-1"] }
+    });
   });
 });
 
@@ -546,6 +591,9 @@ describe("native sale persistence", () => {
       })
     ).resolves.toBe(false);
     await expect(
+      deleteNativeReceivable({ receivableId: "receivable-sale-1" })
+    ).resolves.toBe(false);
+    await expect(
       saveNativeCustomerReceipt({ receipt, receivable: updatedReceivable })
     ).resolves.toBe(false);
     await expect(
@@ -556,6 +604,13 @@ describe("native sale persistence", () => {
       saveNativeCreditNoteStatus({
         creditNote: confirmedCreditNote,
         productStockAdjustments: [{ productId: "product-1", quantityDelta: 1 }],
+        receivable: updatedReceivable
+      })
+    ).resolves.toBe(false);
+    await expect(
+      deleteNativeCreditNote({
+        creditNoteId: "credit-note-1",
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: -1 }],
         receivable: updatedReceivable
       })
     ).resolves.toBe(false);
@@ -635,6 +690,18 @@ describe("native sale persistence", () => {
     });
   });
 
+  it("deletes a receivable through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      deleteNativeReceivable({ receivableId: "receivable-sale-1" })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("delete_receivable", {
+      input: { receivableId: "receivable-sale-1" }
+    });
+  });
+
   it("saves a customer receipt through Tauri", async () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
     setTauriInvoke(invoke);
@@ -698,6 +765,26 @@ describe("native sale persistence", () => {
       }
     });
   });
+
+  it("deletes a credit note through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      deleteNativeCreditNote({
+        creditNoteId: "credit-note-1",
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: -1 }],
+        receivable: updatedReceivable
+      })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("delete_credit_note", {
+      input: {
+        creditNoteId: "credit-note-1",
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: -1 }],
+        receivable: updatedReceivable
+      }
+    });
+  });
 });
 
 describe("native supplier persistence", () => {
@@ -722,6 +809,7 @@ describe("native supplier persistence", () => {
 
     await expect(loadNativeSuppliers()).resolves.toBeNull();
     await expect(saveNativeSupplier(supplier)).resolves.toBe(false);
+    await expect(deleteNativeSuppliers(["supplier-1"])).resolves.toBeNull();
   });
 
   it("loads suppliers through Tauri", async () => {
@@ -738,6 +826,20 @@ describe("native supplier persistence", () => {
 
     await expect(saveNativeSupplier(supplier)).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_supplier", { supplier });
+  });
+
+  it("deletes suppliers through Tauri", async () => {
+    const result = {
+      blockedCount: 0,
+      deletedSupplierIds: ["supplier-1"]
+    };
+    const invoke = vi.fn().mockResolvedValue(result);
+    setTauriInvoke(invoke);
+
+    await expect(deleteNativeSuppliers(["supplier-1"])).resolves.toEqual(result);
+    expect(invoke).toHaveBeenCalledWith("delete_suppliers", {
+      input: { supplierIds: ["supplier-1"] }
+    });
   });
 });
 
@@ -824,6 +926,15 @@ describe("native purchase persistence", () => {
       saveNativePurchase({ purchase, supplierPayable })
     ).resolves.toBe(false);
     await expect(
+      deleteNativePurchase({
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: -2 }],
+        purchaseId: "purchase-1"
+      })
+    ).resolves.toBe(false);
+    await expect(
+      deleteNativeSupplierPayable({ payableId: "payable-purchase-1" })
+    ).resolves.toBe(false);
+    await expect(
       saveNativeSupplierPayment({
         payment: supplierPayment,
         supplierPayable: updatedSupplierPayable
@@ -864,6 +975,36 @@ describe("native purchase persistence", () => {
         purchase,
         supplierPayable
       }
+    });
+  });
+
+  it("deletes a purchase through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      deleteNativePurchase({
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: -2 }],
+        purchaseId: "purchase-1"
+      })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("delete_purchase", {
+      input: {
+        productStockAdjustments: [{ productId: "product-1", quantityDelta: -2 }],
+        purchaseId: "purchase-1"
+      }
+    });
+  });
+
+  it("deletes a supplier payable through Tauri", async () => {
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+
+    await expect(
+      deleteNativeSupplierPayable({ payableId: "payable-purchase-1" })
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("delete_supplier_payable", {
+      input: { payableId: "payable-purchase-1" }
     });
   });
 

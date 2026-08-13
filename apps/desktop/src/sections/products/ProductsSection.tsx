@@ -4,7 +4,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type FormEvent
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent
 } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
@@ -984,84 +985,104 @@ function InventoryMovementsTable({
   products,
   sourceFilter
 }: InventoryMovementsTableProps) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <section className="section-form-shell product-history-panel">
-      <div className="product-history-toolbar">
-        <label className="field" htmlFor="producto-historial-inventario">
-          <span>Producto historial</span>
-          <select
-            id="producto-historial-inventario"
-            onChange={(event) => onProductFilterChange(event.target.value)}
-            value={productFilter}
-          >
-            <option value="">Todos los productos</option>
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field" htmlFor="origen-historial-inventario">
-          <span>Origen</span>
-          <select
-            id="origen-historial-inventario"
-            onChange={(event) =>
-              onSourceFilterChange(event.target.value as InventoryMovementSource | "")
-            }
-            value={sourceFilter}
-          >
-            <option value="">Todos los origenes</option>
-            <option value="purchase">Compras</option>
-            <option value="sale">Ventas</option>
-            <option value="credit-note">Notas credito</option>
-            <option value="adjustment">Ajustes</option>
-          </select>
-        </label>
+      <div className="product-history-header">
+        <h2>Historial de inventario</h2>
+        <SecondaryActionButton
+          aria-controls="historial-inventario-contenido"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((currentExpanded) => !currentExpanded)}
+          variant="compact"
+        >
+          {expanded ? "Ocultar historial" : "Ver historial"}
+        </SecondaryActionButton>
       </div>
 
-      {movements.length > 0 ? (
-        <DataTable ariaLabel="Historial de inventario">
-          <DataTableHeader
-            labels={[
-              "Fecha",
-              "Producto",
-              "Origen",
-              "Documento",
-              "Movimiento",
-              "Cantidad",
-              "Stock resultante",
-              "Detalle"
-            ]}
-          />
-          <tbody>
-            {movements.slice(0, 40).map((movement) => (
-              <tr key={movement.id}>
-                <td>{movement.occurredAtLabel}</td>
-                <td>{movement.productName}</td>
-                <td>{movement.sourceLabel}</td>
-                <td>{movement.documentLabel}</td>
-                <td>{movement.movementLabel}</td>
-                <td>
-                  {formatMovementQuantity(movement.quantityDelta)} {movement.unit}
-                </td>
-                <td>
-                  {movement.resultingStock === null
-                    ? "-"
-                    : `${movement.resultingStock} ${movement.unit}`}
-                </td>
-                <td>{movement.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </DataTable>
-      ) : (
-        <EmptyState
-          body="Los movimientos de compras, ventas, notas credito y ajustes apareceran aqui."
-          className="section-empty"
-          title="Sin movimientos de inventario"
-        />
-      )}
+      {expanded ? (
+        <div className="product-history-content" id="historial-inventario-contenido">
+          <div className="product-history-toolbar">
+            <label className="field" htmlFor="producto-historial-inventario">
+              <span>Producto del historial</span>
+              <select
+                id="producto-historial-inventario"
+                onChange={(event) => onProductFilterChange(event.target.value)}
+                value={productFilter}
+              >
+                <option value="">Todos los productos</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field" htmlFor="origen-historial-inventario">
+              <span>Origen</span>
+              <select
+                id="origen-historial-inventario"
+                onChange={(event) =>
+                  onSourceFilterChange(
+                    event.target.value as InventoryMovementSource | ""
+                  )
+                }
+                value={sourceFilter}
+              >
+                <option value="">Todos los origenes</option>
+                <option value="purchase">Compras</option>
+                <option value="sale">Ventas</option>
+                <option value="credit-note">Notas credito</option>
+                <option value="adjustment">Ajustes</option>
+              </select>
+            </label>
+          </div>
+
+          {movements.length > 0 ? (
+            <DataTable ariaLabel="Historial de inventario">
+              <DataTableHeader
+                labels={[
+                  "Fecha",
+                  "Producto",
+                  "Origen",
+                  "Documento",
+                  "Movimiento",
+                  "Cantidad",
+                  "Stock resultante",
+                  "Detalle"
+                ]}
+              />
+              <tbody>
+                {movements.slice(0, 40).map((movement) => (
+                  <tr key={movement.id}>
+                    <td>{movement.occurredAtLabel}</td>
+                    <td>{movement.productName}</td>
+                    <td>{movement.sourceLabel}</td>
+                    <td>{movement.documentLabel}</td>
+                    <td>{movement.movementLabel}</td>
+                    <td>
+                      {formatMovementQuantity(movement.quantityDelta)} {movement.unit}
+                    </td>
+                    <td>
+                      {movement.resultingStock === null
+                        ? "-"
+                        : `${movement.resultingStock} ${movement.unit}`}
+                    </td>
+                    <td>{movement.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+          ) : (
+            <EmptyState
+              body="Los movimientos de compras, ventas, notas credito y ajustes apareceran aqui."
+              className="section-empty"
+              title="Sin movimientos de inventario"
+            />
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1224,6 +1245,8 @@ type ProductTableProps = {
   products: ProductRecord[];
 };
 
+const productActionsPopoverWidth = 176;
+
 function ProductTable({
   formatCurrency,
   isLowStock,
@@ -1232,9 +1255,61 @@ function ProductTable({
   onSetProductActive,
   products
 }: ProductTableProps) {
-  const [openActionsProductId, setOpenActionsProductId] = useState<string | null>(
-    null
-  );
+  const [openActions, setOpenActions] = useState<{
+    left: number;
+    productId: string;
+    top: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!openActions) {
+      return;
+    }
+
+    function closeActions() {
+      setOpenActions(null);
+    }
+
+    function closeOnOutsideClick(event: MouseEvent) {
+      const target = event.target;
+
+      if (
+        target instanceof Element &&
+        target.closest(".product-actions-popover, .product-actions-trigger")
+      ) {
+        return;
+      }
+
+      closeActions();
+    }
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("resize", closeActions);
+    window.addEventListener("scroll", closeActions, true);
+
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("resize", closeActions);
+      window.removeEventListener("scroll", closeActions, true);
+    };
+  }, [openActions]);
+
+  function toggleProductActions(
+    productId: string,
+    event: ReactMouseEvent<HTMLButtonElement>
+  ) {
+    const triggerRect = event.currentTarget.getBoundingClientRect();
+
+    setOpenActions((currentActions) =>
+      currentActions?.productId === productId
+        ? null
+        : {
+            left: Math.max(12, triggerRect.right - productActionsPopoverWidth),
+            productId,
+            top: triggerRect.bottom + 8
+          }
+    );
+  }
 
   return (
     <DataTable ariaLabel="Productos registrados">
@@ -1275,50 +1350,58 @@ function ProductTable({
             <td className="product-actions-cell">
               <div className="product-actions-menu">
                 <button
-                  aria-expanded={openActionsProductId === product.id}
+                  aria-expanded={openActions?.productId === product.id}
                   aria-haspopup="menu"
                   aria-label={`Acciones de ${product.name}`}
                   className="product-actions-trigger"
-                  onClick={() =>
-                    setOpenActionsProductId((currentId) =>
-                      currentId === product.id ? null : product.id
-                    )
-                  }
+                  onClick={(event) => toggleProductActions(product.id, event)}
                   type="button"
                 >
                   ...
                 </button>
               </div>
-              {openActionsProductId === product.id ? (
-                <div className="product-actions-popover" role="menu">
-                  <SecondaryActionButton
+              {openActions?.productId === product.id ? (
+                <div
+                  className="product-actions-popover"
+                  role="menu"
+                  style={{
+                    left: openActions.left,
+                    top: openActions.top
+                  }}
+                >
+                  <button
+                    className="product-actions-item"
                     onClick={() => {
                       onEditProduct(product);
-                      setOpenActionsProductId(null);
+                      setOpenActions(null);
                     }}
-                    variant="compact"
+                    role="menuitem"
+                    type="button"
                   >
                     Editar
-                  </SecondaryActionButton>
-                  <SecondaryActionButton
+                  </button>
+                  <button
+                    className="product-actions-item"
                     onClick={() => {
                       onSetProductActive(product, !product.active);
-                      setOpenActionsProductId(null);
+                      setOpenActions(null);
                     }}
-                    variant="compact"
+                    role="menuitem"
+                    type="button"
                   >
                     {product.active ? "Inactivar" : "Reactivar"}
-                  </SecondaryActionButton>
-                  <SecondaryActionButton
-                    className="danger-action"
+                  </button>
+                  <button
+                    className="product-actions-item product-actions-item-danger"
                     onClick={() => {
                       onDeleteProduct(product);
-                      setOpenActionsProductId(null);
+                      setOpenActions(null);
                     }}
-                    variant="compact"
+                    role="menuitem"
+                    type="button"
                   >
                     Eliminar
-                  </SecondaryActionButton>
+                  </button>
                 </div>
               ) : null}
             </td>
