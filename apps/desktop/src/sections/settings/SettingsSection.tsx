@@ -14,6 +14,7 @@ import type { AppSettings, CompanySettings, InvoiceDesignSettings } from "../../
 
 type SettingsSectionProps = {
   onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
+  onResetDatabase: () => Promise<boolean>;
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
 };
@@ -40,6 +41,7 @@ function formatBackupSize(sizeBytes: number): string {
 
 export function SettingsSection({
   onCreateBackup,
+  onResetDatabase,
   settings,
   onSettingsChange
 }: SettingsSectionProps) {
@@ -56,8 +58,18 @@ export function SettingsSection({
     kind: "idle",
     message: "Crea una copia local de la base de datos antes de cambios importantes."
   });
+  const [resetPhrase, setResetPhrase] = useState("");
+  const [resetStatus, setResetStatus] = useState<{
+    kind: "idle" | "resetting" | "success" | "error";
+    message: string;
+  }>({
+    kind: "idle",
+    message:
+      "Borra productos, clientes, proveedores, compras, ventas, cartera, recibos, abonos, notas credito, reportes y configuracion."
+  });
   const hasUnsavedChanges =
     JSON.stringify(draftSettings) !== JSON.stringify(settings);
+  const canResetDatabase = resetPhrase.trim().toLocaleUpperCase() === "ELIMINAR";
 
   useEffect(() => {
     setDraftSettings(settings);
@@ -204,6 +216,34 @@ export function SettingsSection({
     }
   }
 
+  async function resetDatabase() {
+    if (!canResetDatabase || resetStatus.kind === "resetting") {
+      return;
+    }
+
+    setResetStatus({
+      kind: "resetting",
+      message: "Eliminando toda la informacion..."
+    });
+
+    const resetSucceeded = await onResetDatabase();
+
+    if (!resetSucceeded) {
+      setResetStatus({
+        kind: "error",
+        message: "No se pudo eliminar la informacion. Revisa el estado de la base local."
+      });
+      return;
+    }
+
+    setResetPhrase("");
+    setSavedMessageVisible(false);
+    setResetStatus({
+      kind: "success",
+      message: "Moneta quedo vacia. Puedes empezar de nuevo."
+    });
+  }
+
   return (
     <form className="settings-layout" onSubmit={saveChanges}>
       <section className="section-form-shell settings-form">
@@ -226,6 +266,51 @@ export function SettingsSection({
               type="button"
             >
               {backupStatus.kind === "creating" ? "Creando..." : "Crear backup"}
+            </SecondaryActionButton>
+          </FormActions>
+        </div>
+      </section>
+
+      <section className="section-form-shell settings-form settings-danger-zone">
+        <div className="panel-header">
+          <div>
+            <h2>Zona peligrosa</h2>
+            <span>Reinicio completo de Moneta.</span>
+          </div>
+        </div>
+
+        <div className="settings-danger-panel">
+          <p>{resetStatus.message}</p>
+          <small>
+            Esta accion no revisa saldos, pendientes ni abonos registrados. No se
+            puede deshacer desde Moneta.
+          </small>
+          <TextField
+            label="Escribe ELIMINAR"
+            onChange={(value) => {
+              setResetPhrase(value);
+              setResetStatus((currentStatus) =>
+                currentStatus.kind === "success" || currentStatus.kind === "error"
+                  ? {
+                      kind: "idle",
+                      message:
+                        "Borra productos, clientes, proveedores, compras, ventas, cartera, recibos, abonos, notas credito, reportes y configuracion."
+                    }
+                  : currentStatus
+              );
+            }}
+            value={resetPhrase}
+          />
+          <FormActions>
+            <SecondaryActionButton
+              className="danger-action"
+              disabled={!canResetDatabase || resetStatus.kind === "resetting"}
+              onClick={resetDatabase}
+              type="button"
+            >
+              {resetStatus.kind === "resetting"
+                ? "Eliminando..."
+                : "Eliminar toda la informacion"}
             </SecondaryActionButton>
           </FormActions>
         </div>

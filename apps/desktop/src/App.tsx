@@ -40,6 +40,7 @@ import {
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
   loadNativeSuppliers,
+  resetNativeDatabase,
   saveNativeCustomer,
   saveNativeCustomerReceipt,
   saveNativeCreditNote,
@@ -519,6 +520,67 @@ export function App() {
 
   async function createBackup() {
     return createNativeDatabaseBackup();
+  }
+
+  function resetApplicationState() {
+    setProducts([]);
+    setInventoryAdjustments([]);
+    setCustomers([]);
+    setSalesDraft(emptySalesDraft);
+    setSales([]);
+    setCreditNotes([]);
+    setReceivables([]);
+    setCustomerReceipts([]);
+    setSuppliers([]);
+    setPurchases([]);
+    setSupplierPayables([]);
+    setSupplierPayments([]);
+    setSettings(defaultSettings);
+    setProductFormVisible(false);
+    setProductDeleteAllRequestId(0);
+    setSupplierFormVisible(false);
+  }
+
+  async function resetAllDataInSession(): Promise<boolean> {
+    try {
+      const resetStatus = await resetNativeDatabase();
+
+      if (!resetStatus) {
+        setNativeConnectionStatus({
+          kind: "error",
+          message: "Abre Moneta como app de escritorio para reiniciar la base local."
+        });
+        return false;
+      }
+
+      resetApplicationState();
+      setNativeConnectionStatus((currentStatus) => {
+        const message = "Moneta reiniciada. Base local vacia.";
+
+        if (currentStatus.kind === "connected" && currentStatus.databasePath) {
+          return {
+            kind: "connected",
+            databasePath: currentStatus.databasePath,
+            message
+          };
+        }
+
+        return {
+          kind: "connected",
+          message
+        };
+      });
+      return true;
+    } catch (error) {
+      setNativeConnectionStatus({
+        kind: "error",
+        message: formatNativePersistenceError(
+          "No se pudo reiniciar la base local.",
+          error
+        )
+      });
+      return false;
+    }
   }
 
   const lowStockProducts = products.filter(isLowStock);
@@ -2547,6 +2609,7 @@ export function App() {
             section={activeSection}
             onSalesDraftChange={setSalesDraft}
             onCreateBackup={createBackup}
+            onResetDatabase={resetAllDataInSession}
             onSettingsChange={updateSettings}
             supplierPayables={supplierPayables}
             supplierPayments={supplierPayments}

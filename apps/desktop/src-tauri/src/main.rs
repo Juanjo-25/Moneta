@@ -28,6 +28,12 @@ struct AutomaticBackupStatus {
     deleted_old_backups: usize,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResetDatabaseStatus {
+    deleted_rows: usize,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ExportFileInput {
@@ -574,6 +580,15 @@ fn create_automatic_database_backup(
 }
 
 #[tauri::command]
+fn reset_database(app: tauri::AppHandle) -> Result<ResetDatabaseStatus, String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+
+    reset_database_in_connection(&mut connection)
+}
+
+#[tauri::command]
 fn save_excel_export(
     app: tauri::AppHandle,
     input: ExportFileInput,
@@ -756,6 +771,48 @@ fn prune_automatic_backups(backup_dir: &PathBuf, keep_count: usize) -> Result<us
     }
 
     Ok(deleted_count)
+}
+
+fn reset_database_in_connection(
+    connection: &mut Connection,
+) -> Result<ResetDatabaseStatus, String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar el reinicio de datos: {error}"))?;
+    let tables = [
+        "customer_receipts",
+        "credit_note_lines",
+        "credit_notes",
+        "supplier_payments",
+        "supplier_payables",
+        "purchase_lines",
+        "purchases",
+        "receivables",
+        "sale_lines",
+        "sales",
+        "inventory_adjustments",
+        "products",
+        "customers",
+        "suppliers",
+        "app_settings",
+    ];
+    let mut deleted_rows = 0usize;
+
+    for table_name in tables {
+        deleted_rows += transaction
+            .execute(&format!("DELETE FROM {table_name}"), [])
+            .map_err(|error| format!("No se pudo borrar {table_name}: {error}"))?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar el reinicio de datos: {error}"))?;
+
+    connection
+        .execute_batch("VACUUM")
+        .map_err(|error| format!("No se pudo compactar la base de datos: {error}"))?;
+
+    Ok(ResetDatabaseStatus { deleted_rows })
 }
 
 fn current_epoch_seconds() -> Result<u64, String> {
@@ -2179,7 +2236,10 @@ fn delete_receivable(
     }
 
     let affected = transaction
-        .execute("DELETE FROM receivables WHERE id = ?1", [&input.receivable_id])
+        .execute(
+            "DELETE FROM receivables WHERE id = ?1",
+            [&input.receivable_id],
+        )
         .map_err(|error| format!("No se pudo eliminar la cuenta por cobrar: {error}"))?;
 
     if affected == 0 {
@@ -2509,11 +2569,9 @@ fn delete_credit_note(
     let database_path = database_path(&app)?;
     let mut connection = open_database(&database_path)?;
     apply_migrations(&connection)?;
-    let transaction = connection
-        .transaction()
-        .map_err(|error| {
-            format!("No se pudo iniciar la transaccion de eliminacion de nota credito: {error}")
-        })?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("No se pudo iniciar la transaccion de eliminacion de nota credito: {error}")
+    })?;
 
     let note_count: i64 = transaction
         .query_row(
@@ -2584,12 +2642,15 @@ fn delete_credit_note(
         )
         .map_err(|error| format!("No se pudieron eliminar las lineas de nota credito: {error}"))?;
     transaction
-        .execute("DELETE FROM credit_notes WHERE id = ?1", [&input.credit_note_id])
+        .execute(
+            "DELETE FROM credit_notes WHERE id = ?1",
+            [&input.credit_note_id],
+        )
         .map_err(|error| format!("No se pudo eliminar la nota credito: {error}"))?;
 
-    transaction.commit().map_err(|error| {
-        format!("No se pudo confirmar la eliminacion de nota credito: {error}")
-    })?;
+    transaction
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la eliminacion de nota credito: {error}"))?;
 
     Ok(())
 }
@@ -3133,11 +3194,9 @@ fn delete_purchase(app: tauri::AppHandle, input: PurchaseDeletePersistence) -> R
     let database_path = database_path(&app)?;
     let mut connection = open_database(&database_path)?;
     apply_migrations(&connection)?;
-    let transaction = connection
-        .transaction()
-        .map_err(|error| {
-            format!("No se pudo iniciar la transaccion de eliminacion de compra: {error}")
-        })?;
+    let transaction = connection.transaction().map_err(|error| {
+        format!("No se pudo iniciar la transaccion de eliminacion de compra: {error}")
+    })?;
 
     ensure_purchase_has_no_supplier_payments(&transaction, &input.purchase_id)?;
 
@@ -3163,7 +3222,10 @@ fn delete_purchase(app: tauri::AppHandle, input: PurchaseDeletePersistence) -> R
         .map_err(|error| format!("No se pudo eliminar la compra: {error}"))?;
 
     if affected == 0 {
-        return Err(format!("La compra {} no existe en SQLite.", input.purchase_id));
+        return Err(format!(
+            "La compra {} no existe en SQLite.",
+            input.purchase_id
+        ));
     }
 
     transaction
@@ -3207,7 +3269,10 @@ fn delete_supplier_payable(
     }
 
     let affected = transaction
-        .execute("DELETE FROM supplier_payables WHERE id = ?1", [&input.payable_id])
+        .execute(
+            "DELETE FROM supplier_payables WHERE id = ?1",
+            [&input.payable_id],
+        )
         .map_err(|error| format!("No se pudo eliminar la cuenta por pagar: {error}"))?;
 
     if affected == 0 {
@@ -4378,6 +4443,419 @@ mod tests {
     }
 
     #[test]
+    fn resets_all_application_data_even_with_pending_balances() {
+        let mut connection = test_connection();
+        insert_product(&connection, "product-1", "ARZ-001");
+        insert_customer(&connection, "customer-1", "123456789");
+        insert_supplier(&connection, "supplier-1", "900123");
+        connection
+            .execute_batch(
+                "
+                INSERT INTO app_settings (key, value)
+                VALUES ('app_settings', '{}');
+
+                INSERT INTO inventory_adjustments (
+                  id,
+                  product_id,
+                  product_name,
+                  unit,
+                  adjustment_type,
+                  quantity,
+                  previous_stock,
+                  next_stock,
+                  reason,
+                  occurred_at_ms,
+                  occurred_at_label
+                )
+                VALUES (
+                  'adjustment-1',
+                  'product-1',
+                  'Arroz libra',
+                  'Unidad',
+                  'entry',
+                  1,
+                  4,
+                  5,
+                  'Conteo',
+                  1,
+                  '13/08/26, 10:00'
+                );
+
+                INSERT INTO sales (
+                  id,
+                  customer_json,
+                  customer_id,
+                  customer_name,
+                  branch,
+                  prefix,
+                  invoice_number,
+                  seller,
+                  currency,
+                  concept,
+                  issued_at,
+                  product_id,
+                  product_name,
+                  quantity,
+                  unit_price_minor,
+                  total_minor,
+                  payment_status,
+                  occurred_at_ms,
+                  occurred_at_label
+                )
+                VALUES (
+                  'sale-1',
+                  '{}',
+                  'customer-1',
+                  'Ana Perez',
+                  'Principal',
+                  '',
+                  '001',
+                  'Sin asignar',
+                  'COP',
+                  'Factura de venta',
+                  '2026-08-13',
+                  'product-1',
+                  'Arroz libra',
+                  1,
+                  4500,
+                  4500,
+                  'pending',
+                  1,
+                  '13/08/26, 10:00'
+                );
+
+                INSERT INTO sale_lines (
+                  id,
+                  sale_id,
+                  product_id,
+                  product_name,
+                  unit,
+                  quantity,
+                  unit_cost_minor_at_sale,
+                  unit_price_minor,
+                  discount_percent,
+                  discount_minor,
+                  tax_percent,
+                  tax_minor,
+                  subtotal_minor,
+                  cost_minor,
+                  margin_minor,
+                  margin_percent,
+                  total_minor
+                )
+                VALUES (
+                  'sale-line-1',
+                  'sale-1',
+                  'product-1',
+                  'Arroz libra',
+                  'Unidad',
+                  1,
+                  3200,
+                  4500,
+                  0,
+                  0,
+                  0,
+                  0,
+                  4500,
+                  3200,
+                  1300,
+                  28.89,
+                  4500
+                );
+
+                INSERT INTO receivables (
+                  id,
+                  customer_id,
+                  customer_name,
+                  sale_id,
+                  amount_minor,
+                  original_amount_minor,
+                  paid_amount_minor,
+                  balance_minor,
+                  due_at,
+                  status
+                )
+                VALUES (
+                  'receivable-1',
+                  'customer-1',
+                  'Ana Perez',
+                  'sale-1',
+                  4500,
+                  4500,
+                  0,
+                  4500,
+                  '2026-09-13',
+                  'pending'
+                );
+
+                INSERT INTO customer_receipts (
+                  id,
+                  number,
+                  receivable_id,
+                  sale_id,
+                  customer_id,
+                  customer_name,
+                  amount_minor,
+                  concept,
+                  received_at,
+                  received_at_ms,
+                  received_at_label
+                )
+                VALUES (
+                  'receipt-1',
+                  'RC-001',
+                  'receivable-1',
+                  'sale-1',
+                  'customer-1',
+                  'Ana Perez',
+                  1000,
+                  'Abono',
+                  '2026-08-13',
+                  1,
+                  '13/08/26, 10:00'
+                );
+
+                INSERT INTO credit_notes (
+                  id,
+                  adjustment_type,
+                  confirmed_at_label,
+                  confirmed_at_ms,
+                  number,
+                  sale_id,
+                  invoice_number,
+                  customer_json,
+                  customer_id,
+                  customer_name,
+                  issued_at,
+                  reason,
+                  receivable_due_at,
+                  status,
+                  total_minor,
+                  occurred_at_ms,
+                  occurred_at_label,
+                  voided_at_label,
+                  voided_at_ms
+                )
+                VALUES (
+                  'credit-note-1',
+                  'return',
+                  '',
+                  0,
+                  'NC-001',
+                  'sale-1',
+                  '001',
+                  '{}',
+                  'customer-1',
+                  'Ana Perez',
+                  '2026-08-13',
+                  'Devolucion',
+                  '2026-09-13',
+                  'draft',
+                  4500,
+                  1,
+                  '13/08/26, 10:00',
+                  '',
+                  0
+                );
+
+                INSERT INTO credit_note_lines (
+                  id,
+                  credit_note_id,
+                  sale_line_id,
+                  product_id,
+                  product_name,
+                  unit,
+                  quantity,
+                  unit_price_minor,
+                  discount_percent,
+                  tax_percent,
+                  cost_minor,
+                  margin_minor,
+                  margin_percent,
+                  total_minor
+                )
+                VALUES (
+                  'credit-note-line-1',
+                  'credit-note-1',
+                  'sale-line-1',
+                  'product-1',
+                  'Arroz libra',
+                  'Unidad',
+                  1,
+                  4500,
+                  0,
+                  0,
+                  3200,
+                  1300,
+                  28.89,
+                  4500
+                );
+
+                INSERT INTO purchases (
+                  id,
+                  supplier_id,
+                  supplier_name,
+                  expense_category,
+                  branch,
+                  prefix,
+                  currency,
+                  concept,
+                  invoice_number,
+                  issued_at,
+                  due_at,
+                  occurred_at_ms,
+                  product_id,
+                  product_name,
+                  quantity,
+                  unit_cost_minor,
+                  total_minor,
+                  payment_status,
+                  occurred_at_label
+                )
+                VALUES (
+                  'purchase-1',
+                  'supplier-1',
+                  'Distribuidora Norte',
+                  'inventory',
+                  'Principal',
+                  '',
+                  'COP',
+                  'Factura de compra',
+                  'FC-001',
+                  '2026-08-13',
+                  '2026-09-13',
+                  1,
+                  'product-1',
+                  'Arroz libra',
+                  1,
+                  3200,
+                  3200,
+                  'pending',
+                  '13/08/26, 10:00'
+                );
+
+                INSERT INTO purchase_lines (
+                  id,
+                  purchase_id,
+                  product_id,
+                  product_name,
+                  unit,
+                  quantity,
+                  unit_cost_minor,
+                  discount_percent,
+                  discount_minor,
+                  tax_percent,
+                  tax_minor,
+                  subtotal_minor,
+                  total_minor
+                )
+                VALUES (
+                  'purchase-line-1',
+                  'purchase-1',
+                  'product-1',
+                  'Arroz libra',
+                  'Unidad',
+                  1,
+                  3200,
+                  0,
+                  0,
+                  0,
+                  0,
+                  3200,
+                  3200
+                );
+
+                INSERT INTO supplier_payables (
+                  id,
+                  supplier_id,
+                  supplier_name,
+                  expense_category,
+                  purchase_id,
+                  invoice_number,
+                  original_amount_minor,
+                  paid_amount_minor,
+                  balance_minor,
+                  due_at,
+                  status
+                )
+                VALUES (
+                  'payable-1',
+                  'supplier-1',
+                  'Distribuidora Norte',
+                  'inventory',
+                  'purchase-1',
+                  'FC-001',
+                  3200,
+                  0,
+                  3200,
+                  '2026-09-13',
+                  'pending'
+                );
+
+                INSERT INTO supplier_payments (
+                  id,
+                  payable_id,
+                  purchase_id,
+                  supplier_id,
+                  supplier_name,
+                  expense_category,
+                  amount_minor,
+                  paid_at_ms,
+                  paid_at_label
+                )
+                VALUES (
+                  'supplier-payment-1',
+                  'payable-1',
+                  'purchase-1',
+                  'supplier-1',
+                  'Distribuidora Norte',
+                  'inventory',
+                  500,
+                  1,
+                  '13/08/26, 10:00'
+                );
+                ",
+            )
+            .expect("seed dependent application data");
+
+        let result = reset_database_in_connection(&mut connection).expect("reset database");
+        let application_tables = [
+            "customer_receipts",
+            "credit_note_lines",
+            "credit_notes",
+            "supplier_payments",
+            "supplier_payables",
+            "purchase_lines",
+            "purchases",
+            "receivables",
+            "sale_lines",
+            "sales",
+            "inventory_adjustments",
+            "products",
+            "customers",
+            "suppliers",
+            "app_settings",
+        ];
+
+        assert_eq!(result.deleted_rows, 15);
+        for table_name in application_tables {
+            let count: i64 = connection
+                .query_row(&format!("SELECT COUNT(1) FROM {table_name}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count reset table");
+            assert_eq!(count, 0, "{table_name} should be empty");
+        }
+
+        let migration_count: i64 = connection
+            .query_row("SELECT COUNT(1) FROM moneta_migrations", [], |row| {
+                row.get(0)
+            })
+            .expect("count migrations");
+        assert!(migration_count > 0);
+    }
+
+    #[test]
     fn sanitizes_export_file_names() {
         assert_eq!(
             sanitize_export_file_name("../moneta:flujo?.xls"),
@@ -4418,6 +4896,7 @@ fn main() {
             save_app_settings,
             create_database_backup,
             create_automatic_database_backup,
+            reset_database,
             save_excel_export,
             list_products,
             save_product,

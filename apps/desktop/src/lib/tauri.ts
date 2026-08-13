@@ -57,6 +57,10 @@ export type AutomaticBackupStatus = {
   deletedOldBackups: number;
 };
 
+export type ResetDatabaseStatus = {
+  deletedRows: number;
+};
+
 export type ExportFileStatus = {
   fileName: string;
   path: string;
@@ -147,6 +151,16 @@ export async function createNativeAutomaticDatabaseBackup(): Promise<
   }
 
   return invoke<AutomaticBackupStatus>("create_automatic_database_backup");
+}
+
+export async function resetNativeDatabase(): Promise<ResetDatabaseStatus | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return null;
+  }
+
+  return invoke<ResetDatabaseStatus>("reset_database");
 }
 
 export async function saveNativeExcelExport(input: {

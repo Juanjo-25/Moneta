@@ -361,6 +361,146 @@ describe("App navigation", () => {
     );
   });
 
+  it("resets all local data from settings even when pending payables exist", async () => {
+    const user = userEvent.setup();
+    const storedProduct = {
+      active: true,
+      costMinor: 3200,
+      id: "product-stored",
+      minimumStock: 1,
+      name: "Arroz libra",
+      salePriceMinor: 4500,
+      sku: "ARZ-001",
+      stock: 4,
+      unit: "Unidad"
+    };
+    const storedSupplier = {
+      active: true,
+      address: "Calle 20",
+      city: "Medellin",
+      department: "Antioquia",
+      document: "900123",
+      email: "proveedor@test.com",
+      id: "supplier-stored",
+      name: "Distribuidora Norte",
+      phone: "300"
+    };
+    const storedPurchase = {
+      branch: "Principal",
+      concept: "Factura de compra",
+      currency: "COP" as const,
+      dueAt: "2026-08-18",
+      expenseCategory: "inventory" as const,
+      id: "purchase-stored",
+      invoiceNumber: "001",
+      issuedAt: "2026-07-18",
+      lines: [
+        {
+          discountMinor: 0,
+          discountPercent: 0,
+          id: "purchase-line-stored",
+          productId: "product-stored",
+          productName: "Arroz libra",
+          quantity: 1,
+          subtotalMinor: 3200,
+          taxMinor: 0,
+          taxPercent: 0,
+          totalMinor: 3200,
+          unit: "Unidad",
+          unitCostMinor: 3200
+        }
+      ],
+      occurredAtLabel: "18/07/26, 10:00",
+      occurredAtMs: 1,
+      paymentStatus: "pending" as const,
+      prefix: "",
+      productId: "product-stored",
+      productName: "Arroz libra",
+      quantity: 1,
+      supplierId: "supplier-stored",
+      supplierName: "Distribuidora Norte",
+      totalMinor: 3200,
+      unitCostMinor: 3200
+    };
+    const storedSupplierPayable = {
+      balanceMinor: 3200,
+      dueAt: "2026-08-18",
+      expenseCategory: "inventory" as const,
+      id: "payable-stored",
+      invoiceNumber: "001",
+      originalAmountMinor: 3200,
+      paidAmountMinor: 0,
+      purchaseId: "purchase-stored",
+      status: "pending" as const,
+      supplierId: "supplier-stored",
+      supplierName: "Distribuidora Norte"
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 3,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_products") {
+        return Promise.resolve([storedProduct]);
+      }
+      if (command === "list_suppliers") {
+        return Promise.resolve([storedSupplier]);
+      }
+      if (command === "list_purchases") {
+        return Promise.resolve([storedPurchase]);
+      }
+      if (command === "list_supplier_payables") {
+        return Promise.resolve([storedSupplierPayable]);
+      }
+      if (command === "reset_database") {
+        return Promise.resolve({ deletedRows: 4 });
+      }
+
+      return Promise.resolve(undefined);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    expect(await screen.findByRole("cell", { name: "ARZ-001" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    const resetButton = screen.getByRole("button", {
+      name: "Eliminar toda la informacion"
+    }) as HTMLButtonElement;
+    expect(resetButton.disabled).toBe(true);
+
+    await user.type(screen.getByLabelText("Escribe ELIMINAR"), "ELIMINAR");
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Eliminar toda la informacion"
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(false);
+    await user.click(
+      screen.getByRole("button", { name: "Eliminar toda la informacion" })
+    );
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("reset_database"));
+    expect(screen.getByText("Moneta quedo vacia. Puedes empezar de nuevo.")).toBeTruthy();
+    expect(screen.getByText("Moneta reiniciada. Base local vacia.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    expect(screen.getByText("Sin productos registrados")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+    expect(screen.getByText("Sin cartera por cobrar")).toBeTruthy();
+  });
+
   it("loads and saves products through SQLite when Tauri is available", async () => {
     const user = userEvent.setup();
     const storedProduct = {

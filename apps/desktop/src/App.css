@@ -1138,16 +1138,39 @@ button,
   font-weight: 700;
 }
 
-.settings-backup-panel {
+.settings-backup-panel,
+.settings-danger-panel {
   display: grid;
   gap: 12px;
   max-width: 760px;
 }
 
-.settings-backup-panel p {
+.settings-backup-panel p,
+.settings-danger-panel p {
   margin: 0;
   color: var(--text-secondary);
   font-size: 14px;
+  font-weight: 700;
+}
+
+.settings-danger-zone {
+  border-color: #fecaca;
+}
+
+.settings-danger-panel {
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-control);
+  background: var(--danger-soft);
+  padding: 14px;
+}
+
+.settings-danger-panel p {
+  color: #7f1d1d;
+}
+
+.settings-danger-panel small {
+  color: #991b1b;
+  font-size: 13px;
   font-weight: 700;
 }
 

@@ -23,6 +23,7 @@ import {
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
   loadNativeSuppliers,
+  resetNativeDatabase,
   saveNativeExcelExport,
   saveNativeCustomer,
   saveNativeCustomerReceipt,
@@ -125,6 +126,7 @@ describe("native settings persistence", () => {
     await expect(loadNativeSettings()).resolves.toBeNull();
     await expect(createNativeAutomaticDatabaseBackup()).resolves.toBeNull();
     await expect(createNativeDatabaseBackup()).resolves.toBeNull();
+    await expect(resetNativeDatabase()).resolves.toBeNull();
     await expect(
       saveNativeExcelExport({
         contents: "<Workbook />",
@@ -235,6 +237,17 @@ describe("native settings persistence", () => {
       backupStatus
     );
     expect(invoke).toHaveBeenCalledWith("create_automatic_database_backup");
+  });
+
+  it("resets the database through Tauri", async () => {
+    const resetStatus = {
+      deletedRows: 12
+    };
+    const invoke = vi.fn().mockResolvedValue(resetStatus);
+    setTauriInvoke(invoke);
+
+    await expect(resetNativeDatabase()).resolves.toEqual(resetStatus);
+    expect(invoke).toHaveBeenCalledWith("reset_database");
   });
 
   it("saves an Excel export through Tauri", async () => {

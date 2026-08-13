@@ -205,6 +205,7 @@ type SectionContentProps = {
   onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
   onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
+  onResetDatabase: () => Promise<boolean>;
   onSettingsChange: (settings: AppSettings) => void;
   parseNonNegativeInteger: (value: string) => number | null;
   productDeleteAllRequestId: number;
@@ -266,6 +267,7 @@ export function SectionContent({
   onCloseSupplierForm,
   onSalesDraftChange,
   onCreateBackup,
+  onResetDatabase,
   onSettingsChange,
   parseNonNegativeInteger,
   productDeleteAllRequestId,
@@ -464,6 +466,7 @@ export function SectionContent({
     return (
       <SettingsSection
         onCreateBackup={onCreateBackup}
+        onResetDatabase={onResetDatabase}
         onSettingsChange={onSettingsChange}
         settings={settings}
       />
