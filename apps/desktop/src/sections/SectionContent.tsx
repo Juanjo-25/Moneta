@@ -304,6 +304,7 @@ export function SectionContent({
         products={products}
         purchases={purchases}
         sales={sales}
+        settings={settings}
       />
     );
   }
@@ -414,6 +415,7 @@ export function SectionContent({
         onRegisterSupplierPayment={onRegisterSupplierPayment}
         parseNonNegativeInteger={parseNonNegativeInteger}
         receivables={receivables}
+        settings={settings}
         supplierPayables={supplierPayables}
       />
     );

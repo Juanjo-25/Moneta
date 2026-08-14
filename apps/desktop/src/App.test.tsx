@@ -2,9 +2,15 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { generateCarteraPdf } from "./cartera-pdf";
 import { generateCashReceiptPdf } from "./cash-receipt-pdf";
 import { generateInvoicePdf } from "./invoice-pdf";
+import { generateInventoryPdf } from "./inventory-pdf";
 import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
+
+vi.mock("./cartera-pdf", () => ({
+  generateCarteraPdf: vi.fn()
+}));
 
 vi.mock("./cash-receipt-pdf", () => ({
   generateCashReceiptPdf: vi.fn()
@@ -14,12 +20,18 @@ vi.mock("./invoice-pdf", () => ({
   generateInvoicePdf: vi.fn()
 }));
 
+vi.mock("./inventory-pdf", () => ({
+  generateInventoryPdf: vi.fn()
+}));
+
 vi.mock("./supplier-payment-pdf", () => ({
   generateSupplierPaymentPdf: vi.fn()
 }));
 
+const generateCarteraPdfMock = vi.mocked(generateCarteraPdf);
 const generateCashReceiptPdfMock = vi.mocked(generateCashReceiptPdf);
 const generateInvoicePdfMock = vi.mocked(generateInvoicePdf);
+const generateInventoryPdfMock = vi.mocked(generateInventoryPdf);
 const generateSupplierPaymentPdfMock = vi.mocked(generateSupplierPaymentPdf);
 
 function setTauriInvoke(
@@ -114,6 +126,11 @@ async function clickFirstSaleAction(user: UserEvent, actionName: string) {
 
 describe("App navigation", () => {
   beforeEach(() => {
+    generateCarteraPdfMock.mockReset();
+    generateCarteraPdfMock.mockReturnValue({
+      dataUri: "data:application/pdf;base64,cartera-pdf",
+      fileName: "cartera-pendiente.pdf"
+    });
     generateCashReceiptPdfMock.mockReset();
     generateCashReceiptPdfMock.mockReturnValue({
       dataUri: "data:application/pdf;base64,cash-receipt-pdf",
@@ -123,6 +140,11 @@ describe("App navigation", () => {
     generateInvoicePdfMock.mockReturnValue({
       dataUri: "data:application/pdf;base64,invoice-pdf",
       fileName: "factura-FE-sale-1.pdf"
+    });
+    generateInventoryPdfMock.mockReset();
+    generateInventoryPdfMock.mockReturnValue({
+      dataUri: "data:application/pdf;base64,inventory-pdf",
+      fileName: "inventario-productos.pdf"
     });
     generateSupplierPaymentPdfMock.mockReset();
     generateSupplierPaymentPdfMock.mockReturnValue({
@@ -1017,6 +1039,39 @@ describe("App navigation", () => {
     expect(screen.getByText("Arroz libra")).toBeTruthy();
   });
 
+  it("generates a printable inventory PDF for registered products", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Imprimir inventario" }));
+
+    await waitFor(() =>
+      expect(generateInventoryPdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          products: [
+            expect.objectContaining({
+              name: "Arroz libra",
+              sku: "ARZ-001",
+              stock: 4
+            })
+          ],
+          settings: expect.objectContaining({
+            company: expect.any(Object),
+            invoice: expect.any(Object)
+          })
+        })
+      )
+    );
+    expect(screen.getByTitle("Vista previa de inventario PDF").getAttribute("src")).toBe(
+      "data:application/pdf;base64,inventory-pdf"
+    );
+    expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
+      "data:application/pdf;base64,inventory-pdf"
+    );
+  });
+
   it("imports products from an Excel CSV export", async () => {
     const user = userEvent.setup();
     const file = new File(
@@ -1515,6 +1570,55 @@ describe("App navigation", () => {
     const receivablesTable = screen.getByRole("table", { name: "Cartera por cobrar" });
     expect(within(receivablesTable).getByText("Carlos Ruiz")).toBeTruthy();
     expect(within(receivablesTable).getAllByText(/\$\s*13\.500/)).toHaveLength(2);
+  });
+
+  it("generates a printable cartera PDF for open receivables", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "3");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-20");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Cartera" }));
+    await user.click(screen.getByRole("button", { name: "Imprimir cartera" }));
+
+    await waitFor(() =>
+      expect(generateCarteraPdfMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          receivables: [
+            expect.objectContaining({
+              balanceMinor: 13500,
+              customerName: "Carlos Ruiz",
+              dueAt: "2026-07-20"
+            })
+          ],
+          settings: expect.objectContaining({
+            company: expect.any(Object),
+            invoice: expect.any(Object)
+          }),
+          supplierPayables: []
+        })
+      )
+    );
+    expect(screen.getByTitle("Vista previa de cartera PDF").getAttribute("src")).toBe(
+      "data:application/pdf;base64,cartera-pdf"
+    );
+    expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
+      "data:application/pdf;base64,cartera-pdf"
+    );
   });
 
   it("requires a due date for pending sales", async () => {

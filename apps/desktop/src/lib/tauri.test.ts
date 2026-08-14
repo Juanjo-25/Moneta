@@ -381,10 +381,8 @@ describe("native inventory adjustment persistence", () => {
       saveNativeInventoryAdjustment({ adjustment, product })
     ).resolves.toBe(true);
     expect(invoke).toHaveBeenCalledWith("save_inventory_adjustment", {
-      input: {
-        adjustment,
-        product
-      }
+      adjustment,
+      product
     });
   });
 });

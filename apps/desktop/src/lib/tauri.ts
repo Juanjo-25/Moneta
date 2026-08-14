@@ -234,7 +234,7 @@ export async function saveNativeInventoryAdjustment(input: {
     return false;
   }
 
-  await invoke<void>("save_inventory_adjustment", { input });
+  await invoke<void>("save_inventory_adjustment", input);
 
   return true;
 }

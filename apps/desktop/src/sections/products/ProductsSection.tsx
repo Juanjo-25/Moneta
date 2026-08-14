@@ -16,7 +16,9 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
 import { parseProductImportCsv } from "../../lib/product-import";
+import type { InventoryPdfResult } from "../../inventory-pdf";
 import type {
+  AppSettings,
   InventoryAdjustmentRecord,
   InventoryAdjustmentType,
   ProductRecord,
@@ -136,6 +138,7 @@ type ProductsSectionProps = {
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   sales: SaleRecord[];
+  settings: AppSettings;
 };
 
 export function ProductsSection({
@@ -155,7 +158,8 @@ export function ProductsSection({
   parseNonNegativeInteger,
   products,
   purchases,
-  sales
+  sales,
+  settings
 }: ProductsSectionProps) {
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [errors, setErrors] = useState<ProductFormErrors>({});
@@ -177,6 +181,10 @@ export function ProductsSection({
   const [importingProducts, setImportingProducts] = useState(false);
   const [deleteDraft, setDeleteDraft] = useState<ProductDeleteDraft | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<ProductDeleteNotice | null>(null);
+  const [inventoryPreview, setInventoryPreview] =
+    useState<InventoryPdfResult | null>(null);
+  const [inventoryPdfError, setInventoryPdfError] = useState("");
+  const [generatingInventoryPdf, setGeneratingInventoryPdf] = useState(false);
   const editFormRef = useRef<HTMLFormElement | null>(null);
   const previousDeleteAllProductsRequestId = useRef(deleteAllProductsRequestId);
   const editingProduct =
@@ -624,6 +632,27 @@ export function ProductsSection({
     }
   }
 
+  async function generateInventoryPrintablePdf() {
+    if (products.length === 0 || generatingInventoryPdf) {
+      return;
+    }
+
+    setGeneratingInventoryPdf(true);
+    setInventoryPdfError("");
+
+    try {
+      const { generateInventoryPdf } = await import("../../inventory-pdf");
+      const pdf = generateInventoryPdf({ products, settings });
+
+      setInventoryPreview(pdf);
+    } catch {
+      setInventoryPreview(null);
+      setInventoryPdfError("No se pudo generar el PDF del inventario.");
+    } finally {
+      setGeneratingInventoryPdf(false);
+    }
+  }
+
   return (
     <section className="products-layout">
       {deleteNotice ? (
@@ -662,6 +691,40 @@ export function ProductsSection({
               Confirmar eliminacion
             </SecondaryActionButton>
           </FormActions>
+        </section>
+      ) : null}
+
+      <section className="printable-report-toolbar section-surface" aria-label="Impresion de inventario">
+        <div>
+          <h2>Inventario para imprimir</h2>
+          <span>{products.length} productos registrados</span>
+        </div>
+        <SecondaryActionButton
+          disabled={products.length === 0 || generatingInventoryPdf}
+          onClick={() => void generateInventoryPrintablePdf()}
+        >
+          {generatingInventoryPdf ? "Generando..." : "Imprimir inventario"}
+        </SecondaryActionButton>
+      </section>
+
+      {inventoryPdfError ? (
+        <p className="form-error" role="alert">
+          {inventoryPdfError}
+        </p>
+      ) : null}
+
+      {inventoryPreview ? (
+        <section className="invoice-preview" aria-label="PDF de inventario">
+          <div className="invoice-preview-header">
+            <strong>Inventario generado</strong>
+            <a download={inventoryPreview.fileName} href={inventoryPreview.dataUri}>
+              Descargar PDF
+            </a>
+          </div>
+          <iframe
+            src={inventoryPreview.dataUri}
+            title="Vista previa de inventario PDF"
+          />
         </section>
       ) : null}
 

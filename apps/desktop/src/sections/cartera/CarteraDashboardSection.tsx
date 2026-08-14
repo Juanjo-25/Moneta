@@ -9,7 +9,9 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { ViewSwitch } from "../../components/ViewSwitch";
 import type { DueMetadata } from "../../lib/dates";
+import type { CarteraPdfResult } from "../../cartera-pdf";
 import type {
+  AppSettings,
   ReceivableRecord,
   SupplierPayableRecord,
   SupplierPayableStatus
@@ -42,6 +44,7 @@ type CarteraDashboardSectionProps = {
   parseNonNegativeInteger: (value: string) => number | null;
   receivables: ReceivableRecord[];
   supplierPayables: SupplierPayableRecord[];
+  settings: AppSettings;
 };
 
 function getOpenPayables(payables: SupplierPayableRecord[]): SupplierPayableRecord[] {
@@ -59,9 +62,15 @@ export function CarteraDashboardSection({
   onRegisterSupplierPayment,
   parseNonNegativeInteger,
   receivables,
-  supplierPayables
+  supplierPayables,
+  settings
 }: CarteraDashboardSectionProps) {
   const [activeView, setActiveView] = useState<CarteraView>("receivables");
+  const [carteraPreview, setCarteraPreview] = useState<CarteraPdfResult | null>(
+    null
+  );
+  const [carteraPdfError, setCarteraPdfError] = useState("");
+  const [generatingCarteraPdf, setGeneratingCarteraPdf] = useState(false);
   const openPayables = getOpenPayables(supplierPayables);
   const sortedReceivables = [...receivables].sort((left, right) =>
     compareDueDates(left.dueAt, right.dueAt)
@@ -108,9 +117,65 @@ export function CarteraDashboardSection({
   const upcomingCount = alertItems.filter(
     (item) => item.metadata.alert === "upcoming"
   ).length;
+  const printableItemsCount = receivables.length + openPayables.length;
+
+  async function generateCarteraPrintablePdf() {
+    if (printableItemsCount === 0 || generatingCarteraPdf) {
+      return;
+    }
+
+    setGeneratingCarteraPdf(true);
+    setCarteraPdfError("");
+
+    try {
+      const { generateCarteraPdf } = await import("../../cartera-pdf");
+      const pdf = generateCarteraPdf({ receivables, settings, supplierPayables });
+
+      setCarteraPreview(pdf);
+    } catch {
+      setCarteraPreview(null);
+      setCarteraPdfError("No se pudo generar el PDF de cartera.");
+    } finally {
+      setGeneratingCarteraPdf(false);
+    }
+  }
 
   return (
     <section className="section-panel cartera-dashboard">
+      <section className="printable-report-toolbar section-surface" aria-label="Impresion de cartera">
+        <div>
+          <h2>Cartera para imprimir</h2>
+          <span>{printableItemsCount} cuentas abiertas</span>
+        </div>
+        <SecondaryActionButton
+          disabled={printableItemsCount === 0 || generatingCarteraPdf}
+          onClick={() => void generateCarteraPrintablePdf()}
+        >
+          {generatingCarteraPdf ? "Generando..." : "Imprimir cartera"}
+        </SecondaryActionButton>
+      </section>
+
+      {carteraPdfError ? (
+        <p className="form-error" role="alert">
+          {carteraPdfError}
+        </p>
+      ) : null}
+
+      {carteraPreview ? (
+        <section className="invoice-preview" aria-label="PDF de cartera">
+          <div className="invoice-preview-header">
+            <strong>Cartera generada</strong>
+            <a download={carteraPreview.fileName} href={carteraPreview.dataUri}>
+              Descargar PDF
+            </a>
+          </div>
+          <iframe
+            src={carteraPreview.dataUri}
+            title="Vista previa de cartera PDF"
+          />
+        </section>
+      ) : null}
+
       <section className="cartera-summary-shell" aria-label="Resumen de cartera">
         <div className="cartera-summary">
           <SummaryCard

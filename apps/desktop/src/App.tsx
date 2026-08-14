@@ -871,12 +871,16 @@ export function App() {
         adjustment,
         product: updatedProduct
       });
-    } catch {
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo guardar el ajuste de inventario local.",
+        error
+      );
       setNativeConnectionStatus({
         kind: "error",
-        message: "No se pudo guardar el ajuste de inventario local."
+        message
       });
-      return "No se pudo guardar el ajuste de inventario local.";
+      return message;
     }
 
     setProducts((currentProducts) =>
