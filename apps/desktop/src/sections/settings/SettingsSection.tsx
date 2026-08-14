@@ -10,7 +10,12 @@ import { FormActions } from "../../components/FormActions";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { TextField } from "../../components/TextField";
-import type { AppSettings, CompanySettings, InvoiceDesignSettings } from "../../types";
+import type {
+  AppSettings,
+  CompanySettings,
+  InvoiceDesignSettings,
+  InvoiceNumberingSettings
+} from "../../types";
 
 type SettingsSectionProps = {
   onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
@@ -46,6 +51,11 @@ export function SettingsSection({
   onSettingsChange
 }: SettingsSectionProps) {
   const [draftSettings, setDraftSettings] = useState<AppSettings>(settings);
+  const [invoiceStartingNumber, setInvoiceStartingNumber] = useState(
+    String(settings.invoiceNumbering.startingNumber)
+  );
+  const [invoiceNumberingError, setInvoiceNumberingError] =
+    useState<string | null>(null);
   const [sellerName, setSellerName] = useState("");
   const [sellerError, setSellerError] = useState<string | null>(null);
   const [editingSellerIndex, setEditingSellerIndex] = useState<number | null>(null);
@@ -73,6 +83,8 @@ export function SettingsSection({
 
   useEffect(() => {
     setDraftSettings(settings);
+    setInvoiceStartingNumber(String(settings.invoiceNumbering.startingNumber));
+    setInvoiceNumberingError(null);
     setSellerName("");
     setSellerError(null);
     setEditingSellerIndex(null);
@@ -95,6 +107,35 @@ export function SettingsSection({
       invoice: {
         ...currentSettings.invoice,
         [field]: value
+      }
+    }));
+    setSavedMessageVisible(false);
+  }
+
+  function updateInvoiceNumbering(
+    field: keyof InvoiceNumberingSettings,
+    value: string
+  ) {
+    const normalizedValue = value.replace(/[^0-9]/g, "");
+    const parsedValue = Number(normalizedValue);
+
+    setInvoiceStartingNumber(normalizedValue);
+    setInvoiceNumberingError(null);
+
+    if (
+      normalizedValue === "" ||
+      !Number.isSafeInteger(parsedValue) ||
+      parsedValue < 1
+    ) {
+      setSavedMessageVisible(false);
+      return;
+    }
+
+    setDraftSettings((currentSettings) => ({
+      ...currentSettings,
+      invoiceNumbering: {
+        ...currentSettings.invoiceNumbering,
+        [field]: parsedValue
       }
     }));
     setSavedMessageVisible(false);
@@ -179,7 +220,30 @@ export function SettingsSection({
 
   function saveChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSettingsChange(draftSettings);
+    const parsedInvoiceStartingNumber = Number(invoiceStartingNumber);
+
+    if (
+      invoiceStartingNumber.trim() === "" ||
+      !Number.isSafeInteger(parsedInvoiceStartingNumber) ||
+      parsedInvoiceStartingNumber < 1
+    ) {
+      setInvoiceNumberingError(
+        "El inicio debe ser un numero entero mayor a cero."
+      );
+      setSavedMessageVisible(false);
+      return;
+    }
+
+    const settingsToSave: AppSettings = {
+      ...draftSettings,
+      invoiceNumbering: {
+        ...draftSettings.invoiceNumbering,
+        startingNumber: parsedInvoiceStartingNumber
+      }
+    };
+
+    setDraftSettings(settingsToSave);
+    onSettingsChange(settingsToSave);
     setSavedMessageVisible(true);
   }
 
@@ -423,6 +487,25 @@ export function SettingsSection({
               value={draftSettings.invoice.observations}
             />
           </label>
+        </div>
+      </section>
+
+      <section className="section-form-shell settings-form">
+        <div className="panel-header">
+          <div>
+            <h2>Numeracion de facturas</h2>
+            <span>Inicio para nuevas facturas de venta.</span>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          <TextField
+            error={invoiceNumberingError ?? undefined}
+            inputMode="numeric"
+            label="Inicio numeracion facturas"
+            onChange={(value) => updateInvoiceNumbering("startingNumber", value)}
+            value={invoiceStartingNumber}
+          />
         </div>
       </section>
 

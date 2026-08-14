@@ -61,6 +61,20 @@ struct CompanySettings {
     logo_data_uri: String,
 }
 
+impl Default for CompanySettings {
+    fn default() -> Self {
+        Self {
+            name: "NOMBRE DE LA EMPRESA S.A.S.".to_string(),
+            document: "900.123.456-7".to_string(),
+            address: "Calle 00 # 00-00".to_string(),
+            city: "Colombia".to_string(),
+            email: "contacto@empresa.com".to_string(),
+            phone: String::new(),
+            logo_data_uri: String::new(),
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InvoiceDesignSettings {
@@ -70,11 +84,42 @@ struct InvoiceDesignSettings {
     observations: String,
 }
 
+impl Default for InvoiceDesignSettings {
+    fn default() -> Self {
+        Self {
+            accent_color: "#475569".to_string(),
+            title: "REMISION".to_string(),
+            legal_note:
+                "Plantilla visual imprimible. No corresponde a una factura electronica DIAN ni incluye CUFE real."
+                    .to_string(),
+            observations: "Observaciones: factura generada desde Moneta para impresion."
+                .to_string(),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InvoiceNumberingSettings {
+    starting_number: i64,
+}
+
+impl Default for InvoiceNumberingSettings {
+    fn default() -> Self {
+        Self { starting_number: 1 }
+    }
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AppSettings {
+    #[serde(default)]
     company: CompanySettings,
+    #[serde(default)]
     invoice: InvoiceDesignSettings,
+    #[serde(default)]
+    invoice_numbering: InvoiceNumberingSettings,
+    #[serde(default)]
     sellers: Vec<String>,
 }
 

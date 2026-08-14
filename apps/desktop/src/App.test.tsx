@@ -227,6 +227,7 @@ describe("App navigation", () => {
     expect(screen.getByLabelText("Nombre empresa")).toBeTruthy();
     expect(screen.getByLabelText("Logo empresa")).toBeTruthy();
     expect(screen.getByLabelText("Titulo factura")).toBeTruthy();
+    expect(screen.getByLabelText("Inicio numeracion facturas")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeTruthy();
   });
 
@@ -369,6 +370,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Configuracion" }));
     await user.type(screen.getByLabelText("Nombre vendedor"), "Laura Gomez");
     await user.click(screen.getByRole("button", { name: "Agregar vendedor" }));
+    await user.clear(screen.getByLabelText("Inicio numeracion facturas"));
+    await user.type(screen.getByLabelText("Inicio numeracion facturas"), "25");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     await waitFor(() =>
@@ -376,11 +379,66 @@ describe("App navigation", () => {
         "save_app_settings",
         expect.objectContaining({
           settings: expect.objectContaining({
+            invoiceNumbering: {
+              startingNumber: 25
+            },
             sellers: ["Laura Gomez"]
           })
         })
       )
     );
+  });
+
+  it("starts sales invoice numbers from settings and continues the registered sequence", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.clear(screen.getByLabelText("Inicio numeracion facturas"));
+    await user.type(screen.getByLabelText("Inicio numeracion facturas"), "25");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect((screen.getByLabelText("Numero") as HTMLInputElement).value).toBe("025");
+
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Numeracion");
+    await user.type(screen.getByLabelText("NIT o C.C."), "777");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const firstSalesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(firstSalesTable).getByText("025")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Configuracion" }));
+    await user.clear(screen.getByLabelText("Inicio numeracion facturas"));
+    await user.type(screen.getByLabelText("Inicio numeracion facturas"), "10");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect((screen.getByLabelText("Numero") as HTMLInputElement).value).toBe("026");
+
+    await user.selectOptions(
+      screen.getByLabelText("Cliente"),
+      screen.getByRole("option", { name: "Cliente Numeracion - 777" })
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    const updatedSalesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(updatedSalesTable).getByText("026")).toBeTruthy();
+    expect(within(updatedSalesTable).getByText("025")).toBeTruthy();
   });
 
   it("resets all local data from settings even when pending payables exist", async () => {
@@ -1605,10 +1663,17 @@ describe("App navigation", () => {
               dueAt: "2026-07-20"
             })
           ],
+          sales: [
+            expect.objectContaining({
+              customerName: "Carlos Ruiz",
+              issuedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
+            })
+          ],
           settings: expect.objectContaining({
             company: expect.any(Object),
             invoice: expect.any(Object)
           }),
+          purchases: [],
           supplierPayables: []
         })
       )
@@ -4097,6 +4162,7 @@ describe("App navigation", () => {
             quantity: 3,
             totalMinor: 13500
           }),
+          dueDate: "2026-07-15",
           paymentStatus: "pending"
         })
       )

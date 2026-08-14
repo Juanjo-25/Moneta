@@ -12,7 +12,9 @@ import type { DueMetadata } from "../../lib/dates";
 import type { CarteraPdfResult } from "../../cartera-pdf";
 import type {
   AppSettings,
+  PurchaseRecord,
   ReceivableRecord,
+  SaleRecord,
   SupplierPayableRecord,
   SupplierPayableStatus
 } from "../../types";
@@ -42,7 +44,9 @@ type CarteraDashboardSectionProps = {
     amountMinor: number;
   }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
+  purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
+  sales: SaleRecord[];
   supplierPayables: SupplierPayableRecord[];
   settings: AppSettings;
 };
@@ -61,7 +65,9 @@ export function CarteraDashboardSection({
   onDeleteSupplierPayable,
   onRegisterSupplierPayment,
   parseNonNegativeInteger,
+  purchases,
   receivables,
+  sales,
   supplierPayables,
   settings
 }: CarteraDashboardSectionProps) {
@@ -129,7 +135,13 @@ export function CarteraDashboardSection({
 
     try {
       const { generateCarteraPdf } = await import("../../cartera-pdf");
-      const pdf = generateCarteraPdf({ receivables, settings, supplierPayables });
+      const pdf = generateCarteraPdf({
+        purchases,
+        receivables,
+        sales,
+        settings,
+        supplierPayables
+      });
 
       setCarteraPreview(pdf);
     } catch {

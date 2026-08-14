@@ -42,6 +42,7 @@ const invoiceInput: InvoicePdfInput = {
     email: "ana@example.com",
     name: "Ana Perez"
   },
+  dueDate: "30/07/2026",
   invoiceNumber: "FE-sale-1",
   issueDate: "30/06/2026, 8:30 a. m.",
   item: {
@@ -78,6 +79,8 @@ describe("invoice PDF", () => {
     expect(renderedText).toContain("FE-sale-1");
     expect(renderedText).toContain("SENOR(ES)");
     expect(renderedText).toContain("FECHA DE EXPEDICION");
+    expect(renderedText).toContain("FECHA DE VENCIMIENTO");
+    expect(renderedText).toContain("30/07/2026");
     expect(renderedText).toContain("Ana Perez");
     expect(renderedText).toContain("123456789");
     expect(renderedText).toContain("Calle 10 # 20-30");
@@ -88,6 +91,12 @@ describe("invoice PDF", () => {
     expect(renderedText).toContain("$ 9.000");
     expect(outputMock).toHaveBeenCalledWith("datauristring");
     expect(saveMock).not.toHaveBeenCalled();
+    expect(textMock).toHaveBeenCalledWith("30/06/2026, 8:30 a. m.", 179, 60, {
+      align: "center"
+    });
+    expect(textMock).toHaveBeenCalledWith("30/07/2026", 179, 74, {
+      align: "center"
+    });
     expect(result).toEqual({
       dataUri: "data:application/pdf;base64,invoice-pdf",
       fileName: "factura-FE-sale-1.pdf"
@@ -112,6 +121,17 @@ describe("invoice PDF", () => {
 
     expect(renderedText).toContain("No registrado");
     expect(renderedText).toContain("Email: No registrado");
+  });
+
+  it("prints No aplica as due date for paid invoices without a due date", () => {
+    generateInvoicePdf({
+      ...invoiceInput,
+      dueDate: ""
+    });
+
+    expect(textMock).toHaveBeenCalledWith("No aplica", 179, 74, {
+      align: "center"
+    });
   });
 
   it("renders configured company and invoice design text", () => {

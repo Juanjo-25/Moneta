@@ -235,8 +235,33 @@ const defaultSettings: AppSettings = {
     observations: "Observaciones: factura generada desde Moneta para impresion.",
     title: "REMISION"
   },
+  invoiceNumbering: {
+    startingNumber: 1
+  },
   sellers: []
 };
+
+function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
+  const startingNumber = settings.invoiceNumbering?.startingNumber ?? 1;
+
+  return {
+    company: {
+      ...defaultSettings.company,
+      ...(settings.company ?? {})
+    },
+    invoice: {
+      ...defaultSettings.invoice,
+      ...(settings.invoice ?? {})
+    },
+    invoiceNumbering: {
+      startingNumber:
+        Number.isSafeInteger(startingNumber) && startingNumber >= 1
+          ? startingNumber
+          : defaultSettings.invoiceNumbering.startingNumber
+    },
+    sellers: Array.isArray(settings.sellers) ? settings.sellers : []
+  };
+}
 
 function formatOccurredAtLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
@@ -463,7 +488,7 @@ export function App() {
         ]);
 
         if (isMounted && storedSettings) {
-          setSettings(storedSettings);
+          setSettings(normalizeSettings(storedSettings));
         }
         if (isMounted && storedProducts) {
           setProducts(storedProducts);

@@ -309,8 +309,13 @@ export type InvoiceDesignSettings = {
   observations: string;
 };
 
+export type InvoiceNumberingSettings = {
+  startingNumber: number;
+};
+
 export type AppSettings = {
   company: CompanySettings;
   invoice: InvoiceDesignSettings;
+  invoiceNumbering: InvoiceNumberingSettings;
   sellers: string[];
 };

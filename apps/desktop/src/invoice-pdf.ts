@@ -41,6 +41,7 @@ export type InvoiceSettings = {
 
 export type InvoicePdfInput = {
   customer: InvoiceCustomer;
+  dueDate?: string | undefined;
   invoiceNumber: string;
   issueDate: string;
   item?: InvoiceItem;
@@ -64,6 +65,14 @@ function formatCurrency(minor: number): string {
 
 function fieldValue(value: string): string {
   return value.trim() === "" ? "No registrado" : value.trim();
+}
+
+function getDueDateLabel(input: InvoicePdfInput): string {
+  if (input.dueDate?.trim()) {
+    return input.dueDate.trim();
+  }
+
+  return input.paymentStatus === "paid" ? "No aplica" : "Sin fecha";
 }
 
 function parseHexColor(hex: string): [number, number, number] {
@@ -161,6 +170,7 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   const totalMinor = items.reduce((total, item) => total + item.totalMinor, 0);
   const subtotal = formatCurrency(totalMinor);
   const total = formatCurrency(totalMinor);
+  const dueDateLabel = getDueDateLabel(input);
   const hasLogo = settings.company.logoDataUri.trim() !== "";
 
   doc.setDrawColor(72, 72, 72);
@@ -267,7 +277,7 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
     { maxWidth: 34 }
   );
   writeText(doc, input.issueDate, 179, clientTop + 12, { align: "center" });
-  writeText(doc, input.issueDate, 179, clientTop + 26, { align: "center" });
+  writeText(doc, dueDateLabel, 179, clientTop + 26, { align: "center" });
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   writeText(doc, `Forma de pago: ${paymentLabel}`, pageRight, 82, { align: "right" });

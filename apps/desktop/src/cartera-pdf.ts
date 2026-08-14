@@ -1,13 +1,17 @@
 import { jsPDF } from "jspdf";
 import type {
   AppSettings,
+  PurchaseRecord,
   ReceivableRecord,
+  SaleRecord,
   SupplierPayableRecord
 } from "./types";
 
 export type CarteraPdfInput = {
   generatedAtLabel?: string | undefined;
+  purchases?: PurchaseRecord[] | undefined;
   receivables: ReceivableRecord[];
+  sales?: SaleRecord[] | undefined;
   settings?: AppSettings | undefined;
   supplierPayables: SupplierPayableRecord[];
 };
@@ -37,6 +41,10 @@ function formatCurrency(minor: number): string {
 
 function fieldValue(value: string): string {
   return value.trim() === "" ? "No registrado" : value.trim();
+}
+
+function dateValue(value?: string): string {
+  return value?.trim() ? value.trim() : "Sin fecha";
 }
 
 function fitText(text: string, maxLength: number): string {
@@ -174,16 +182,18 @@ function renderReceivableHeader(doc: jsPDF, y: number): void {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   writeText(doc, "Cliente", 16, y + 5);
-  writeText(doc, "Venta", 62, y + 5);
-  writeText(doc, "Vence", 92, y + 5);
-  writeText(doc, "Original", 126, y + 5, { align: "right" });
-  writeText(doc, "Recibido", 158, y + 5, { align: "right" });
+  writeText(doc, "Venta", 58, y + 5);
+  writeText(doc, "Emitida", 84, y + 5);
+  writeText(doc, "Vence", 110, y + 5);
+  writeText(doc, "Original", 142, y + 5, { align: "right" });
+  writeText(doc, "Recibido", 168, y + 5, { align: "right" });
   writeText(doc, "Saldo", 194, y + 5, { align: "right" });
 }
 
 function renderReceivableRow(
   doc: jsPDF,
   receivable: ReceivableRecord,
+  issuedAt: string | undefined,
   y: number
 ): void {
   doc.setDrawColor(226, 232, 240);
@@ -192,14 +202,15 @@ function renderReceivableRow(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   writeText(doc, fitText(receivable.customerName, 26), 16, y + 5, {
-    maxWidth: 44
+    maxWidth: 40
   });
-  writeText(doc, fitText(receivable.saleId, 16), 62, y + 5);
-  writeText(doc, receivable.dueAt || "Sin fecha", 92, y + 5);
-  writeText(doc, formatCurrency(receivable.originalAmountMinor), 126, y + 5, {
+  writeText(doc, fitText(receivable.saleId, 13), 58, y + 5);
+  writeText(doc, dateValue(issuedAt), 84, y + 5);
+  writeText(doc, dateValue(receivable.dueAt), 110, y + 5);
+  writeText(doc, formatCurrency(receivable.originalAmountMinor), 142, y + 5, {
     align: "right"
   });
-  writeText(doc, formatCurrency(receivable.paidAmountMinor), 158, y + 5, {
+  writeText(doc, formatCurrency(receivable.paidAmountMinor), 168, y + 5, {
     align: "right"
   });
   writeText(doc, formatCurrency(receivable.balanceMinor), 194, y + 5, {
@@ -212,16 +223,18 @@ function renderPayableHeader(doc: jsPDF, y: number): void {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   writeText(doc, "Proveedor", 16, y + 5);
-  writeText(doc, "Factura", 62, y + 5);
-  writeText(doc, "Vence", 92, y + 5);
-  writeText(doc, "Original", 126, y + 5, { align: "right" });
-  writeText(doc, "Abonado", 158, y + 5, { align: "right" });
+  writeText(doc, "Factura", 58, y + 5);
+  writeText(doc, "Emitida", 84, y + 5);
+  writeText(doc, "Vence", 110, y + 5);
+  writeText(doc, "Original", 142, y + 5, { align: "right" });
+  writeText(doc, "Abonado", 168, y + 5, { align: "right" });
   writeText(doc, "Saldo", 194, y + 5, { align: "right" });
 }
 
 function renderPayableRow(
   doc: jsPDF,
   payable: SupplierPayableRecord,
+  issuedAt: string | undefined,
   y: number
 ): void {
   doc.setDrawColor(226, 232, 240);
@@ -230,14 +243,15 @@ function renderPayableRow(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
   writeText(doc, fitText(payable.supplierName, 26), 16, y + 5, {
-    maxWidth: 44
+    maxWidth: 40
   });
-  writeText(doc, fitText(payable.invoiceNumber, 16), 62, y + 5);
-  writeText(doc, payable.dueAt || "Sin fecha", 92, y + 5);
-  writeText(doc, formatCurrency(payable.originalAmountMinor), 126, y + 5, {
+  writeText(doc, fitText(payable.invoiceNumber, 13), 58, y + 5);
+  writeText(doc, dateValue(issuedAt), 84, y + 5);
+  writeText(doc, dateValue(payable.dueAt), 110, y + 5);
+  writeText(doc, formatCurrency(payable.originalAmountMinor), 142, y + 5, {
     align: "right"
   });
-  writeText(doc, formatCurrency(payable.paidAmountMinor), 158, y + 5, {
+  writeText(doc, formatCurrency(payable.paidAmountMinor), 168, y + 5, {
     align: "right"
   });
   writeText(doc, formatCurrency(payable.balanceMinor), 194, y + 5, {
@@ -250,6 +264,12 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
   const company = getCompanySettings(input.settings);
   const accent = parseHexColor(company.accentColor);
   const generatedAtLabel = getGeneratedAtLabel(input.generatedAtLabel);
+  const saleIssuedAtById = new Map(
+    (input.sales ?? []).map((sale) => [sale.id, sale.issuedAt])
+  );
+  const purchaseIssuedAtById = new Map(
+    (input.purchases ?? []).map((purchase) => [purchase.id, purchase.issuedAt])
+  );
   const sortedReceivables = [...input.receivables].sort((left, right) =>
     left.dueAt.localeCompare(right.dueAt)
   );
@@ -300,7 +320,12 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
   } else {
     sortedReceivables.forEach((receivable) => {
       ensureSpace(10);
-      renderReceivableRow(doc, receivable, cursorY);
+      renderReceivableRow(
+        doc,
+        receivable,
+        saleIssuedAtById.get(receivable.saleId),
+        cursorY
+      );
       cursorY += 8;
     });
   }
@@ -321,7 +346,12 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
   } else {
     openPayables.forEach((payable) => {
       ensureSpace(10);
-      renderPayableRow(doc, payable, cursorY);
+      renderPayableRow(
+        doc,
+        payable,
+        purchaseIssuedAtById.get(payable.purchaseId),
+        cursorY
+      );
       cursorY += 8;
     });
   }

@@ -260,7 +260,12 @@ export function SalesSection({
     0
   );
   const totalMinor = saleLinesTotalMinor + draftLineTotalMinor;
-  const nextInvoiceNumber = String(sales.length + 1).padStart(3, "0");
+  const nextInvoiceNumber = formatDocumentSequence(
+    getNextInvoiceSequence({
+      sales,
+      startingNumber: settings.invoiceNumbering.startingNumber
+    })
+  );
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
   const configuredSellers = settings.sellers;
 
@@ -566,6 +571,8 @@ export function SalesSection({
   async function generateInvoiceForSale(sale: SaleRecord) {
     try {
       const { generateInvoicePdf } = await import("../../invoice-pdf");
+      const receivableDueAt =
+        receivables.find((receivable) => receivable.saleId === sale.id)?.dueAt ?? "";
       const invoice = generateInvoicePdf({
         customer: {
           address: sale.customer.address,
@@ -574,6 +581,7 @@ export function SalesSection({
           email: sale.customer.email,
           name: sale.customer.name
         },
+        dueDate: sale.paymentStatus === "pending" ? receivableDueAt : "",
         invoiceNumber: sale.invoiceNumber,
         issueDate: sale.issuedAt,
         item: {
@@ -1307,6 +1315,41 @@ function calculateDocumentLine(input: {
 function formatDocumentNumber(prefix: string, number: string): string {
   const normalizedPrefix = prefix.trim().toUpperCase();
   return normalizedPrefix === "" ? number : `${normalizedPrefix}-${number}`;
+}
+
+function formatDocumentSequence(sequence: number): string {
+  return String(sequence).padStart(3, "0");
+}
+
+function getNextInvoiceSequence(input: {
+  sales: SaleRecord[];
+  startingNumber: number;
+}): number {
+  const startingNumber =
+    Number.isSafeInteger(input.startingNumber) && input.startingNumber >= 1
+      ? input.startingNumber
+      : 1;
+  const highestRegisteredSequence = input.sales.reduce((highestSequence, sale) => {
+    const saleSequence = getDocumentSequenceNumber(sale.invoiceNumber);
+    return saleSequence === null
+      ? highestSequence
+      : Math.max(highestSequence, saleSequence);
+  }, 0);
+
+  return Math.max(startingNumber, highestRegisteredSequence + 1);
+}
+
+function getDocumentSequenceNumber(invoiceNumber: string): number | null {
+  const sequence = getDocumentSequence(invoiceNumber);
+
+  if (!/^\d+$/.test(sequence)) {
+    return null;
+  }
+
+  const parsedSequence = Number(sequence);
+  return Number.isSafeInteger(parsedSequence) && parsedSequence >= 1
+    ? parsedSequence
+    : null;
 }
 
 function normalizeSearchText(value: string): string {

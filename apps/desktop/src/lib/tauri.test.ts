@@ -150,6 +150,9 @@ describe("native settings persistence", () => {
           observations: "",
           title: "REMISION"
         },
+        invoiceNumbering: {
+          startingNumber: 1
+        },
         sellers: []
       })
     ).resolves.toBe(false);
@@ -171,6 +174,9 @@ describe("native settings persistence", () => {
         legalNote: "Nota",
         observations: "Observaciones",
         title: "Factura"
+      },
+      invoiceNumbering: {
+        startingNumber: 25
       },
       sellers: ["Laura Gomez"]
     };
@@ -197,6 +203,9 @@ describe("native settings persistence", () => {
         legalNote: "Nota",
         observations: "Observaciones",
         title: "Factura"
+      },
+      invoiceNumbering: {
+        startingNumber: 25
       },
       sellers: ["Laura Gomez"]
     };

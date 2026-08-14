@@ -4,6 +4,7 @@ import {
   generateCarteraPdf,
   type CarteraPdfInput
 } from "./cartera-pdf";
+import type { PurchaseRecord, SaleRecord } from "./types";
 
 const addPageMock = vi.fn();
 const outputMock = vi.fn(() => "data:application/pdf;base64,cartera-pdf");
@@ -35,6 +36,12 @@ vi.mock("jspdf", () => ({
 
 const carteraInput: CarteraPdfInput = {
   generatedAtLabel: "14/08/2026, 8:00 a. m.",
+  purchases: [
+    {
+      id: "purchase-1",
+      issuedAt: "2026-07-12"
+    } as PurchaseRecord
+  ],
   receivables: [
     {
       amountMinor: 13500,
@@ -48,6 +55,12 @@ const carteraInput: CarteraPdfInput = {
       saleId: "sale-1",
       status: "partial"
     }
+  ],
+  sales: [
+    {
+      id: "sale-1",
+      issuedAt: "2026-07-10"
+    } as SaleRecord
   ],
   supplierPayables: [
     {
@@ -86,12 +99,15 @@ describe("cartera PDF", () => {
     expect(renderedText).toContain("Total por cobrar");
     expect(renderedText).toContain("Total por pagar");
     expect(renderedText).toContain("Por cobrar");
+    expect(renderedText).toContain("Emitida");
     expect(renderedText).toContain("Carlos Ruiz");
     expect(renderedText).toContain("sale-1");
+    expect(renderedText).toContain("2026-07-10");
     expect(renderedText).toContain("$ 8.500");
     expect(renderedText).toContain("Por pagar");
     expect(renderedText).toContain("Proveedor Central");
     expect(renderedText).toContain("FC-100");
+    expect(renderedText).toContain("2026-07-12");
     expect(renderedText).toContain("$ 10.000");
     expect(outputMock).toHaveBeenCalledWith("datauristring");
     expect(saveMock).not.toHaveBeenCalled();

@@ -414,7 +414,9 @@ export function SectionContent({
         onDeleteSupplierPayable={onDeleteSupplierPayable}
         onRegisterSupplierPayment={onRegisterSupplierPayment}
         parseNonNegativeInteger={parseNonNegativeInteger}
+        purchases={purchases}
         receivables={receivables}
+        sales={sales}
         settings={settings}
         supplierPayables={supplierPayables}
       />
