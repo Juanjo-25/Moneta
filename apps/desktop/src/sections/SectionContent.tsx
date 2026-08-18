@@ -111,6 +111,8 @@ type SectionContentProps = {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -136,6 +138,8 @@ type SectionContentProps = {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;

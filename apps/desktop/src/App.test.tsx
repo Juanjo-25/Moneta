@@ -4229,6 +4229,115 @@ describe("App navigation", () => {
     expect(within(productsTable).getByRole("cell", { name: "3" })).toBeTruthy();
   });
 
+  it("edits sale general data, customer, line details, added items, and removed items", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Ana Perez");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123456789");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Carlos Ruiz");
+    await user.type(screen.getByLabelText("NIT o C.C."), "987654321");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(
+      screen.getByLabelText("Cliente"),
+      screen.getByRole("option", { name: "Ana Perez - 123456789" })
+    );
+    await user.type(screen.getByLabelText("Observaciones"), "Primera observacion");
+    await user.type(screen.getByLabelText("Notas al pie"), "Primera nota");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await clickFirstSaleAction(user, "Editar venta");
+    const editCustomerSelect = screen.getByLabelText("Cliente de venta");
+    await user.selectOptions(
+      editCustomerSelect,
+      within(editCustomerSelect).getByRole("option", {
+        name: "Carlos Ruiz - 987654321"
+      })
+    );
+    await user.clear(screen.getByLabelText("Fecha de elaboracion de venta"));
+    await user.type(screen.getByLabelText("Fecha de elaboracion de venta"), "2026-08-15");
+    await user.clear(screen.getByLabelText("Observaciones de venta"));
+    await user.type(screen.getByLabelText("Observaciones de venta"), "Entrega revisada");
+    await user.clear(screen.getByLabelText("Notas al pie de venta"));
+    await user.type(screen.getByLabelText("Notas al pie de venta"), "No incluye domicilio");
+    const descriptionInput = screen.getByLabelText("Descripcion Arroz libra");
+    await user.clear(descriptionInput);
+    await user.type(descriptionInput, "Arroz premium libra");
+    const priceInput = screen.getByLabelText("Precio Arroz premium libra");
+    await user.clear(priceInput);
+    await user.type(priceInput, "5000");
+    await user.selectOptions(screen.getByLabelText("Impuesto Arroz premium libra"), "5");
+    await user.click(screen.getAllByRole("button", { name: "Eliminar item" })[1]!);
+    const editProductSelect = screen.getByLabelText("Producto nuevo item");
+    await user.selectOptions(
+      editProductSelect,
+      within(editProductSelect).getByRole("option", { name: "Panela unidad" })
+    );
+    await user.type(screen.getByLabelText("Cantidad nuevo item"), "2");
+    await user.click(screen.getByRole("button", { name: "Agregar item a venta" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("Carlos Ruiz")).toBeTruthy();
+    expect(within(salesTable).getByText("2 productos")).toBeTruthy();
+    expect(within(salesTable).getByText(/\$\s*17\.500/)).toBeTruthy();
+
+    await clickFirstSaleAction(user, "Generar factura PDF");
+    expect(generateInvoicePdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        footerNote: "No incluye domicilio",
+        issueDate: "2026-08-15",
+        observations: "Entrega revisada",
+        customer: expect.objectContaining({ name: "Carlos Ruiz" }),
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            description: "Arroz premium libra",
+            quantity: 2,
+            totalMinor: 10500,
+            unitPriceMinor: 5000
+          }),
+          expect.objectContaining({
+            description: "Panela unidad",
+            quantity: 2,
+            totalMinor: 7000
+          })
+        ])
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+      })
+    ).toBeTruthy();
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
+      })
+    ).toBeTruthy();
+  });
+
   it("deletes a sale and restores inventory", async () => {
     const user = userEvent.setup();
 

@@ -471,6 +471,7 @@ describe("native sale persistence", () => {
     customer,
     customerId: "customer-1",
     customerName: "Ana Perez",
+    footerNote: "",
     id: "sale-1",
     invoiceNumber: "001",
     issuedAt: "2026-07-18",
@@ -494,6 +495,7 @@ describe("native sale persistence", () => {
         unitPriceMinor: 4500
       }
     ],
+    observations: "",
     occurredAtLabel: "18/07/26, 12:20",
     occurredAtMs: 3,
     paymentStatus: "pending" as const,

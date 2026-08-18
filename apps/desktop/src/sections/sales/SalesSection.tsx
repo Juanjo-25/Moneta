@@ -51,6 +51,8 @@ type SalesFormState = {
   issuedAt: string;
   seller: string;
   concept: string;
+  observations: string;
+  footerNote: string;
   customerId: string;
   dueAt: string;
   productId: string;
@@ -79,10 +81,21 @@ type SaleEditState = {
   concept: string;
   customerId: string;
   dueAt: string;
+  footerNote: string;
   issuedAt: string;
+  observations: string;
   paymentStatus: "paid" | "pending";
   prefix: string;
   seller: string;
+};
+
+type SaleEditLineDraft = {
+  productId: string;
+  unit: string;
+  quantity: string;
+  unitPrice: string;
+  discountPercent: string;
+  taxPercent: string;
 };
 
 export type SalesDraftState = {
@@ -96,6 +109,8 @@ const emptySalesForm: SalesFormState = {
   issuedAt: getTodayInputValue(),
   seller: "",
   concept: "Factura de venta",
+  observations: "",
+  footerNote: "",
   customerId: "",
   dueAt: "",
   productId: "",
@@ -120,6 +135,15 @@ const emptyCustomerForm: CustomerFormState = {
   name: ""
 };
 
+const emptySaleEditLineDraft: SaleEditLineDraft = {
+  productId: "",
+  unit: "Unidad",
+  quantity: "",
+  unitPrice: "",
+  discountPercent: "0",
+  taxPercent: "0"
+};
+
 type SalesSectionProps = {
   customers: CustomerRecord[];
   formatCurrency: (minor: number) => string;
@@ -133,6 +157,8 @@ type SalesSectionProps = {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -158,6 +184,8 @@ type SalesSectionProps = {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
@@ -222,6 +250,9 @@ export function SalesSection({
   const [editingSale, setEditingSale] = useState<SaleRecord | null>(null);
   const [editForm, setEditForm] = useState<SaleEditState | null>(null);
   const [editLines, setEditLines] = useState<SaleLineRecord[]>([]);
+  const [editLineDraft, setEditLineDraft] = useState<SaleEditLineDraft>(
+    emptySaleEditLineDraft
+  );
   const [editError, setEditError] = useState<string | null>(null);
   const [openSaleActionsId, setOpenSaleActionsId] = useState<string | null>(null);
 
@@ -499,6 +530,8 @@ export function SalesSection({
     const registerInput = {
       branch: form.branch.trim() || "Principal",
       concept: form.concept.trim() || "Factura de venta",
+      footerNote: form.footerNote.trim(),
+      observations: form.observations.trim(),
       customer: selectedCustomer,
       invoiceNumber: documentNumber,
       issuedAt: form.issuedAt.trim(),
@@ -582,6 +615,7 @@ export function SalesSection({
           name: sale.customer.name
         },
         dueDate: sale.paymentStatus === "pending" ? receivableDueAt : "",
+        footerNote: sale.footerNote ?? "",
         invoiceNumber: sale.invoiceNumber,
         issueDate: sale.issuedAt,
         item: {
@@ -596,6 +630,7 @@ export function SalesSection({
           totalMinor: line.totalMinor,
           unitPriceMinor: line.unitPriceMinor
         })),
+        observations: sale.observations ?? "",
         settings,
         paymentStatus: sale.paymentStatus
       });
@@ -614,12 +649,15 @@ export function SalesSection({
       concept: sale.concept,
       customerId: sale.customerId,
       dueAt: receivables.find((receivable) => receivable.saleId === sale.id)?.dueAt ?? "",
+      footerNote: sale.footerNote ?? "",
       issuedAt: sale.issuedAt,
+      observations: sale.observations ?? "",
       paymentStatus: sale.paymentStatus,
       prefix: sale.prefix,
       seller: sale.seller
     });
     setEditLines(sale.lines);
+    setEditLineDraft(emptySaleEditLineDraft);
     setEditError(null);
   }
 
@@ -632,7 +670,13 @@ export function SalesSection({
 
   function updateEditLine(
     lineId: string,
-    field: "quantity" | "unitPriceMinor" | "discountPercent" | "taxPercent" | "unit",
+    field:
+      | "productName"
+      | "quantity"
+      | "unitPriceMinor"
+      | "discountPercent"
+      | "taxPercent"
+      | "unit",
     value: string
   ) {
     setEditLines((currentLines) =>
@@ -643,6 +687,10 @@ export function SalesSection({
 
         if (field === "unit") {
           return { ...line, unit: value };
+        }
+
+        if (field === "productName") {
+          return { ...line, productName: value };
         }
 
         const parsedValue = Number(value.replace(/[^0-9]/g, ""));
@@ -674,6 +722,97 @@ export function SalesSection({
     setEditError(null);
   }
 
+  function updateEditLineDraft(field: keyof SaleEditLineDraft, value: string) {
+    setEditLineDraft((currentDraft) => {
+      if (field !== "productId") {
+        return { ...currentDraft, [field]: value };
+      }
+
+      const product = products.find((currentProduct) => currentProduct.id === value);
+
+      return {
+        ...currentDraft,
+        productId: value,
+        unit: product?.unit ?? "Unidad",
+        unitPrice:
+          product && currentDraft.unitPrice.trim() === ""
+            ? formatIntegerInput(String(product.salePriceMinor))
+            : currentDraft.unitPrice
+      };
+    });
+    setEditError(null);
+  }
+
+  function addEditLine() {
+    if (!editingSale) {
+      return;
+    }
+
+    const product = products.find(
+      (currentProduct) => currentProduct.id === editLineDraft.productId
+    );
+    const parsedQuantity = parseNonNegativeInteger(editLineDraft.quantity);
+    const parsedUnitPrice = parseNonNegativeInteger(editLineDraft.unitPrice);
+    const parsedDiscountPercent = parsePercentage(editLineDraft.discountPercent);
+    const parsedTaxPercent = parsePercentage(editLineDraft.taxPercent);
+
+    if (!product || !product.active) {
+      setEditError("Debes seleccionar un producto activo para agregarlo.");
+      return;
+    }
+    if (
+      parsedQuantity === null ||
+      parsedQuantity <= 0 ||
+      parsedUnitPrice === null ||
+      parsedUnitPrice <= 0 ||
+      parsedDiscountPercent === null ||
+      parsedDiscountPercent > 100 ||
+      parsedTaxPercent === null ||
+      parsedTaxPercent > 100
+    ) {
+      setEditError("El nuevo item debe tener cantidad, precio y porcentajes validos.");
+      return;
+    }
+
+    const draftLine = buildSaleLineSnapshot({
+      discountPercent: parsedDiscountPercent,
+      product,
+      quantity: parsedQuantity,
+      taxPercent: parsedTaxPercent,
+      unit: editLineDraft.unit,
+      unitPriceMinor: parsedUnitPrice
+    });
+
+    setEditLines((currentLines) => [
+      ...currentLines,
+      {
+        costMinor: draftLine.costMinor,
+        discountMinor: draftLine.discountMinor,
+        discountPercent: draftLine.discountPercent,
+        id: `${editingSale.id}-line-${Date.now()}-${currentLines.length}`,
+        marginMinor: draftLine.marginMinor,
+        marginPercent: draftLine.marginPercent,
+        productId: product.id,
+        productName: product.name,
+        quantity: draftLine.quantity,
+        subtotalMinor: draftLine.subtotalMinor,
+        taxMinor: draftLine.taxMinor,
+        taxPercent: draftLine.taxPercent,
+        totalMinor: draftLine.totalMinor,
+        unit: draftLine.unit,
+        unitCostMinorAtSale: draftLine.unitCostMinorAtSale,
+        unitPriceMinor: draftLine.unitPriceMinor
+      }
+    ]);
+    setEditLineDraft(emptySaleEditLineDraft);
+    setEditError(null);
+  }
+
+  function removeEditLine(lineId: string) {
+    setEditLines((currentLines) => currentLines.filter((line) => line.id !== lineId));
+    setEditError(null);
+  }
+
   async function submitSaleEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -685,6 +824,7 @@ export function SalesSection({
     const hasInvalidLine = editLines.some(
       (line) =>
         line.quantity <= 0 ||
+        line.productName.trim() === "" ||
         line.unitPriceMinor <= 0 ||
         line.discountPercent < 0 ||
         line.discountPercent > 100 ||
@@ -698,6 +838,10 @@ export function SalesSection({
     }
     if (!customer.active) {
       setEditError("El cliente seleccionado esta inactivo. Reactivalo para modificar la venta.");
+      return;
+    }
+    if (editForm.issuedAt.trim() === "") {
+      setEditError("La fecha de elaboracion es obligatoria.");
       return;
     }
     if (editForm.paymentStatus === "pending" && editForm.dueAt.trim() === "") {
@@ -717,11 +861,13 @@ export function SalesSection({
       ...editingSale,
       branch: editForm.branch.trim() || "Principal",
       concept: editForm.concept.trim() || "Factura de venta",
+      footerNote: editForm.footerNote.trim(),
+      observations: editForm.observations.trim(),
       customer,
       customerId: customer.id,
       customerName: customer.name,
       invoiceNumber: formatDocumentNumber(prefix, getDocumentSequence(editingSale.invoiceNumber)),
-      issuedAt: editForm.issuedAt,
+      issuedAt: editForm.issuedAt.trim(),
       lines: editLines,
       paymentStatus: editForm.paymentStatus,
       prefix,
@@ -746,6 +892,7 @@ export function SalesSection({
     setEditingSale(null);
     setEditForm(null);
     setEditLines([]);
+    setEditLineDraft(emptySaleEditLineDraft);
     setEditError(null);
   }
 
@@ -761,6 +908,7 @@ export function SalesSection({
       setEditingSale(null);
       setEditForm(null);
       setEditLines([]);
+      setEditLineDraft(emptySaleEditLineDraft);
       setEditError(null);
     }
   }
@@ -851,6 +999,22 @@ export function SalesSection({
               onChange={(value) => updateField("concept", value)}
               value={form.concept}
             />
+            <label className="field" htmlFor="observaciones-venta">
+              <span>Observaciones</span>
+              <textarea
+                id="observaciones-venta"
+                onChange={(event) => updateField("observations", event.target.value)}
+                value={form.observations}
+              />
+            </label>
+            <label className="field" htmlFor="notas-pie-venta">
+              <span>Notas al pie</span>
+              <textarea
+                id="notas-pie-venta"
+                onChange={(event) => updateField("footerNote", event.target.value)}
+                value={form.footerNote}
+              />
+            </label>
           </div>
           <InlineActionGroup>
             <SecondaryActionButton onClick={() => setCustomerFormVisible((visible) => !visible)}>
@@ -1070,7 +1234,7 @@ export function SalesSection({
           <form onSubmit={submitSaleEdit}>
             <div className="document-header-grid">
               <label className="field" htmlFor="cliente-edicion">
-                <span>Cliente</span>
+                <span>Cliente de venta</span>
                 <select id="cliente-edicion" onChange={(event) => updateEditField("customerId", event.target.value)} value={editForm.customerId}>
                   {activeCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name} - {customer.document}</option>)}
                 </select>
@@ -1088,6 +1252,14 @@ export function SalesSection({
               )}
               <TextField label="Fecha de elaboracion de venta" onChange={(value) => updateEditField("issuedAt", value)} type="date" value={editForm.issuedAt} />
               <TextField label="Concepto de venta" onChange={(value) => updateEditField("concept", value)} value={editForm.concept} />
+              <label className="field" htmlFor="observaciones-edicion-venta">
+                <span>Observaciones de venta</span>
+                <textarea id="observaciones-edicion-venta" onChange={(event) => updateEditField("observations", event.target.value)} value={editForm.observations} />
+              </label>
+              <label className="field" htmlFor="notas-pie-edicion-venta">
+                <span>Notas al pie de venta</span>
+                <textarea id="notas-pie-edicion-venta" onChange={(event) => updateEditField("footerNote", event.target.value)} value={editForm.footerNote} />
+              </label>
               <div className="field">
                 <span>Forma de pago</span>
                 <div className="payment-status-group" role="radiogroup" aria-label="Estado de pago de venta en edicion">
@@ -1098,25 +1270,54 @@ export function SalesSection({
               {editForm.paymentStatus === "pending" ? <TextField label="Fecha vencimiento de venta" onChange={(value) => updateEditField("dueAt", value)} type="date" value={editForm.dueAt} /> : null}
             </div>
 
+            <section className="sale-edit-add-line" aria-label="Agregar item a venta en edicion">
+              <div className="document-lines-heading">
+                <h3>Agregar item</h3>
+              </div>
+              <div className="sales-grid">
+                <label className="field" htmlFor="producto-edicion-venta">
+                  <span>Producto nuevo item</span>
+                  <select id="producto-edicion-venta" onChange={(event) => updateEditLineDraft("productId", event.target.value)} value={editLineDraft.productId}>
+                    <option value="">Selecciona un producto</option>
+                    {activeProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+                  </select>
+                </label>
+                <label className="field" htmlFor="unidad-edicion-venta">
+                  <span>Unidad</span>
+                  <select id="unidad-edicion-venta" onChange={(event) => updateEditLineDraft("unit", event.target.value)} value={editLineDraft.unit}>
+                    <option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option>
+                  </select>
+                </label>
+                <TextField inputMode="numeric" label="Cantidad nuevo item" onChange={(value) => updateEditLineDraft("quantity", value)} value={editLineDraft.quantity} />
+                <TextField inputMode="numeric" label="Precio nuevo item" onChange={(value) => updateEditLineDraft("unitPrice", formatIntegerInput(value))} value={editLineDraft.unitPrice} />
+                <TextField inputMode="numeric" label="Descuento nuevo item %" onChange={(value) => updateEditLineDraft("discountPercent", value.replace(/[^0-9]/g, ""))} value={editLineDraft.discountPercent} />
+                <label className="field" htmlFor="impuesto-edicion-venta"><span>Impuesto nuevo item</span><select id="impuesto-edicion-venta" onChange={(event) => updateEditLineDraft("taxPercent", event.target.value)} value={editLineDraft.taxPercent}><option value="0">Sin IVA</option><option value="5">IVA 5%</option><option value="19">IVA 19%</option></select></label>
+                <InlineActionGroup>
+                  <SecondaryActionButton onClick={addEditLine}>Agregar item a venta</SecondaryActionButton>
+                </InlineActionGroup>
+              </div>
+            </section>
+
             <DataTable ariaLabel="Lineas de venta en edicion" className="sale-edit-lines">
-              <DataTableHeader labels={["Producto", "Unidad", "Cantidad", "Precio", "Descuento", "Impuesto", "Total"]} />
+              <DataTableHeader labels={["Descripcion", "Unidad", "Cantidad", "Precio", "Descuento", "Impuesto", "Total", "Acciones"]} />
               <tbody>
                 {editLines.map((line) => (
                   <tr key={line.id}>
-                    <td>{line.productName}</td>
+                    <td><input aria-label={`Descripcion ${line.productName}`} onChange={(event) => updateEditLine(line.id, "productName", event.target.value)} value={line.productName} /></td>
                     <td><select aria-label={`Unidad ${line.productName}`} onChange={(event) => updateEditLine(line.id, "unit", event.target.value)} value={line.unit}><option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option></select></td>
                     <td><input aria-label={`Cantidad ${line.productName}`} inputMode="numeric" onChange={(event) => updateEditLine(line.id, "quantity", event.target.value)} value={line.quantity} /></td>
                     <td><input aria-label={`Precio ${line.productName}`} inputMode="numeric" onChange={(event) => updateEditLine(line.id, "unitPriceMinor", event.target.value)} value={line.unitPriceMinor} /></td>
                     <td><input aria-label={`Descuento ${line.productName}`} inputMode="numeric" onChange={(event) => updateEditLine(line.id, "discountPercent", event.target.value)} value={line.discountPercent} /></td>
                     <td><select aria-label={`Impuesto ${line.productName}`} onChange={(event) => updateEditLine(line.id, "taxPercent", event.target.value)} value={line.taxPercent}><option value="0">0%</option><option value="5">5%</option><option value="19">19%</option></select></td>
                     <td>{formatCurrency(line.totalMinor)}</td>
+                    <td><SecondaryActionButton onClick={() => removeEditLine(line.id)}>Eliminar item</SecondaryActionButton></td>
                   </tr>
                 ))}
               </tbody>
             </DataTable>
             {editError ? <p className="form-error">{editError}</p> : null}
             <FormActions>
-              <SecondaryActionButton onClick={() => { setEditingSale(null); setEditForm(null); setEditLines([]); setEditError(null); }}>Cancelar</SecondaryActionButton>
+              <SecondaryActionButton onClick={() => { setEditingSale(null); setEditForm(null); setEditLines([]); setEditLineDraft(emptySaleEditLineDraft); setEditError(null); }}>Cancelar</SecondaryActionButton>
               <PrimaryActionButton type="submit">Guardar cambios</PrimaryActionButton>
             </FormActions>
           </form>
@@ -1142,7 +1343,7 @@ export function SalesSection({
             <tbody>
               {sales.map((sale) => (
                 <tr key={sale.id}>
-                  <td>{sale.occurredAtLabel}</td>
+                  <td>{sale.issuedAt}</td>
                   <td>{sale.invoiceNumber}</td>
                   <td>{sale.customerName}</td>
                   <td>{sale.seller}</td>

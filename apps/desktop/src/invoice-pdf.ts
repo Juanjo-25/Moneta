@@ -42,10 +42,12 @@ export type InvoiceSettings = {
 export type InvoicePdfInput = {
   customer: InvoiceCustomer;
   dueDate?: string | undefined;
+  footerNote?: string | undefined;
   invoiceNumber: string;
   issueDate: string;
   item?: InvoiceItem;
   items?: InvoiceItem[];
+  observations?: string | undefined;
   paymentStatus: InvoicePaymentStatus;
   settings?: InvoiceSettings | undefined;
 };
@@ -171,6 +173,9 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   const subtotal = formatCurrency(totalMinor);
   const total = formatCurrency(totalMinor);
   const dueDateLabel = getDueDateLabel(input);
+  const observations =
+    input.observations?.trim() || settings.invoice.observations;
+  const footerNote = input.footerNote?.trim() || settings.invoice.legalNote;
   const hasLogo = settings.company.logoDataUri.trim() !== "";
 
   doc.setDrawColor(72, 72, 72);
@@ -326,7 +331,7 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(255, 255, 255);
-  writeText(doc, fitText(fieldValue(settings.invoice.legalNote), 64), 10, tableBottom - 2, {
+  writeText(doc, fitText(fieldValue(footerNote), 64), 10, tableBottom - 2, {
     maxWidth: 114
   });
 
@@ -354,7 +359,7 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  writeText(doc, fieldValue(settings.invoice.observations), pageLeft, 292, {
+  writeText(doc, fieldValue(observations), pageLeft, 292, {
     maxWidth: pageWidth
   });
 

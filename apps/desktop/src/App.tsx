@@ -1495,6 +1495,8 @@ export function App() {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     dueAt?: string | undefined;
     lines: Array<{
       product: ProductRecord;
@@ -1556,6 +1558,7 @@ export function App() {
     const sale: SaleRecord = {
       branch: input.branch,
       concept: input.concept,
+      footerNote: input.footerNote,
       currency: "COP",
       customer: input.customer,
       customerId: input.customer.id,
@@ -1564,6 +1567,7 @@ export function App() {
       invoiceNumber: input.invoiceNumber,
       issuedAt: input.issuedAt,
       lines,
+      observations: input.observations,
       occurredAtMs,
       occurredAtLabel: formatOccurredAtLabel(occurredAt),
       paymentStatus: input.paymentStatus,
@@ -1629,6 +1633,8 @@ export function App() {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -1650,9 +1656,11 @@ export function App() {
       branch: input.branch,
       concept: input.concept,
       customer: input.customer,
+      footerNote: input.footerNote,
       invoiceNumber: input.invoiceNumber,
       issuedAt: input.issuedAt,
       lines: input.lines,
+      observations: input.observations,
       paymentStatus: "paid",
       prefix: input.prefix,
       seller: input.seller
@@ -1667,6 +1675,8 @@ export function App() {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
@@ -1690,9 +1700,11 @@ export function App() {
       concept: input.concept,
       customer: input.customer,
       dueAt: input.dueAt,
+      footerNote: input.footerNote,
       invoiceNumber: input.invoiceNumber,
       issuedAt: input.issuedAt,
       lines: input.lines,
+      observations: input.observations,
       paymentStatus: "pending",
       prefix: input.prefix,
       seller: input.seller

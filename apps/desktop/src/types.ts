@@ -104,6 +104,8 @@ export type SaleRecord = {
   seller: string;
   currency: "COP";
   concept: string;
+  observations: string;
+  footerNote: string;
   issuedAt: string;
   productId: string;
   productName: string;
