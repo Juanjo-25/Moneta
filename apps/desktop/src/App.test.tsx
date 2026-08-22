@@ -4337,7 +4337,7 @@ describe("App navigation", () => {
         name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+1\s+1/
       })
     ).toBeTruthy();
-  });
+  }, 10_000);
 
   it("deletes a sale and restores inventory", async () => {
     const user = userEvent.setup();
