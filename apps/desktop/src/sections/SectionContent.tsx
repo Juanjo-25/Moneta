@@ -24,7 +24,10 @@ import type {
   CreditNoteStatus,
   CustomerRecord,
   CreditNoteRecord,
+  InventoryAdjustmentRecord,
+  InventoryAdjustmentType,
   ProductRecord,
+  PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
   ReceivableRecord,
@@ -58,12 +61,25 @@ type SectionContentProps = {
   formatIntegerInput: (value: string) => string;
   formatPayableStatus: (status: SupplierPayableStatus) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
+  inventoryAdjustments: InventoryAdjustmentRecord[];
   isLowStock: (product: ProductRecord) => boolean;
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
-  onCreateProduct: (product: ProductRecord) => void;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
-  onUpdateSupplier: (supplierId: string, input: SupplierFormState) => void;
-  onSetSupplierActive: (supplierId: string, active: boolean) => void;
+  onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
+  onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onDeleteAllProducts: () => Promise<{
+    blockedCount: number;
+    deletedCount: number;
+    deletedProductIds: string[];
+    error: string | null;
+  }>;
+  onDeleteProduct: (productId: string) => Promise<string | null>;
+  onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
+  onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
+  onUpdateSupplier: (
+    supplierId: string,
+    input: SupplierFormState
+  ) => Promise<boolean>;
+  onSetSupplierActive: (supplierId: string, active: boolean) => Promise<boolean>;
+  onDeleteSupplier: (supplierId: string) => Promise<string | null>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -72,6 +88,7 @@ type SectionContentProps = {
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
+    expenseCategory: PurchaseExpenseCategory;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -84,7 +101,8 @@ type SectionContentProps = {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) => void;
+  }) => Promise<boolean>;
+  onDeletePurchase: (purchaseId: string) => Promise<string | null>;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -93,6 +111,8 @@ type SectionContentProps = {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -109,7 +129,7 @@ type SectionContentProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterPendingSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -118,6 +138,8 @@ type SectionContentProps = {
     issuedAt: string;
     seller: string;
     concept: string;
+    observations: string;
+    footerNote: string;
     dueAt: string;
     lines: Array<{
       product: ProductRecord;
@@ -135,7 +157,7 @@ type SectionContentProps = {
       marginPercent: number;
       totalMinor: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onRegisterCreditNote: (input: {
     sale: SaleRecord;
     adjustmentType: CreditNoteAdjustmentType;
@@ -146,34 +168,51 @@ type SectionContentProps = {
       saleLineId: string;
       quantity: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
+  onDeleteCreditNote: (creditNoteId: string) => Promise<string | null>;
   onRegisterCustomerReceipt: (input: {
     receivableId: string;
     amountMinor: number;
     concept: string;
     receivedAt: string;
-  }) => string | null;
+  }) => Promise<string | null>;
+  onRegisterInventoryAdjustment: (input: {
+    productId: string;
+    adjustmentType: InventoryAdjustmentType;
+    quantity: number;
+    reason: string;
+  }) => Promise<string | null>;
+  onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
+  onDeleteReceivable: (receivableId: string) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
-  ) => void;
-  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => string | null;
-  onDeleteSale: (saleId: string) => void;
+  ) => Promise<void>;
+  onUpdateSale: (input: { sale: SaleRecord; dueAt: string }) => Promise<string | null>;
+  onDeleteSale: (saleId: string) => Promise<string | null>;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
-  }) => void;
+  }) => Promise<boolean>;
+  onDeleteSupplierPayable: (payableId: string) => Promise<string | null>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
   ) => CustomerFormErrors;
-  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
-  onSetCustomerActive: (customerId: string, active: boolean) => void;
+  onUpdateCustomer: (
+    customerId: string,
+    input: CustomerFormState
+  ) => Promise<boolean>;
+  onSetCustomerActive: (customerId: string, active: boolean) => Promise<boolean>;
+  onDeleteCustomer: (customerId: string) => Promise<string | null>;
   onCloseProductForm: () => void;
   onCloseSupplierForm: () => void;
   onSalesDraftChange: Dispatch<SetStateAction<SalesDraftState>>;
-  onSettingsChange: Dispatch<SetStateAction<AppSettings>>;
+  onCreateBackup: () => Promise<{ path: string; sizeBytes: number } | null>;
+  onResetDatabase: () => Promise<boolean>;
+  onSettingsChange: (settings: AppSettings) => void;
   parseNonNegativeInteger: (value: string) => number | null;
+  productDeleteAllRequestId: number;
   productFormVisible: boolean;
   supplierFormVisible: boolean;
   products: ProductRecord[];
@@ -198,29 +237,44 @@ export function SectionContent({
   formatIntegerInput,
   formatPayableStatus,
   getDueMetadata,
+  inventoryAdjustments,
   isLowStock,
   onCreateCustomer,
   onCreateProduct,
+  onDeleteAllProducts,
+  onDeleteProduct,
+  onUpdateProduct,
   onCreateSupplier,
   onUpdateSupplier,
   onSetSupplierActive,
+  onDeleteSupplier,
   onRegisterPurchase,
+  onDeletePurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
   onRegisterCreditNote,
+  onDeleteCreditNote,
   onRegisterCustomerReceipt,
+  onRegisterInventoryAdjustment,
+  onVoidCustomerReceipt,
+  onDeleteReceivable,
   onSetCreditNoteStatus,
   onUpdateSale,
   onDeleteSale,
   onRegisterSupplierPayment,
+  onDeleteSupplierPayable,
   onValidateCustomer,
   onUpdateCustomer,
   onSetCustomerActive,
+  onDeleteCustomer,
   onCloseProductForm,
   onCloseSupplierForm,
   onSalesDraftChange,
+  onCreateBackup,
+  onResetDatabase,
   onSettingsChange,
   parseNonNegativeInteger,
+  productDeleteAllRequestId,
   productFormVisible,
   supplierFormVisible,
   products,
@@ -237,14 +291,24 @@ export function SectionContent({
   if (section.id === "products") {
     return (
       <ProductsSection
+        creditNotes={creditNotes}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
         formVisible={productFormVisible}
+        inventoryAdjustments={inventoryAdjustments}
         isLowStock={isLowStock}
         onCloseForm={onCloseProductForm}
         onCreateProduct={onCreateProduct}
+        onDeleteAllProducts={onDeleteAllProducts}
+        onDeleteProduct={onDeleteProduct}
+        onRegisterInventoryAdjustment={onRegisterInventoryAdjustment}
+        onUpdateProduct={onUpdateProduct}
         parseNonNegativeInteger={parseNonNegativeInteger}
+        deleteAllProductsRequestId={productDeleteAllRequestId}
         products={products}
+        purchases={purchases}
+        sales={sales}
+        settings={settings}
       />
     );
   }
@@ -256,6 +320,7 @@ export function SectionContent({
         formatIntegerInput={formatIntegerInput}
         onCreateProduct={onCreateProduct}
         onCreateSupplier={onCreateSupplier}
+        onDeletePurchase={onDeletePurchase}
         onRegisterPurchase={onRegisterPurchase}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
@@ -295,6 +360,7 @@ export function SectionContent({
         customers={customers}
         formatCurrency={formatCurrency}
         onCreateCustomer={onCreateCustomer}
+        onDeleteCustomer={onDeleteCustomer}
         onSetCustomerActive={onSetCustomerActive}
         onUpdateCustomer={onUpdateCustomer}
         onValidateCustomer={onValidateCustomer}
@@ -310,6 +376,7 @@ export function SectionContent({
         creditNotes={creditNotes}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
+        onDeleteCreditNote={onDeleteCreditNote}
         onRegisterCreditNote={onRegisterCreditNote}
         onSetCreditNoteStatus={onSetCreditNoteStatus}
         parseNonNegativeInteger={parseNonNegativeInteger}
@@ -321,12 +388,20 @@ export function SectionContent({
   if (section.id === "cash-receipts") {
     return (
       <CashReceiptsSection
+        compareDueDates={compareDueDates}
         customerReceipts={customerReceipts}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
+        formatPayableStatus={formatPayableStatus}
+        getDueMetadata={getDueMetadata}
         onRegisterCustomerReceipt={onRegisterCustomerReceipt}
+        onRegisterSupplierPayment={onRegisterSupplierPayment}
+        onVoidCustomerReceipt={onVoidCustomerReceipt}
         parseNonNegativeInteger={parseNonNegativeInteger}
         receivables={receivables}
+        settings={settings}
+        supplierPayables={supplierPayables}
+        supplierPayments={supplierPayments}
       />
     );
   }
@@ -339,9 +414,14 @@ export function SectionContent({
         formatIntegerInput={formatIntegerInput}
         formatPayableStatus={formatPayableStatus}
         getDueMetadata={getDueMetadata}
+        onDeleteReceivable={onDeleteReceivable}
+        onDeleteSupplierPayable={onDeleteSupplierPayable}
         onRegisterSupplierPayment={onRegisterSupplierPayment}
         parseNonNegativeInteger={parseNonNegativeInteger}
+        purchases={purchases}
         receivables={receivables}
+        sales={sales}
+        settings={settings}
         supplierPayables={supplierPayables}
       />
     );
@@ -353,6 +433,7 @@ export function SectionContent({
         formVisible={supplierFormVisible}
         onCloseForm={onCloseSupplierForm}
         onCreateSupplier={onCreateSupplier}
+        onDeleteSupplier={onDeleteSupplier}
         onSetSupplierActive={onSetSupplierActive}
         onUpdateSupplier={onUpdateSupplier}
         renderPayablesTable={({ supplierPayables, tableLabel }) => (
@@ -361,6 +442,7 @@ export function SectionContent({
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
             getDueMetadata={getDueMetadata}
+            onDeleteSupplierPayable={onDeleteSupplierPayable}
             onRegisterSupplierPayment={onRegisterSupplierPayment}
             parseNonNegativeInteger={parseNonNegativeInteger}
             supplierPayables={supplierPayables}
@@ -391,6 +473,8 @@ export function SectionContent({
   if (section.id === "settings") {
     return (
       <SettingsSection
+        onCreateBackup={onCreateBackup}
+        onResetDatabase={onResetDatabase}
         onSettingsChange={onSettingsChange}
         settings={settings}
       />

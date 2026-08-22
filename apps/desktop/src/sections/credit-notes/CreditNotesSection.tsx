@@ -25,6 +25,7 @@ type CreditNotesSectionProps = {
   creditNotes: CreditNoteRecord[];
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
+  onDeleteCreditNote: (creditNoteId: string) => Promise<string | null>;
   onRegisterCreditNote: (input: {
     sale: SaleRecord;
     adjustmentType: CreditNoteAdjustmentType;
@@ -35,11 +36,11 @@ type CreditNotesSectionProps = {
       saleLineId: string;
       quantity: number;
     }>;
-  }) => string | null;
+  }) => Promise<string | null>;
   onSetCreditNoteStatus: (
     creditNoteId: string,
     status: CreditNoteStatus
-  ) => void;
+  ) => Promise<void>;
   parseNonNegativeInteger: (value: string) => number | null;
   sales: SaleRecord[];
 };
@@ -56,6 +57,11 @@ type CreditNoteFormErrors = {
   lines?: string | undefined;
   saleId?: string | undefined;
   submit?: string | undefined;
+};
+
+type CreditNoteDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 const creditNoteReasonsByType: Record<CreditNoteAdjustmentType, string[]> = {
@@ -81,6 +87,7 @@ export function CreditNotesSection({
   creditNotes,
   formatCurrency,
   formatIntegerInput,
+  onDeleteCreditNote,
   onRegisterCreditNote,
   onSetCreditNoteStatus,
   parseNonNegativeInteger,
@@ -91,6 +98,12 @@ export function CreditNotesSection({
   const [lineQuantities, setLineQuantities] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<CreditNoteFormErrors>({});
   const [reviewCreditNoteId, setReviewCreditNoteId] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<CreditNoteRecord | null>(
+    null
+  );
+  const [deleteNotice, setDeleteNotice] = useState<CreditNoteDeleteNotice | null>(
+    null
+  );
   const selectedSale = sales.find((sale) => sale.id === form.saleId) ?? null;
   const creditBalanceByLine = useMemo(
     () => buildCreditBalanceByLine(creditNotes, selectedSale?.id ?? ""),
@@ -197,7 +210,7 @@ export function CreditNotesSection({
     }));
   }
 
-  function submitCreditNote(event: FormEvent<HTMLFormElement>) {
+  async function submitCreditNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: CreditNoteFormErrors = {};
@@ -234,7 +247,7 @@ export function CreditNotesSection({
       return;
     }
 
-    const submitError = onRegisterCreditNote({
+    const submitError = await onRegisterCreditNote({
       adjustmentType: form.adjustmentType,
       issuedAt: form.issuedAt.trim(),
       lines: selectedCreditLines.map(({ amountMinor, line, quantity }) => ({
@@ -254,6 +267,29 @@ export function CreditNotesSection({
     setForm(emptyCreditNoteForm);
     setLineQuantities({});
     setErrors({});
+  }
+
+  async function confirmCreditNoteDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedCreditNote = deleteCandidate;
+    const deleteError = await onDeleteCreditNote(deletedCreditNote.id);
+
+    if (deleteError) {
+      setDeleteNotice({ kind: "error", message: deleteError });
+      return;
+    }
+
+    setDeleteCandidate(null);
+    setReviewCreditNoteId((currentId) =>
+      currentId === deletedCreditNote.id ? null : currentId
+    );
+    setDeleteNotice({
+      kind: "success",
+      message: `Nota credito ${deletedCreditNote.number} eliminada.`
+    });
   }
 
   return (
@@ -451,6 +487,43 @@ export function CreditNotesSection({
         </FormActions>
       </form>
 
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de nota credito"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              {deleteCandidate.status === "confirmed"
+                ? `Se eliminara la nota ${deleteCandidate.number} y se reversara su efecto en inventario y cartera.`
+                : `Se quitara la nota ${deleteCandidate.number} del historial de notas credito.`}
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmCreditNoteDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+
       {creditNotes.length > 0 ? (
         <DataTable ariaLabel="Notas credito registradas">
           <DataTableHeader
@@ -496,17 +569,49 @@ export function CreditNotesSection({
                             setReviewCreditNoteId(isReviewing ? null : creditNote.id)
                           }
                         >
-                          Revisar
+                          Detalle
                         </PrimaryActionButton>
                       ) : null}
                       {creditNote.status === "confirmed" ? (
+                        <>
+                          <SecondaryActionButton
+                            onClick={() =>
+                              setReviewCreditNoteId(
+                                isReviewing ? null : creditNote.id
+                              )
+                            }
+                            variant="compact"
+                          >
+                            Detalle
+                          </SecondaryActionButton>
+                          <SecondaryActionButton
+                            onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                            variant="compact"
+                          >
+                            Anular
+                          </SecondaryActionButton>
+                        </>
+                      ) : null}
+                      {creditNote.status === "void" ? (
                         <SecondaryActionButton
-                          onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                          onClick={() =>
+                            setReviewCreditNoteId(isReviewing ? null : creditNote.id)
+                          }
                           variant="compact"
                         >
-                          Anular
+                          Detalle
                         </SecondaryActionButton>
                       ) : null}
+                      <SecondaryActionButton
+                        className="danger-action"
+                        onClick={() => {
+                          setDeleteCandidate(creditNote);
+                          setDeleteNotice(null);
+                        }}
+                        variant="compact"
+                      >
+                        Eliminar
+                      </SecondaryActionButton>
                     </td>
                   </tr>
                   {isReviewing ? (
@@ -516,8 +621,8 @@ export function CreditNotesSection({
                           creditNote={creditNote}
                           formatCurrency={formatCurrency}
                           onCancel={() => setReviewCreditNoteId(null)}
-                          onConfirm={() => {
-                            onSetCreditNoteStatus(creditNote.id, "confirmed");
+                          onConfirm={async () => {
+                            await onSetCreditNoteStatus(creditNote.id, "confirmed");
                             setReviewCreditNoteId(null);
                           }}
                           salePaymentStatus={relatedSale?.paymentStatus ?? "paid"}
@@ -560,26 +665,38 @@ function CreditNoteReviewPanel({
     (total, line) => total + line.quantity,
     0
   );
+  const isDraft = creditNote.status === "draft";
 
   return (
     <section
-      aria-label={`Resumen antes de confirmar ${creditNote.number}`}
+      aria-label={`Detalle historico ${creditNote.number}`}
       className="credit-note-review"
     >
       <div className="credit-note-review-heading">
         <div>
-          <span>Resumen antes de confirmar</span>
+          <span>{isDraft ? "Resumen antes de confirmar" : "Detalle historico"}</span>
           <strong>{creditNote.number}</strong>
         </div>
         <div className="credit-note-review-actions">
           <SecondaryActionButton onClick={onCancel} variant="compact">
-            Cancelar
+            Cerrar
           </SecondaryActionButton>
-          <PrimaryActionButton onClick={onConfirm}>Confirmar nota</PrimaryActionButton>
+          {isDraft ? (
+            <PrimaryActionButton onClick={onConfirm}>Confirmar nota</PrimaryActionButton>
+          ) : null}
         </div>
       </div>
 
       <div className="credit-note-impact-grid">
+        <div>
+          <span>Estado</span>
+          <strong>{formatCreditNoteStatus(creditNote.status)}</strong>
+          <small>
+            {creditNote.status === "void"
+              ? creditNote.voidedAtLabel
+              : creditNote.confirmedAtLabel || creditNote.occurredAtLabel}
+          </small>
+        </div>
         <div>
           <span>Venta afectada</span>
           <strong>{creditNote.invoiceNumber}</strong>

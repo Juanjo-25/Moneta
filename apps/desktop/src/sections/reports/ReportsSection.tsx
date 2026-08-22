@@ -9,9 +9,18 @@ import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SubmenuSwitch } from "../../components/SubmenuSwitch";
 import { parseLocalDate } from "../../lib/dates";
+import {
+  buildExcelWorkbookDownload,
+  buildExcelWorkbookXml,
+  type ExcelCellValue,
+  type ExcelWorkbookDownload,
+  type ExcelWorksheet
+} from "../../lib/excel-export";
+import { saveNativeExcelExport } from "../../lib/tauri";
 import type {
   CreditNoteRecord,
   CustomerReceiptRecord,
+  PurchaseExpenseCategory,
   PurchaseRecord,
   ReceivableRecord,
   SaleRecord,
@@ -58,9 +67,18 @@ type SaleMarginRow = {
   saleId: string;
 };
 
-type ReportDetailView = "product" | "customer" | "sales" | "sale" | null;
-type ReportTab = "profitability" | "dso" | "cashflow" | "variance";
-type ProfitabilityTab = "overview" | "customer" | "product" | "sales";
+type SellerMarginRow = {
+  costMinor: number;
+  marginMinor: number;
+  marginPercent: number;
+  revenueMinor: number;
+  saleCount: number;
+  sellerName: string;
+};
+
+type ReportDetailView = "product" | "customer" | "seller" | "sales" | "sale" | null;
+type ReportTab = "profitability" | "dso" | "cashflow" | "expenses" | "variance";
+type ProfitabilityTab = "overview" | "customer" | "product" | "seller" | "sales";
 
 type DsoSummary = {
   activeReceivablesMinor: number;
@@ -131,8 +149,60 @@ type UtilitySummary = {
   worstPeriodMarginMinor: number;
 };
 
+type ExpenseEntry = {
+  amountMinor: number;
+  categoryLabel: string;
+  dateLabel: string;
+  dateSortMs: number;
+  id: string;
+  invoiceNumber: string;
+  originLabel: string;
+  partyName: string;
+  statusLabel: "Real" | "Proyectado";
+};
+
+type ExpenseSummary = {
+  projectedExpenseMinor: number;
+  providerCount: number;
+  realExpenseMinor: number;
+  totalExpenseMinor: number;
+};
+
+type ExpenseOriginRow = {
+  amountMinor: number;
+  count: number;
+  originLabel: string;
+  participationPercent: number;
+};
+
+type ReportExportConfig = {
+  fileName: string;
+  worksheets: ExcelWorksheet[];
+};
+
+type ReportExportStatus =
+  | {
+      kind: "error" | "success";
+      message: string;
+    }
+  | null;
+
 function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
+}
+
+function roundDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function buildSummaryWorksheet(
+  name: string,
+  rows: Array<{ label: string; value: ExcelCellValue }>
+): ExcelWorksheet {
+  return {
+    name,
+    rows: [["Indicador", "Valor"], ...rows.map((row) => [row.label, row.value])]
+  };
 }
 
 function formatDays(value: number): string {
@@ -163,6 +233,20 @@ function formatLocalDateLabel(value: string): string {
   }
 
   return formatDateLabel(parsed);
+}
+
+function formatExpenseCategory(category: PurchaseExpenseCategory): string {
+  const labels: Record<PurchaseExpenseCategory, string> = {
+    inventory: "Inventario / proveedores",
+    services: "Servicios",
+    payroll: "Nomina",
+    rent: "Arriendo",
+    transport: "Transporte",
+    taxes: "Impuestos",
+    other: "Otros"
+  };
+
+  return labels[category];
 }
 
 function buildMarginSummary(
@@ -323,36 +407,99 @@ function buildSaleMarginRows(
   sales: SaleRecord[],
   creditNotes: CreditNoteRecord[]
 ): SaleMarginRow[] {
-  return sales.map((sale) => {
-    const saleCreditNotes = creditNotes.filter(
-      (creditNote) => creditNote.saleId === sale.id
-    );
-    const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
-    const marginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
-    const creditedRevenueMinor = saleCreditNotes.reduce(
-      (sum, creditNote) => sum + creditNote.totalMinor,
-      0
-    );
-    const creditedCostMinor = saleCreditNotes.reduce(
-      (sum, creditNote) =>
-        sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
-      0
-    );
-    const netRevenueMinor = Math.max(sale.totalMinor - creditedRevenueMinor, 0);
-    const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
-    const netMarginMinor = netRevenueMinor - netCostMinor;
+  return sales
+    .map((sale) => {
+      const saleCreditNotes = creditNotes.filter(
+        (creditNote) => creditNote.saleId === sale.id
+      );
+      const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+      const creditedRevenueMinor = saleCreditNotes.reduce(
+        (sum, creditNote) => sum + creditNote.totalMinor,
+        0
+      );
+      const creditedCostMinor = saleCreditNotes.reduce(
+        (sum, creditNote) =>
+          sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+        0
+      );
+      const netRevenueMinor = Math.max(sale.totalMinor - creditedRevenueMinor, 0);
+      const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
+      const netMarginMinor = netRevenueMinor - netCostMinor;
 
-    return {
-      costMinor: netCostMinor,
-      customerName: sale.customerName,
-      marginMinor: netMarginMinor,
-      marginPercent: netRevenueMinor > 0 ? (netMarginMinor / netRevenueMinor) * 100 : 0,
-      occurredAtLabel: sale.occurredAtLabel,
-      paymentStatus: sale.paymentStatus,
-      revenueMinor: netRevenueMinor,
-      saleId: sale.id
+      return {
+        costMinor: netCostMinor,
+        customerName: sale.customerName,
+        marginMinor: netMarginMinor,
+        marginPercent:
+          netRevenueMinor > 0 ? (netMarginMinor / netRevenueMinor) * 100 : 0,
+        occurredAtLabel: sale.occurredAtLabel,
+        paymentStatus: sale.paymentStatus,
+        revenueMinor: netRevenueMinor,
+        saleId: sale.id
+      };
+    })
+    .sort((left, right) => right.marginMinor - left.marginMinor);
+}
+
+function buildSellerMarginRows(
+  sales: SaleRecord[],
+  creditNotes: CreditNoteRecord[]
+): SellerMarginRow[] {
+  const salesById = new Map(sales.map((sale) => [sale.id, sale]));
+  const sellerMap = new Map<string, SellerMarginRow>();
+
+  sales.forEach((sale) => {
+    const sellerName = sale.seller.trim() || "Sin asignar";
+    const currentRow = sellerMap.get(sellerName) ?? {
+      costMinor: 0,
+      marginMinor: 0,
+      marginPercent: 0,
+      revenueMinor: 0,
+      saleCount: 0,
+      sellerName
     };
+
+    currentRow.revenueMinor += sale.totalMinor;
+    currentRow.costMinor += sale.lines.reduce(
+      (lineSum, line) => lineSum + line.costMinor,
+      0
+    );
+    currentRow.saleCount += 1;
+    sellerMap.set(sellerName, currentRow);
   });
+
+  creditNotes.forEach((creditNote) => {
+    const sale = salesById.get(creditNote.saleId);
+    const sellerName = sale?.seller.trim() || "Sin asignar";
+    const currentRow = sellerMap.get(sellerName);
+
+    if (!currentRow) {
+      return;
+    }
+
+    currentRow.revenueMinor = Math.max(
+      currentRow.revenueMinor - creditNote.totalMinor,
+      0
+    );
+    currentRow.costMinor = Math.max(
+      currentRow.costMinor -
+        creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
+      0
+    );
+  });
+
+  return [...sellerMap.values()]
+    .map((row) => {
+      const marginMinor = row.revenueMinor - row.costMinor;
+
+      return {
+        ...row,
+        marginMinor,
+        marginPercent:
+          row.revenueMinor > 0 ? (marginMinor / row.revenueMinor) * 100 : 0
+      };
+    })
+    .sort((left, right) => right.revenueMinor - left.revenueMinor);
 }
 
 function buildDsoClientRows(input: {
@@ -535,6 +682,10 @@ function buildCashflowEntries(input: {
   });
 
   input.customerReceipts.forEach((receipt) => {
+    if (!receipt.active) {
+      return;
+    }
+
     const receivedAt = new Date(receipt.receivedAtMs);
     entries.push({
       dateLabel: formatDateLabel(receivedAt),
@@ -744,6 +895,113 @@ function buildUtilitySummary(periodRows: UtilityPeriodRow[]): UtilitySummary {
   };
 }
 
+function buildExpenseEntries(input: {
+  purchases: PurchaseRecord[];
+  supplierPayables: SupplierPayableRecord[];
+  supplierPayments: SupplierPaymentRecord[];
+}): ExpenseEntry[] {
+  const entries: ExpenseEntry[] = [];
+  const purchaseById = new Map(input.purchases.map((purchase) => [purchase.id, purchase]));
+
+  input.purchases.forEach((purchase) => {
+    if (purchase.paymentStatus !== "paid") {
+      return;
+    }
+
+    const occurredAt = new Date(purchase.occurredAtMs);
+
+    entries.push({
+      amountMinor: purchase.totalMinor,
+      categoryLabel: formatExpenseCategory(purchase.expenseCategory),
+      dateLabel: formatDateLabel(occurredAt),
+      dateSortMs: purchase.occurredAtMs,
+      id: `expense-purchase-${purchase.id}`,
+      invoiceNumber: purchase.invoiceNumber,
+      originLabel: "Compra pagada",
+      partyName: purchase.supplierName,
+      statusLabel: "Real"
+    });
+  });
+
+  input.supplierPayments.forEach((payment) => {
+    const paidAt = new Date(payment.paidAtMs);
+    const purchase = purchaseById.get(payment.purchaseId);
+
+    entries.push({
+      amountMinor: payment.amountMinor,
+      categoryLabel: formatExpenseCategory(
+        payment.expenseCategory ?? purchase?.expenseCategory ?? "inventory"
+      ),
+      dateLabel: formatDateLabel(paidAt),
+      dateSortMs: payment.paidAtMs,
+      id: `expense-payment-${payment.id}`,
+      invoiceNumber: purchase?.invoiceNumber ?? payment.purchaseId,
+      originLabel: "Abono proveedor",
+      partyName: payment.supplierName,
+      statusLabel: "Real"
+    });
+  });
+
+  input.supplierPayables
+    .filter((payable) => payable.balanceMinor > 0)
+    .forEach((payable) => {
+      const dueAtMs = parseLocalDate(payable.dueAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+
+      entries.push({
+        amountMinor: payable.balanceMinor,
+        categoryLabel: formatExpenseCategory(payable.expenseCategory),
+        dateLabel: formatLocalDateLabel(payable.dueAt),
+        dateSortMs: dueAtMs,
+        id: `expense-payable-${payable.id}`,
+        invoiceNumber: payable.invoiceNumber,
+        originLabel: "Cuenta por pagar",
+        partyName: payable.supplierName,
+        statusLabel: "Proyectado"
+      });
+    });
+
+  return entries.sort((left, right) => left.dateSortMs - right.dateSortMs);
+}
+
+function buildExpenseSummary(entries: ExpenseEntry[]): ExpenseSummary {
+  const realExpenseMinor = entries
+    .filter((entry) => entry.statusLabel === "Real")
+    .reduce((sum, entry) => sum + entry.amountMinor, 0);
+  const projectedExpenseMinor = entries
+    .filter((entry) => entry.statusLabel === "Proyectado")
+    .reduce((sum, entry) => sum + entry.amountMinor, 0);
+
+  return {
+    projectedExpenseMinor,
+    providerCount: new Set(entries.map((entry) => entry.partyName)).size,
+    realExpenseMinor,
+    totalExpenseMinor: realExpenseMinor + projectedExpenseMinor
+  };
+}
+
+function buildExpenseOriginRows(entries: ExpenseEntry[]): ExpenseOriginRow[] {
+  const originMap = new Map<string, ExpenseOriginRow>();
+  const totalExpenseMinor = entries.reduce((sum, entry) => sum + entry.amountMinor, 0);
+
+  entries.forEach((entry) => {
+    const currentRow = originMap.get(entry.originLabel) ?? {
+      amountMinor: 0,
+      count: 0,
+      originLabel: entry.originLabel,
+      participationPercent: 0
+    };
+
+    currentRow.amountMinor += entry.amountMinor;
+    currentRow.count += 1;
+    currentRow.participationPercent =
+      totalExpenseMinor > 0 ? (currentRow.amountMinor / totalExpenseMinor) * 100 : 0;
+
+    originMap.set(entry.originLabel, currentRow);
+  });
+
+  return [...originMap.values()].sort((left, right) => right.amountMinor - left.amountMinor);
+}
+
 type ReportsSectionProps = {
   creditNotes: CreditNoteRecord[];
   customerReceipts: CustomerReceiptRecord[];
@@ -769,14 +1027,19 @@ export function ReportsSection({
   const [activeProfitabilityTab, setActiveProfitabilityTab] =
     useState<ProfitabilityTab>("overview");
   const [detailView, setDetailView] = useState<ReportDetailView>(null);
+  const [preparedDownload, setPreparedDownload] =
+    useState<ExcelWorkbookDownload | null>(null);
+  const [exportStatus, setExportStatus] = useState<ReportExportStatus>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
   const summary = buildMarginSummary(sales, creditNotes);
   const productRows = buildProductMarginRows(sales, creditNotes);
   const customerRows = buildCustomerMarginRows(sales, creditNotes);
+  const sellerRows = buildSellerMarginRows(sales, creditNotes);
   const saleRows = buildSaleMarginRows(sales, creditNotes);
   const productMaxMargin = productRows[0]?.marginMinor ?? 0;
   const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
+  const sellerMaxRevenue = sellerRows[0]?.revenueMinor ?? 0;
   const saleMaxMargin = saleRows[0]?.marginMinor ?? 0;
   const selectedSale = selectedSaleId
     ? sales.find((sale) => sale.id === selectedSaleId) ?? null
@@ -801,18 +1064,28 @@ export function ReportsSection({
       Math.abs(row.projectedNetMinor)
     ])
   );
+  const expenseEntries = buildExpenseEntries({
+    purchases,
+    supplierPayables,
+    supplierPayments
+  });
+  const expenseSummary = buildExpenseSummary(expenseEntries);
+  const expenseOriginRows = buildExpenseOriginRows(expenseEntries);
+  const expenseMaxAmount = Math.max(1, ...expenseOriginRows.map((row) => row.amountMinor));
   const utilityPeriodRows = buildUtilityPeriodRows(sales, creditNotes);
   const utilitySummary = buildUtilitySummary(utilityPeriodRows);
   const utilityMaxMargin = Math.max(1, ...utilityPeriodRows.map((row) => Math.abs(row.marginMinor)));
   const netMarginMinor = summary.marginMinor;
   const topCustomerRows = customerRows.slice(0, 10);
   const topProductRows = productRows.slice(0, 10);
+  const topSellerRows = sellerRows.slice(0, 10);
   const topSaleRows = saleRows.slice(0, 10);
 
   const reportTabs: Array<{ id: ReportTab; label: string; title: string }> = [
     { id: "profitability", label: "Rentabilidad", title: "Rentabilidad" },
     { id: "dso", label: "DSO", title: "DSO" },
     { id: "cashflow", label: "Flujo de caja", title: "Flujo de caja" },
+    { id: "expenses", label: "Egresos", title: "Egresos" },
     { id: "variance", label: "Utilidades", title: "Utilidades" }
   ];
 
@@ -820,19 +1093,347 @@ export function ReportsSection({
     { id: "overview", label: "Dashboard general" },
     { id: "customer", label: "Clientes" },
     { id: "product", label: "Producto" },
+    { id: "seller", label: "Vendedores" },
     { id: "sales", label: "Ventas" }
   ];
 
   function selectReportTab(tab: ReportTab) {
     setActiveReportTab(tab);
     setDetailView(null);
+    setExportStatus(null);
+    setPreparedDownload(null);
     setSelectedSaleId(null);
   }
 
   function selectProfitabilityTab(tab: ProfitabilityTab) {
     setActiveProfitabilityTab(tab);
     setDetailView(null);
+    setExportStatus(null);
+    setPreparedDownload(null);
     setSelectedSaleId(null);
+  }
+
+  function buildReportExport(): ReportExportConfig {
+    if (activeReportTab === "dso") {
+      return {
+        fileName: "moneta-dso.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen DSO", [
+            { label: "DSO global dias", value: roundDecimal(dsoSummary.dsoDays) },
+            { label: "Cartera abierta COP", value: dsoSummary.activeReceivablesMinor },
+            { label: "Clientes con saldo", value: dsoSummary.clientCount },
+            { label: "Facturas abiertas", value: dsoSummary.openInvoiceCount }
+          ]),
+          {
+            name: "Clientes DSO",
+            rows: [
+              [
+                "Cliente",
+                "Saldo pendiente COP",
+                "Participacion %",
+                "DSO cliente dias",
+                "Facturas abiertas"
+              ],
+              ...dsoClientRows.map((row) => [
+                row.customerName,
+                row.receivableMinor,
+                roundDecimal(row.participationPercent),
+                roundDecimal(row.averageOutstandingDays),
+                row.invoiceCount
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    if (activeReportTab === "cashflow") {
+      return {
+        fileName: "moneta-flujo-de-caja.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen flujo caja", [
+            { label: "Entradas reales COP", value: cashflowSummary.realInflowMinor },
+            { label: "Salidas reales COP", value: cashflowSummary.realOutflowMinor },
+            { label: "Flujo neto real COP", value: cashflowSummary.realNetMinor },
+            {
+              label: "Flujo neto proyectado COP",
+              value: cashflowSummary.projectedNetMinor
+            }
+          ]),
+          {
+            name: "Por fecha",
+            rows: [
+              [
+                "Fecha",
+                "Entrada real COP",
+                "Salida real COP",
+                "Neto real COP",
+                "Entrada proyectada COP",
+                "Salida proyectada COP",
+                "Neto proyectado COP"
+              ],
+              ...cashflowPeriodRows.map((row) => [
+                row.dateLabel,
+                row.realInflowMinor,
+                row.realOutflowMinor,
+                row.realNetMinor,
+                row.projectedInflowMinor,
+                row.projectedOutflowMinor,
+                row.projectedNetMinor
+              ])
+            ]
+          },
+          {
+            name: "Detalle",
+            rows: [
+              ["Fecha", "Tipo", "Origen", "Tercero", "Entrada COP", "Salida COP", "Neto COP"],
+              ...cashflowEntries.map((entry) => [
+                entry.dateLabel,
+                entry.typeLabel,
+                entry.originLabel,
+                entry.partyName,
+                entry.inflowMinor,
+                entry.outflowMinor,
+                entry.netMinor
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    if (activeReportTab === "expenses") {
+      return {
+        fileName: "moneta-egresos.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen egresos", [
+            { label: "Egresos reales COP", value: expenseSummary.realExpenseMinor },
+            { label: "Egresos proyectados COP", value: expenseSummary.projectedExpenseMinor },
+            { label: "Compromisos totales COP", value: expenseSummary.totalExpenseMinor },
+            { label: "Proveedores", value: expenseSummary.providerCount }
+          ]),
+          {
+            name: "Por origen",
+            rows: [
+              ["Origen", "Valor COP", "Participacion %", "Movimientos"],
+              ...expenseOriginRows.map((row) => [
+                row.originLabel,
+                row.amountMinor,
+                roundDecimal(row.participationPercent),
+                row.count
+              ])
+            ]
+          },
+          {
+            name: "Detalle",
+            rows: [
+              ["Fecha", "Estado", "Origen", "Proveedor", "Factura", "Valor COP"],
+              ...expenseEntries.map((entry) => [
+                entry.dateLabel,
+                entry.statusLabel,
+                entry.originLabel,
+                entry.partyName,
+                entry.invoiceNumber,
+                entry.amountMinor
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    if (activeReportTab === "variance") {
+      return {
+        fileName: "moneta-utilidades.xls",
+        worksheets: [
+          buildSummaryWorksheet("Resumen utilidades", [
+            { label: "Utilidad total COP", value: utilitySummary.totalMarginMinor },
+            { label: "Promedio por periodo COP", value: utilitySummary.averageMarginMinor },
+            { label: "Mejor periodo", value: utilitySummary.bestPeriodLabel },
+            {
+              label: "Utilidad mejor periodo COP",
+              value: utilitySummary.bestPeriodMarginMinor
+            },
+            { label: "Peor periodo", value: utilitySummary.worstPeriodLabel },
+            {
+              label: "Utilidad peor periodo COP",
+              value: utilitySummary.worstPeriodMarginMinor
+            }
+          ]),
+          {
+            name: "Por periodo",
+            rows: [
+              ["Periodo", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %", "Ventas"],
+              ...utilityPeriodRows.map((row) => [
+                row.dateLabel,
+                row.revenueMinor,
+                row.costMinor,
+                row.marginMinor,
+                roundDecimal(row.marginPercent),
+                row.salesCount
+              ])
+            ]
+          }
+        ]
+      };
+    }
+
+    const worksheets: ExcelWorksheet[] = [
+      buildSummaryWorksheet("Resumen rentabilidad", [
+        { label: "Ingresos totales COP", value: summary.revenueMinor },
+        { label: "Costo de ventas COP", value: summary.costMinor },
+        { label: "Margen bruto COP", value: summary.marginMinor },
+        { label: "Margen neto COP", value: netMarginMinor },
+        { label: "Margen %", value: roundDecimal(summary.marginPercent) }
+      ]),
+      {
+        name: "Productos",
+        rows: [
+          ["Producto", "Unidades", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %"],
+          ...productRows.map((row) => [
+            row.productName,
+            row.quantity,
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent)
+          ])
+        ]
+      },
+      {
+        name: "Clientes",
+        rows: [
+          ["Cliente", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %", "Compras"],
+          ...customerRows.map((row) => [
+            row.customerName,
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent),
+            row.purchaseCount
+          ])
+        ]
+      },
+      {
+        name: "Vendedores",
+        rows: [
+          ["Vendedor", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %", "Cantidad"],
+          ...sellerRows.map((row) => [
+            row.sellerName,
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent),
+            row.saleCount
+          ])
+        ]
+      },
+      {
+        name: "Ventas",
+        rows: [
+          ["Venta", "Fecha", "Cliente", "Estado", "Ventas COP", "Costo COP", "Utilidad COP", "Margen %"],
+          ...saleRows.map((row) => [
+            row.saleId,
+            row.occurredAtLabel,
+            row.customerName,
+            row.paymentStatus === "paid" ? "Pagada" : "Pendiente",
+            row.revenueMinor,
+            row.costMinor,
+            row.marginMinor,
+            roundDecimal(row.marginPercent)
+          ])
+        ]
+      }
+    ];
+
+    if (selectedSale) {
+      worksheets.push({
+        name: "Detalle venta",
+        rows: [
+          [
+            "Producto",
+            "Cantidad",
+            "Precio venta COP",
+            "Ventas COP",
+            "Costo COP",
+            "Utilidad COP",
+            "Margen %"
+          ],
+          ...selectedSale.lines.map((line) => [
+            line.productName,
+            line.quantity,
+            line.unitPriceMinor,
+            line.totalMinor,
+            line.costMinor,
+            line.marginMinor,
+            roundDecimal(line.marginPercent)
+          ])
+        ]
+      });
+    }
+
+    return {
+      fileName: "moneta-rentabilidad.xls",
+      worksheets
+    };
+  }
+
+  async function exportActiveReport() {
+    const reportExport = buildReportExport();
+    const workbookXml = buildExcelWorkbookXml(reportExport);
+    const fallbackDownload = buildExcelWorkbookDownload(reportExport);
+
+    try {
+      const nativeExport = await saveNativeExcelExport({
+        contents: workbookXml,
+        fileName: fallbackDownload.fileName
+      });
+
+      if (nativeExport) {
+        setPreparedDownload(null);
+        setExportStatus({
+          kind: "success",
+          message: `Exportacion guardada en Descargas: ${nativeExport.fileName}`
+        });
+        return;
+      }
+
+      setPreparedDownload(fallbackDownload);
+      setExportStatus({
+        kind: "success",
+        message: "Archivo listo para descargar."
+      });
+    } catch {
+      setPreparedDownload(fallbackDownload);
+      setExportStatus({
+        kind: "error",
+        message: "No se pudo guardar en Descargas. Usa el enlace de descarga."
+      });
+    }
+  }
+
+  function renderExportAction() {
+    return (
+      <section className="reports-export-toolbar" aria-label="Exportacion de reportes">
+        <SecondaryActionButton onClick={() => void exportActiveReport()}>
+          Exportar a Excel
+        </SecondaryActionButton>
+        {preparedDownload ? (
+          <a
+            className="secondary-action"
+            download={preparedDownload.fileName}
+            href={preparedDownload.href}
+          >
+            Descargar archivo Excel
+          </a>
+        ) : null}
+        {exportStatus ? (
+          <span className={`reports-export-status reports-export-status-${exportStatus.kind}`}>
+            {exportStatus.message}
+          </span>
+        ) : null}
+      </section>
+    );
   }
 
   function renderProfitabilitySummary() {
@@ -852,6 +1453,7 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
+        {renderExportAction()}
         {withSummary ? <ReportSummaryShell>{renderProfitabilitySummary()}</ReportSummaryShell> : null}
         {content}
       </section>
@@ -906,6 +1508,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen DSO" items={summaryItems} />
         </ReportSummaryShell>
@@ -969,6 +1572,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen flujo de caja" items={summaryItems} />
         </ReportSummaryShell>
@@ -1044,6 +1648,105 @@ export function ReportsSection({
     );
   }
 
+  if (activeReportTab === "expenses") {
+    const summaryItems = [
+      {
+        label: "Egresos reales",
+        value: formatCurrency(expenseSummary.realExpenseMinor)
+      },
+      {
+        label: "Egresos proyectados",
+        value: formatCurrency(expenseSummary.projectedExpenseMinor)
+      },
+      {
+        label: "Compromisos totales",
+        value: formatCurrency(expenseSummary.totalExpenseMinor)
+      },
+      {
+        label: "Proveedores",
+        value: String(expenseSummary.providerCount)
+      }
+    ];
+
+    return (
+      <section className="reports-layout">
+        {renderReportTabs()}
+        {renderExportAction()}
+        <ReportSummaryShell>
+          <CompactSummaryGrid ariaLabel="Resumen egresos" items={summaryItems} />
+        </ReportSummaryShell>
+
+        {expenseEntries.length === 0 ? (
+          <EmptyState
+            body="Registra compras pagadas, abonos o cuentas por pagar para detallar los egresos."
+            className="section-empty"
+            title="Sin egresos para analizar"
+          />
+        ) : (
+          <>
+            <ReportPrimaryInsightPanel
+              title="Egresos"
+              description="Salidas reales y compromisos proyectados agrupados por origen."
+            >
+              <div className="report-chart report-chart-detail" aria-label="Grafico egresos por origen">
+                {expenseOriginRows.map((row) => (
+                  <div className="report-bar-row report-bar-row-detail" key={row.originLabel}>
+                    <span>{row.originLabel}</span>
+                    <div className="report-bar-track">
+                      <div
+                        className="report-bar-fill report-bar-fill-negative"
+                        style={{ width: `${(row.amountMinor / expenseMaxAmount) * 100}%` }}
+                      />
+                    </div>
+                    <strong>{formatCurrency(row.amountMinor)}</strong>
+                  </div>
+                ))}
+              </div>
+            </ReportPrimaryInsightPanel>
+
+            {renderReportSupportingContent(
+              <>
+                <DataTable ariaLabel="Resumen egresos por origen">
+                  <DataTableHeader
+                    labels={["Origen", "Valor", "Participacion", "Movimientos"]}
+                  />
+                  <tbody>
+                    {expenseOriginRows.map((row) => (
+                      <tr key={row.originLabel}>
+                        <td>{row.originLabel}</td>
+                        <td>{formatCurrency(row.amountMinor)}</td>
+                        <td>{formatPercent(row.participationPercent)}</td>
+                        <td>{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+
+                <DataTable ariaLabel="Detalle egresos">
+                  <DataTableHeader
+                    labels={["Fecha", "Estado", "Origen", "Proveedor", "Factura", "Valor"]}
+                  />
+                  <tbody>
+                    {expenseEntries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{entry.dateLabel}</td>
+                        <td>{entry.statusLabel}</td>
+                        <td>{entry.originLabel}</td>
+                        <td>{entry.partyName}</td>
+                        <td>{entry.invoiceNumber}</td>
+                        <td>{formatCurrency(entry.amountMinor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </DataTable>
+              </>
+            )}
+          </>
+        )}
+      </section>
+    );
+  }
+
   if (activeReportTab === "variance") {
     const summaryItems = [
       {
@@ -1067,6 +1770,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen utilidades" items={summaryItems} />
         </ReportSummaryShell>
@@ -1137,6 +1841,7 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
+        {renderExportAction()}
         <EmptyState
           body="Este reporte aparecera aqui cuando terminemos su implementacion."
           className="report-placeholder-panel"
@@ -1152,6 +1857,7 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
+        {renderExportAction()}
         <EmptyState
           body="Registra ventas para habilitar los reportes de rentabilidad."
           className="section-empty"
@@ -1249,6 +1955,55 @@ export function ReportsSection({
                   <td>{formatCurrency(row.marginMinor)}</td>
                   <td>{formatPercent(row.marginPercent)}</td>
                   <td>{row.purchaseCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </>,
+      true
+    );
+  }
+
+  if (detailView === "seller") {
+    return renderProfitabilityLayout(
+      <>
+        <ReportPrimaryInsightPanel
+          title="Ventas por vendedor"
+          description="Ingresos, utilidad y cantidad de ventas agrupadas por vendedor."
+          onBack={() => setDetailView(null)}
+        >
+          <div className="report-chart report-chart-detail" aria-label="Grafico detalle ventas por vendedor">
+            {sellerRows.map((row) => (
+              <div className="report-bar-row report-bar-row-detail" key={row.sellerName}>
+                <span>{row.sellerName}</span>
+                <div className="report-bar-track">
+                  <div
+                    className="report-bar-fill"
+                    style={{
+                      width: `${sellerMaxRevenue > 0 ? (row.revenueMinor / sellerMaxRevenue) * 100 : 0}%`
+                    }}
+                  />
+                </div>
+                <strong>{formatCurrency(row.revenueMinor)}</strong>
+              </div>
+            ))}
+          </div>
+        </ReportPrimaryInsightPanel>
+        {renderReportSupportingContent(
+          <DataTable ariaLabel="Detalle ventas por vendedor">
+            <DataTableHeader
+              labels={["Vendedor", "Ventas", "Costo", "Utilidad", "% margen", "Cantidad"]}
+            />
+            <tbody>
+              {sellerRows.map((row) => (
+                <tr key={row.sellerName}>
+                  <td>{row.sellerName}</td>
+                  <td>{formatCurrency(row.revenueMinor)}</td>
+                  <td>{formatCurrency(row.costMinor)}</td>
+                  <td>{formatCurrency(row.marginMinor)}</td>
+                  <td>{formatPercent(row.marginPercent)}</td>
+                  <td>{row.saleCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -1418,6 +2173,27 @@ export function ReportsSection({
         onOpenDetail={() => setDetailView("product")}
         rows={rows}
         title="Margen por producto"
+      />
+    );
+  }
+
+  if (activeProfitabilityTab === "seller") {
+    const rows = topSellerRows.map((row) => ({
+      id: row.sellerName,
+      label: row.sellerName,
+      value: formatCurrency(row.revenueMinor),
+      widthPercent:
+        sellerMaxRevenue > 0 ? (row.revenueMinor / sellerMaxRevenue) * 100 : 0
+    }));
+
+    return renderProfitabilityLayout(
+      <ReportChartPreviewPanel
+        actionLabel="Abrir detalle de ventas por vendedor"
+        chartLabel="Grafico ventas por vendedor"
+        description="Vendedores ordenados por ventas registradas."
+        onOpenDetail={() => setDetailView("seller")}
+        rows={rows}
+        title="Ventas por vendedor"
       />
     );
   }

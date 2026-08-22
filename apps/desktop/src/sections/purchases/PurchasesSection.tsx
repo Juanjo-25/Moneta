@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -11,6 +11,7 @@ import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
   ProductRecord,
+  PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
   SupplierFormErrors,
@@ -34,6 +35,7 @@ type PurchaseDraftLine = {
 
 type PurchaseFormState = {
   branch: string;
+  expenseCategory: PurchaseExpenseCategory;
   prefix: string;
   concept: string;
   supplierId: string;
@@ -66,6 +68,7 @@ type PurchaseFormErrors = {
 type PurchaseProductFormState = {
   sku: string;
   name: string;
+  unit: string;
   cost: string;
   salePrice: string;
   minimumStock: string;
@@ -82,8 +85,9 @@ type PurchaseProductFormErrors = {
 type PurchasesSectionProps = {
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
-  onCreateProduct: (product: ProductRecord) => void;
-  onCreateSupplier: (input: SupplierFormState) => SupplierRecord;
+  onCreateProduct: (product: ProductRecord) => Promise<boolean>;
+  onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
+  onDeletePurchase: (purchaseId: string) => Promise<string | null>;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -92,6 +96,7 @@ type PurchasesSectionProps = {
     invoiceNumber: string;
     issuedAt: string;
     dueAt: string;
+    expenseCategory: PurchaseExpenseCategory;
     lines: Array<{
       product: ProductRecord;
       unit: string;
@@ -104,11 +109,16 @@ type PurchasesSectionProps = {
       subtotalMinor: number;
     }>;
     paymentStatus: PurchasePaymentStatus;
-  }) => void;
+  }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   suppliers: SupplierRecord[];
+};
+
+type PurchaseDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 const emptySupplierForm: SupplierFormState = {
@@ -126,6 +136,7 @@ const emptyPurchaseForm: PurchaseFormState = {
   prefix: "",
   concept: "Factura de compra",
   dueAt: "",
+  expenseCategory: "inventory",
   invoiceNumber: "",
   issuedAt: "",
   paymentStatus: "paid",
@@ -143,14 +154,38 @@ const emptyPurchaseProductForm: PurchaseProductFormState = {
   minimumStock: "",
   name: "",
   salePrice: "",
-  sku: ""
+  sku: "",
+  unit: "Unidad"
 };
+
+const productUnitOptions = ["Unidad", "Kg", "Libra", "Metro", "Caja", "Paquete"];
+
+const expenseCategoryOptions: Array<{
+  label: string;
+  value: PurchaseExpenseCategory;
+}> = [
+  { label: "Inventario / proveedores", value: "inventory" },
+  { label: "Servicios", value: "services" },
+  { label: "Nomina", value: "payroll" },
+  { label: "Arriendo", value: "rent" },
+  { label: "Transporte", value: "transport" },
+  { label: "Impuestos", value: "taxes" },
+  { label: "Otros", value: "other" }
+];
+
+function formatExpenseCategory(category: PurchaseExpenseCategory): string {
+  return (
+    expenseCategoryOptions.find((option) => option.value === category)?.label ??
+    "Otros"
+  );
+}
 
 export function PurchasesSection({
   formatCurrency,
   formatIntegerInput,
   onCreateProduct,
   onCreateSupplier,
+  onDeletePurchase,
   onRegisterPurchase,
   parseNonNegativeInteger,
   products,
@@ -168,10 +203,13 @@ export function PurchasesSection({
     useState<PurchaseProductFormState>(emptyPurchaseProductForm);
   const [productErrors, setProductErrors] = useState<PurchaseProductFormErrors>({});
   const [purchaseLines, setPurchaseLines] = useState<PurchaseDraftLine[]>([]);
+  const [deleteCandidate, setDeleteCandidate] = useState<PurchaseRecord | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<PurchaseDeleteNotice | null>(null);
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
   const activeSuppliers = suppliers.filter((supplier) => supplier.active);
+  const activeProducts = products.filter((product) => product.active);
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
@@ -192,6 +230,18 @@ export function PurchasesSection({
   const nextInvoiceNumber = String(purchases.length + 1).padStart(3, "0");
   const nextProductSku = String(products.length + 1).padStart(3, "0");
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
+
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+
+    setForm((currentForm) =>
+      currentForm.productId === selectedProduct.id
+        ? { ...currentForm, unit: selectedProduct.unit }
+        : currentForm
+    );
+  }, [selectedProduct]);
 
   function updateField(field: keyof PurchaseFormState, value: string) {
     setForm((currentForm) => ({
@@ -234,7 +284,7 @@ export function PurchasesSection({
     }));
   }
 
-  function submitSupplier() {
+  async function submitSupplier() {
     const nextErrors: SupplierFormErrors = {};
 
     if (supplierForm.name.trim() === "") {
@@ -247,7 +297,11 @@ export function PurchasesSection({
       return;
     }
 
-    const supplier = onCreateSupplier(supplierForm);
+    const supplier = await onCreateSupplier(supplierForm);
+
+    if (!supplier) {
+      return;
+    }
 
     setForm((currentForm) => ({ ...currentForm, supplierId: supplier.id }));
     setSupplierForm(emptySupplierForm);
@@ -255,7 +309,7 @@ export function PurchasesSection({
     setSupplierFormVisible(false);
   }
 
-  function submitProduct() {
+  async function submitProduct() {
     const nextErrors: PurchaseProductFormErrors = {};
     const minimumStock = parseNonNegativeInteger(productForm.minimumStock);
 
@@ -280,10 +334,16 @@ export function PurchasesSection({
       name: productForm.name.trim(),
       salePriceMinor: 0,
       sku: nextProductSku,
-      stock: 0
+      stock: 0,
+      unit: productForm.unit
     };
 
-    onCreateProduct(product);
+    const created = await onCreateProduct(product);
+
+    if (!created) {
+      return;
+    }
+
     setForm((currentForm) => ({ ...currentForm, productId: product.id }));
     setProductForm(emptyPurchaseProductForm);
     setProductErrors({});
@@ -397,7 +457,7 @@ export function PurchasesSection({
     }));
   }
 
-  function submitPurchase(event: FormEvent<HTMLFormElement>) {
+  async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors: PurchaseFormErrors = {};
@@ -468,10 +528,11 @@ export function PurchasesSection({
       return;
     }
 
-    onRegisterPurchase({
+    const registered = await onRegisterPurchase({
       branch: form.branch.trim() || "Principal",
       concept: form.concept.trim() || "Factura de compra",
       dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
+      expenseCategory: form.expenseCategory,
       invoiceNumber: documentNumber,
       issuedAt: form.issuedAt.trim(),
       lines: linesToRegister.map((line) => ({
@@ -489,9 +550,34 @@ export function PurchasesSection({
       prefix: form.prefix.trim(),
       supplier: selectedSupplier
     });
+
+    if (!registered) {
+      return;
+    }
+
     setErrors({});
     setPurchaseLines([]);
     setForm(emptyPurchaseForm);
+  }
+
+  async function confirmPurchaseDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedPurchase = deleteCandidate;
+    const deleteError = await onDeletePurchase(deletedPurchase.id);
+
+    if (deleteError) {
+      setDeleteNotice({ kind: "error", message: deleteError });
+      return;
+    }
+
+    setDeleteCandidate(null);
+    setDeleteNotice({
+      kind: "success",
+      message: `Compra ${deletedPurchase.invoiceNumber} eliminada.`
+    });
   }
 
   return (
@@ -507,6 +593,7 @@ export function PurchasesSection({
             <TextField error={errors.issuedAt} label="Fecha emision" onChange={(value) => updateField("issuedAt", value)} type="date" value={form.issuedAt} />
             {form.paymentStatus === "pending" ? <TextField error={errors.dueAt} label="Fecha vencimiento" onChange={(value) => updateField("dueAt", value)} type="date" value={form.dueAt} /> : null}
             <div className="field"><span>Forma de pago</span><div aria-label="Estado de factura compra" className="payment-status-group" role="radiogroup"><label htmlFor="compra-pagada"><input checked={form.paymentStatus === "paid"} id="compra-pagada" name="purchase-payment-status" onChange={() => updateField("paymentStatus", "paid")} type="radio" />Pagada</label><label htmlFor="compra-pendiente"><input checked={form.paymentStatus === "pending"} id="compra-pendiente" name="purchase-payment-status" onChange={() => updateField("paymentStatus", "pending")} type="radio" />Pendiente</label></div></div>
+            <label className="field" htmlFor="categoria-egreso-compra"><span>Categoria egreso</span><select id="categoria-egreso-compra" onChange={(event) => updateField("expenseCategory", event.target.value as PurchaseExpenseCategory)} value={form.expenseCategory}>{expenseCategoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <TextField label="Moneda" onChange={() => undefined} readOnly value="Peso colombiano (COP)" />
             <TextField label="Concepto" onChange={(value) => updateField("concept", value)} value={form.concept} />
           </div>
@@ -524,7 +611,7 @@ export function PurchasesSection({
               value={form.productId}
             >
               <option value="">Selecciona un producto</option>
-              {products.map((product) => (
+              {activeProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>
@@ -590,6 +677,20 @@ export function PurchasesSection({
               onChange={(value) => updateProductField("name", value)}
               value={productForm.name}
             />
+            <label className="field" htmlFor="unidad-producto-compra">
+              <span>Unidad producto</span>
+              <select
+                id="unidad-producto-compra"
+                onChange={(event) => updateProductField("unit", event.target.value)}
+                value={productForm.unit}
+              >
+                {productUnitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            </label>
             <TextField
               error={productErrors.minimumStock}
               inputMode="numeric"
@@ -634,6 +735,43 @@ export function PurchasesSection({
         </FormActions>
       </form>
 
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de compra"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              Se eliminara la compra {deleteCandidate.invoiceNumber} y se
+              descontara del inventario lo que ingreso con esta factura. Si ya
+              tiene abonos de proveedor, no se eliminara.
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmPurchaseDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+
       {purchases.length > 0 ? (
         <DataTable ariaLabel="Compras registradas">
           <DataTableHeader
@@ -641,10 +779,12 @@ export function PurchasesSection({
               "Fecha",
               "Proveedor",
               "Factura",
+              "Categoria",
               "Producto",
               "Cantidad",
               "Estado",
-              "Total"
+              "Total",
+              "Acciones"
             ]}
           />
           <tbody>
@@ -653,10 +793,23 @@ export function PurchasesSection({
                 <td>{purchase.occurredAtLabel}</td>
                 <td>{purchase.supplierName}</td>
                 <td>{purchase.invoiceNumber}</td>
+                <td>{formatExpenseCategory(purchase.expenseCategory)}</td>
                 <td>{purchase.productName}</td>
                 <td>{purchase.quantity}</td>
                 <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                 <td>{formatCurrency(purchase.totalMinor)}</td>
+                <td>
+                  <SecondaryActionButton
+                    className="danger-action"
+                    onClick={() => {
+                      setDeleteCandidate(purchase);
+                      setDeleteNotice(null);
+                    }}
+                    variant="compact"
+                  >
+                    Eliminar
+                  </SecondaryActionButton>
+                </td>
               </tr>
             ))}
           </tbody>

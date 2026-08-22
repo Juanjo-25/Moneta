@@ -31,15 +31,24 @@ type CustomersSectionProps = {
   }) => CustomerSummary;
   customers: CustomerRecord[];
   formatCurrency: (minor: number) => string;
-  onCreateCustomer: (input: CustomerFormState) => CustomerRecord;
-  onSetCustomerActive: (customerId: string, active: boolean) => void;
-  onUpdateCustomer: (customerId: string, input: CustomerFormState) => void;
+  onCreateCustomer: (input: CustomerFormState) => Promise<CustomerRecord | null>;
+  onDeleteCustomer: (customerId: string) => Promise<string | null>;
+  onSetCustomerActive: (customerId: string, active: boolean) => Promise<boolean>;
+  onUpdateCustomer: (
+    customerId: string,
+    input: CustomerFormState
+  ) => Promise<boolean>;
   onValidateCustomer: (
     input: CustomerFormState,
     currentCustomerId?: string | undefined
   ) => CustomerFormErrors;
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
+};
+
+type CustomerDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 const emptyCustomerForm: CustomerFormState = {
@@ -55,6 +64,7 @@ export function CustomersSection({
   customers,
   formatCurrency,
   onCreateCustomer,
+  onDeleteCustomer,
   onSetCustomerActive,
   onUpdateCustomer,
   onValidateCustomer,
@@ -68,6 +78,8 @@ export function CustomersSection({
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [editErrors, setEditErrors] = useState<CustomerFormErrors>({});
+  const [deleteCandidate, setDeleteCandidate] = useState<CustomerRecord | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<CustomerDeleteNotice | null>(null);
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filteredCustomers = customers.filter((customer) => {
@@ -130,9 +142,17 @@ export function CustomersSection({
     setEditingCustomerId(customer.id);
     setEditForm(getCustomerFormState(customer));
     setEditErrors({});
+    setDeleteCandidate(null);
   }
 
-  function submitCustomer(event: FormEvent<HTMLFormElement>) {
+  function startDeletingCustomer(customer: CustomerRecord) {
+    setDeleteCandidate(customer);
+    setDeleteNotice(null);
+    setEditingCustomerId(null);
+    setEditErrors({});
+  }
+
+  async function submitCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextErrors = onValidateCustomer(form);
@@ -143,13 +163,18 @@ export function CustomersSection({
       return;
     }
 
-    onCreateCustomer(form);
+    const customer = await onCreateCustomer(form);
+
+    if (!customer) {
+      return;
+    }
+
     setForm(emptyCustomerForm);
     setErrors({});
     setFormVisible(false);
   }
 
-  function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
+  async function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!editingCustomer) {
@@ -164,9 +189,46 @@ export function CustomersSection({
       return;
     }
 
-    onUpdateCustomer(editingCustomer.id, editForm);
+    const updated = await onUpdateCustomer(editingCustomer.id, editForm);
+
+    if (!updated) {
+      return;
+    }
+
     setEditErrors({});
     setEditingCustomerId(null);
+  }
+
+  async function confirmCustomerDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedCustomer = deleteCandidate;
+    const error = await onDeleteCustomer(deletedCustomer.id);
+
+    if (error) {
+      setDeleteNotice({
+        kind: "error",
+        message: error
+      });
+      return;
+    }
+
+    if (selectedCustomerId === deletedCustomer.id) {
+      setSelectedCustomerId(null);
+    }
+
+    if (editingCustomerId === deletedCustomer.id) {
+      setEditingCustomerId(null);
+      setEditErrors({});
+    }
+
+    setDeleteCandidate(null);
+    setDeleteNotice({
+      kind: "success",
+      message: `${deletedCustomer.name} eliminado de clientes.`
+    });
   }
 
   return (
@@ -228,6 +290,42 @@ export function CustomersSection({
         </form>
       ) : null}
 
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de cliente"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              Se quitara {deleteCandidate.name} del catalogo activo de clientes. Las
+              ventas, facturas y cartera historica conservaran sus datos guardados.
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmCustomerDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+
       {customers.length === 0 ? (
         <EmptyState
           body="Crea clientes para ventas y cartera."
@@ -272,6 +370,12 @@ export function CustomersSection({
                     >
                       Ver cliente {customer.name}
                     </SecondaryActionButton>
+                    <SecondaryActionButton
+                      onClick={() => startDeletingCustomer(customer)}
+                      variant="compact"
+                    >
+                      Eliminar
+                    </SecondaryActionButton>
                   </td>
                 </tr>
               );
@@ -301,12 +405,21 @@ export function CustomersSection({
                 Editar cliente
               </SecondaryActionButton>
               <SecondaryActionButton
-                onClick={() =>
-                  onSetCustomerActive(selectedCustomer.id, !selectedCustomer.active)
-                }
+                onClick={() => {
+                  void onSetCustomerActive(
+                    selectedCustomer.id,
+                    !selectedCustomer.active
+                  );
+                }}
                 variant="compact"
               >
                 {selectedCustomer.active ? "Desactivar cliente" : "Reactivar cliente"}
+              </SecondaryActionButton>
+              <SecondaryActionButton
+                onClick={() => startDeletingCustomer(selectedCustomer)}
+                variant="compact"
+              >
+                Eliminar cliente
               </SecondaryActionButton>
             </FormActions>
           </div>

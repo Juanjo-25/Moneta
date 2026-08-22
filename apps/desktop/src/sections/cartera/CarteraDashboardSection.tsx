@@ -2,12 +2,19 @@ import { useState } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
+import { FormActions } from "../../components/FormActions";
 import { PayablesTable } from "../../components/PayablesTable";
+import { PrimaryActionButton } from "../../components/PrimaryActionButton";
+import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { ViewSwitch } from "../../components/ViewSwitch";
 import type { DueMetadata } from "../../lib/dates";
+import type { CarteraPdfResult } from "../../cartera-pdf";
 import type {
+  AppSettings,
+  PurchaseRecord,
   ReceivableRecord,
+  SaleRecord,
   SupplierPayableRecord,
   SupplierPayableStatus
 } from "../../types";
@@ -30,17 +37,33 @@ type CarteraDashboardSectionProps = {
   formatIntegerInput: (value: string) => string;
   formatPayableStatus: (status: SupplierPayableStatus) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
+  onDeleteReceivable: (receivableId: string) => Promise<string | null>;
+  onDeleteSupplierPayable: (payableId: string) => Promise<string | null>;
   onRegisterSupplierPayment: (input: {
     payableId: string;
     amountMinor: number;
-  }) => void;
+  }) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
+  purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
+  sales: SaleRecord[];
   supplierPayables: SupplierPayableRecord[];
+  settings: AppSettings;
 };
 
 function getOpenPayables(payables: SupplierPayableRecord[]): SupplierPayableRecord[] {
   return payables.filter((payable) => payable.balanceMinor > 0);
+}
+
+function getReceivableInvoiceNumber(
+  receivable: ReceivableRecord,
+  sales: SaleRecord[]
+): string {
+  return (
+    receivable.invoiceNumber ??
+    sales.find((sale) => sale.id === receivable.saleId)?.invoiceNumber ??
+    receivable.saleId
+  );
 }
 
 export function CarteraDashboardSection({
@@ -49,12 +72,22 @@ export function CarteraDashboardSection({
   formatIntegerInput,
   formatPayableStatus,
   getDueMetadata,
+  onDeleteReceivable,
+  onDeleteSupplierPayable,
   onRegisterSupplierPayment,
   parseNonNegativeInteger,
+  purchases,
   receivables,
-  supplierPayables
+  sales,
+  supplierPayables,
+  settings
 }: CarteraDashboardSectionProps) {
   const [activeView, setActiveView] = useState<CarteraView>("receivables");
+  const [carteraPreview, setCarteraPreview] = useState<CarteraPdfResult | null>(
+    null
+  );
+  const [carteraPdfError, setCarteraPdfError] = useState("");
+  const [generatingCarteraPdf, setGeneratingCarteraPdf] = useState(false);
   const openPayables = getOpenPayables(supplierPayables);
   const sortedReceivables = [...receivables].sort((left, right) =>
     compareDueDates(left.dueAt, right.dueAt)
@@ -78,7 +111,7 @@ export function CarteraDashboardSection({
       id: receivable.id,
       metadata: getDueMetadata(receivable.dueAt),
       partyName: receivable.customerName,
-      reference: receivable.saleId
+      reference: getReceivableInvoiceNumber(receivable, sales)
     })),
     ...openPayables.map((payable) => ({
       balanceMinor: payable.balanceMinor,
@@ -101,9 +134,71 @@ export function CarteraDashboardSection({
   const upcomingCount = alertItems.filter(
     (item) => item.metadata.alert === "upcoming"
   ).length;
+  const printableItemsCount = receivables.length + openPayables.length;
+
+  async function generateCarteraPrintablePdf() {
+    if (printableItemsCount === 0 || generatingCarteraPdf) {
+      return;
+    }
+
+    setGeneratingCarteraPdf(true);
+    setCarteraPdfError("");
+
+    try {
+      const { generateCarteraPdf } = await import("../../cartera-pdf");
+      const pdf = generateCarteraPdf({
+        purchases,
+        receivables,
+        sales,
+        settings,
+        supplierPayables
+      });
+
+      setCarteraPreview(pdf);
+    } catch {
+      setCarteraPreview(null);
+      setCarteraPdfError("No se pudo generar el PDF de cartera.");
+    } finally {
+      setGeneratingCarteraPdf(false);
+    }
+  }
 
   return (
     <section className="section-panel cartera-dashboard">
+      <section className="printable-report-toolbar section-surface" aria-label="Impresion de cartera">
+        <div>
+          <h2>Cartera para imprimir</h2>
+          <span>{printableItemsCount} cuentas abiertas</span>
+        </div>
+        <SecondaryActionButton
+          disabled={printableItemsCount === 0 || generatingCarteraPdf}
+          onClick={() => void generateCarteraPrintablePdf()}
+        >
+          {generatingCarteraPdf ? "Generando..." : "Imprimir cartera"}
+        </SecondaryActionButton>
+      </section>
+
+      {carteraPdfError ? (
+        <p className="form-error" role="alert">
+          {carteraPdfError}
+        </p>
+      ) : null}
+
+      {carteraPreview ? (
+        <section className="invoice-preview" aria-label="PDF de cartera">
+          <div className="invoice-preview-header">
+            <strong>Cartera generada</strong>
+            <a download={carteraPreview.fileName} href={carteraPreview.dataUri}>
+              Descargar PDF
+            </a>
+          </div>
+          <iframe
+            src={carteraPreview.dataUri}
+            title="Vista previa de cartera PDF"
+          />
+        </section>
+      ) : null}
+
       <section className="cartera-summary-shell" aria-label="Resumen de cartera">
         <div className="cartera-summary">
           <SummaryCard
@@ -138,7 +233,9 @@ export function CarteraDashboardSection({
           <ReceivablesTable
             formatCurrency={formatCurrency}
             getDueMetadata={getDueMetadata}
+            onDeleteReceivable={onDeleteReceivable}
             receivables={sortedReceivables}
+            sales={sales}
           />
         </section>
       ) : (
@@ -151,6 +248,7 @@ export function CarteraDashboardSection({
             formatIntegerInput={formatIntegerInput}
             formatPayableStatus={formatPayableStatus}
             getDueMetadata={getDueMetadata}
+            onDeleteSupplierPayable={onDeleteSupplierPayable}
             onRegisterSupplierPayment={onRegisterSupplierPayment}
             parseNonNegativeInteger={parseNonNegativeInteger}
             supplierPayables={sortedPayables}
@@ -199,58 +297,157 @@ function CarteraAlerts({
 type ReceivablesTableProps = {
   formatCurrency: (minor: number) => string;
   getDueMetadata: (dueAt: string) => DueMetadata;
+  onDeleteReceivable: (receivableId: string) => Promise<string | null>;
   receivables: ReceivableRecord[];
+  sales: SaleRecord[];
+};
+
+type ReceivableDeleteNotice = {
+  kind: "error" | "success";
+  message: string;
 };
 
 function ReceivablesTable({
   formatCurrency,
   getDueMetadata,
-  receivables
+  onDeleteReceivable,
+  receivables,
+  sales
 }: ReceivablesTableProps) {
+  const [deleteCandidate, setDeleteCandidate] = useState<ReceivableRecord | null>(
+    null
+  );
+  const [deleteNotice, setDeleteNotice] = useState<ReceivableDeleteNotice | null>(
+    null
+  );
+
+  async function confirmReceivableDeletion() {
+    if (!deleteCandidate) {
+      return;
+    }
+
+    const deletedReceivable = deleteCandidate;
+    const deleteError = await onDeleteReceivable(deletedReceivable.id);
+
+    if (deleteError) {
+      setDeleteNotice({ kind: "error", message: deleteError });
+      return;
+    }
+
+    setDeleteCandidate(null);
+    setDeleteNotice({
+      kind: "success",
+      message: `Cuenta por cobrar ${deletedReceivable.saleId} eliminada.`
+    });
+  }
+
   if (receivables.length === 0) {
     return (
-      <EmptyState
-        body="Las ventas pendientes de pago apareceran aqui."
-        className="section-empty"
-        title="Sin cartera por cobrar"
-      />
+      <>
+        {deleteNotice ? (
+          <p
+            className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+            role={deleteNotice.kind === "error" ? "alert" : "status"}
+          >
+            {deleteNotice.message}
+          </p>
+        ) : null}
+        <EmptyState
+          body="Las ventas pendientes de pago apareceran aqui."
+          className="section-empty"
+          title="Sin cartera por cobrar"
+        />
+      </>
     );
   }
 
   return (
-    <DataTable ariaLabel="Cartera por cobrar">
-      <DataTableHeader
-        labels={[
-          "Cliente",
-          "Venta",
-          "Vence",
-          "Original",
-          "Recibido",
-          "Saldo",
-          "Rango",
-          "Alerta",
-          "Estado"
-        ]}
-      />
-      <tbody>
-        {receivables.map((receivable) => {
-          const dueMetadata = getDueMetadata(receivable.dueAt);
+    <>
+      <DataTable ariaLabel="Cartera por cobrar">
+        <DataTableHeader
+          labels={[
+            "Cliente",
+            "Factura",
+            "Vence",
+            "Original",
+            "Recibido",
+            "Saldo",
+            "Rango",
+            "Alerta",
+            "Estado",
+            "Acciones"
+          ]}
+        />
+        <tbody>
+          {receivables.map((receivable) => {
+            const dueMetadata = getDueMetadata(receivable.dueAt);
+            const invoiceNumber = getReceivableInvoiceNumber(receivable, sales);
 
-          return (
-            <tr key={receivable.id}>
-              <td>{receivable.customerName}</td>
-              <td>{receivable.saleId}</td>
-              <td>{receivable.dueAt || "Sin vencimiento"}</td>
-              <td>{formatCurrency(receivable.originalAmountMinor)}</td>
-              <td>{formatCurrency(receivable.paidAmountMinor)}</td>
-              <td>{formatCurrency(receivable.balanceMinor)}</td>
-              <td>{dueMetadata.bucketLabel}</td>
-              <td>{dueMetadata.alertLabel}</td>
-              <td>{receivable.status === "partial" ? "Abonada" : "Pendiente"}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </DataTable>
+            return (
+              <tr key={receivable.id}>
+                <td>{receivable.customerName}</td>
+                <td>{invoiceNumber}</td>
+                <td>{receivable.dueAt || "Sin vencimiento"}</td>
+                <td>{formatCurrency(receivable.originalAmountMinor)}</td>
+                <td>{formatCurrency(receivable.paidAmountMinor)}</td>
+                <td>{formatCurrency(receivable.balanceMinor)}</td>
+                <td>{dueMetadata.bucketLabel}</td>
+                <td>{dueMetadata.alertLabel}</td>
+                <td>{receivable.status === "partial" ? "Abonada" : "Pendiente"}</td>
+                <td>
+                  <SecondaryActionButton
+                    className="danger-action"
+                    onClick={() => {
+                      setDeleteCandidate(receivable);
+                      setDeleteNotice(null);
+                    }}
+                    variant="compact"
+                  >
+                    Eliminar cartera
+                  </SecondaryActionButton>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </DataTable>
+
+      {deleteNotice ? (
+        <p
+          className={deleteNotice.kind === "error" ? "form-error" : "form-success"}
+          role={deleteNotice.kind === "error" ? "alert" : "status"}
+        >
+          {deleteNotice.message}
+        </p>
+      ) : null}
+
+      {deleteCandidate ? (
+        <section
+          aria-label="Confirmar eliminacion de cuenta por cobrar"
+          className="product-delete-confirmation section-surface"
+        >
+          <div>
+            <h2>Confirmar eliminacion</h2>
+            <p>
+              Se quitara la venta {deleteCandidate.saleId} de cartera por cobrar.
+              La venta historica seguira registrada. Si ya tiene recibos de caja,
+              no se eliminara.
+            </p>
+          </div>
+          <FormActions>
+            <SecondaryActionButton
+              onClick={() => setDeleteCandidate(null)}
+              type="button"
+              variant="compact"
+            >
+              Cancelar
+            </SecondaryActionButton>
+            <PrimaryActionButton onClick={confirmReceivableDeletion} type="button">
+              Confirmar eliminacion
+            </PrimaryActionButton>
+          </FormActions>
+        </section>
+      ) : null}
+    </>
   );
 }
