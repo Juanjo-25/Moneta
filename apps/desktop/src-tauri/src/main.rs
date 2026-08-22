@@ -246,6 +246,7 @@ struct ReceivableRecord {
     customer_id: String,
     customer_name: String,
     sale_id: String,
+    invoice_number: Option<String>,
     amount_minor: i64,
     original_amount_minor: i64,
     paid_amount_minor: i64,
@@ -1519,19 +1520,21 @@ fn list_receivables(app: tauri::AppHandle) -> Result<Vec<ReceivableRecord>, Stri
         .prepare(
             "
             SELECT
-              id,
-              customer_id,
-              customer_name,
-              sale_id,
-              amount_minor,
-              original_amount_minor,
-              paid_amount_minor,
-              balance_minor,
-              due_at,
-              status
+              receivables.id,
+              receivables.customer_id,
+              receivables.customer_name,
+              receivables.sale_id,
+              COALESCE(sales.invoice_number, receivables.sale_id) AS invoice_number,
+              receivables.amount_minor,
+              receivables.original_amount_minor,
+              receivables.paid_amount_minor,
+              receivables.balance_minor,
+              receivables.due_at,
+              receivables.status
             FROM receivables
-            WHERE balance_minor > 0
-            ORDER BY due_at ASC, id ASC
+            LEFT JOIN sales ON sales.id = receivables.sale_id
+            WHERE receivables.balance_minor > 0
+            ORDER BY receivables.due_at ASC, receivables.id ASC
             ",
         )
         .map_err(|error| {
@@ -1545,12 +1548,13 @@ fn list_receivables(app: tauri::AppHandle) -> Result<Vec<ReceivableRecord>, Stri
                 customer_id: row.get(1)?,
                 customer_name: row.get(2)?,
                 sale_id: row.get(3)?,
-                amount_minor: row.get(4)?,
-                original_amount_minor: row.get(5)?,
-                paid_amount_minor: row.get(6)?,
-                balance_minor: row.get(7)?,
-                due_at: row.get(8)?,
-                status: row.get(9)?,
+                invoice_number: row.get(4)?,
+                amount_minor: row.get(5)?,
+                original_amount_minor: row.get(6)?,
+                paid_amount_minor: row.get(7)?,
+                balance_minor: row.get(8)?,
+                due_at: row.get(9)?,
+                status: row.get(10)?,
             })
         })
         .map_err(|error| format!("No se pudo leer la cartera por cobrar: {error}"))?;

@@ -50,6 +50,7 @@ const carteraInput: CarteraPdfInput = {
       customerName: "Carlos Ruiz",
       dueAt: "2026-07-20",
       id: "receivable-1",
+      invoiceNumber: "FV-2026-001",
       originalAmountMinor: 13500,
       paidAmountMinor: 5000,
       saleId: "sale-1",
@@ -59,6 +60,7 @@ const carteraInput: CarteraPdfInput = {
   sales: [
     {
       id: "sale-1",
+      invoiceNumber: "FV-2026-001",
       issuedAt: "2026-07-10"
     } as SaleRecord
   ],
@@ -99,9 +101,11 @@ describe("cartera PDF", () => {
     expect(renderedText).toContain("Total por cobrar");
     expect(renderedText).toContain("Total por pagar");
     expect(renderedText).toContain("Por cobrar");
+    expect(renderedText).toContain("Factura");
     expect(renderedText).toContain("Emitida");
     expect(renderedText).toContain("Carlos Ruiz");
-    expect(renderedText).toContain("sale-1");
+    expect(renderedText).toContain("FV-2026-001");
+    expect(renderedText).not.toContain("sale-1");
     expect(renderedText).toContain("2026-07-10");
     expect(renderedText).toContain("$ 8.500");
     expect(renderedText).toContain("Por pagar");

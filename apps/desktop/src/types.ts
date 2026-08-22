@@ -123,6 +123,7 @@ export type ReceivableRecord = {
   customerId: string;
   customerName: string;
   saleId: string;
+  invoiceNumber?: string | undefined;
   amountMinor: number;
   originalAmountMinor: number;
   paidAmountMinor: number;

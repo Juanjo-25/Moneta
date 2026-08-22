@@ -55,6 +55,17 @@ function getOpenPayables(payables: SupplierPayableRecord[]): SupplierPayableReco
   return payables.filter((payable) => payable.balanceMinor > 0);
 }
 
+function getReceivableInvoiceNumber(
+  receivable: ReceivableRecord,
+  sales: SaleRecord[]
+): string {
+  return (
+    receivable.invoiceNumber ??
+    sales.find((sale) => sale.id === receivable.saleId)?.invoiceNumber ??
+    receivable.saleId
+  );
+}
+
 export function CarteraDashboardSection({
   compareDueDates,
   formatCurrency,
@@ -100,7 +111,7 @@ export function CarteraDashboardSection({
       id: receivable.id,
       metadata: getDueMetadata(receivable.dueAt),
       partyName: receivable.customerName,
-      reference: receivable.saleId
+      reference: getReceivableInvoiceNumber(receivable, sales)
     })),
     ...openPayables.map((payable) => ({
       balanceMinor: payable.balanceMinor,
@@ -224,6 +235,7 @@ export function CarteraDashboardSection({
             getDueMetadata={getDueMetadata}
             onDeleteReceivable={onDeleteReceivable}
             receivables={sortedReceivables}
+            sales={sales}
           />
         </section>
       ) : (
@@ -287,6 +299,7 @@ type ReceivablesTableProps = {
   getDueMetadata: (dueAt: string) => DueMetadata;
   onDeleteReceivable: (receivableId: string) => Promise<string | null>;
   receivables: ReceivableRecord[];
+  sales: SaleRecord[];
 };
 
 type ReceivableDeleteNotice = {
@@ -298,7 +311,8 @@ function ReceivablesTable({
   formatCurrency,
   getDueMetadata,
   onDeleteReceivable,
-  receivables
+  receivables,
+  sales
 }: ReceivablesTableProps) {
   const [deleteCandidate, setDeleteCandidate] = useState<ReceivableRecord | null>(
     null
@@ -353,7 +367,7 @@ function ReceivablesTable({
         <DataTableHeader
           labels={[
             "Cliente",
-            "Venta",
+            "Factura",
             "Vence",
             "Original",
             "Recibido",
@@ -367,11 +381,12 @@ function ReceivablesTable({
         <tbody>
           {receivables.map((receivable) => {
             const dueMetadata = getDueMetadata(receivable.dueAt);
+            const invoiceNumber = getReceivableInvoiceNumber(receivable, sales);
 
             return (
               <tr key={receivable.id}>
                 <td>{receivable.customerName}</td>
-                <td>{receivable.saleId}</td>
+                <td>{invoiceNumber}</td>
                 <td>{receivable.dueAt || "Sin vencimiento"}</td>
                 <td>{formatCurrency(receivable.originalAmountMinor)}</td>
                 <td>{formatCurrency(receivable.paidAmountMinor)}</td>

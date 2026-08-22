@@ -182,7 +182,7 @@ function renderReceivableHeader(doc: jsPDF, y: number): void {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
   writeText(doc, "Cliente", 16, y + 5);
-  writeText(doc, "Venta", 58, y + 5);
+  writeText(doc, "Factura", 58, y + 5);
   writeText(doc, "Emitida", 84, y + 5);
   writeText(doc, "Vence", 110, y + 5);
   writeText(doc, "Original", 142, y + 5, { align: "right" });
@@ -193,6 +193,7 @@ function renderReceivableHeader(doc: jsPDF, y: number): void {
 function renderReceivableRow(
   doc: jsPDF,
   receivable: ReceivableRecord,
+  invoiceNumber: string | undefined,
   issuedAt: string | undefined,
   y: number
 ): void {
@@ -204,7 +205,12 @@ function renderReceivableRow(
   writeText(doc, fitText(receivable.customerName, 26), 16, y + 5, {
     maxWidth: 40
   });
-  writeText(doc, fitText(receivable.saleId, 13), 58, y + 5);
+  writeText(
+    doc,
+    fitText(receivable.invoiceNumber ?? invoiceNumber ?? receivable.saleId, 13),
+    58,
+    y + 5
+  );
   writeText(doc, dateValue(issuedAt), 84, y + 5);
   writeText(doc, dateValue(receivable.dueAt), 110, y + 5);
   writeText(doc, formatCurrency(receivable.originalAmountMinor), 142, y + 5, {
@@ -264,9 +270,7 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
   const company = getCompanySettings(input.settings);
   const accent = parseHexColor(company.accentColor);
   const generatedAtLabel = getGeneratedAtLabel(input.generatedAtLabel);
-  const saleIssuedAtById = new Map(
-    (input.sales ?? []).map((sale) => [sale.id, sale.issuedAt])
-  );
+  const salesById = new Map((input.sales ?? []).map((sale) => [sale.id, sale]));
   const purchaseIssuedAtById = new Map(
     (input.purchases ?? []).map((purchase) => [purchase.id, purchase.issuedAt])
   );
@@ -323,7 +327,8 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
       renderReceivableRow(
         doc,
         receivable,
-        saleIssuedAtById.get(receivable.saleId),
+        salesById.get(receivable.saleId)?.invoiceNumber,
+        salesById.get(receivable.saleId)?.issuedAt,
         cursorY
       );
       cursorY += 8;

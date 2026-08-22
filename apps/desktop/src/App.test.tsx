@@ -1660,7 +1660,8 @@ describe("App navigation", () => {
             expect.objectContaining({
               balanceMinor: 13500,
               customerName: "Carlos Ruiz",
-              dueAt: "2026-07-20"
+              dueAt: "2026-07-20",
+              invoiceNumber: "001"
             })
           ],
           sales: [

@@ -1591,6 +1591,7 @@ export function App() {
             id: `receivable-${saleId}`,
             originalAmountMinor: totalMinor,
             paidAmountMinor: 0,
+            invoiceNumber: input.invoiceNumber,
             saleId,
             status: "pending"
           }
@@ -1756,6 +1757,7 @@ export function App() {
             id: `receivable-${input.sale.id}`,
             originalAmountMinor: input.sale.totalMinor,
             paidAmountMinor: 0,
+            invoiceNumber: input.sale.invoiceNumber,
             saleId: input.sale.id,
             status: "pending"
           }
@@ -2304,6 +2306,7 @@ export function App() {
       id: selectedReceipt.receivableId,
       originalAmountMinor,
       paidAmountMinor,
+      invoiceNumber: fallbackSale?.invoiceNumber ?? selectedReceipt.saleId,
       saleId: selectedReceipt.saleId,
       status: getReceivableStatus(paidAmountMinor)
     };
