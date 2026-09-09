@@ -321,6 +321,14 @@ function isSameLocalMonth(left: Date, right: Date): boolean {
   );
 }
 
+function getSaleIssuedDate(sale: SaleRecord): Date {
+  return parseLocalDate(sale.issuedAt) ?? new Date(sale.occurredAtMs);
+}
+
+function getCreditNoteIssuedDate(creditNote: CreditNoteRecord): Date {
+  return parseLocalDate(creditNote.issuedAt) ?? new Date(creditNote.occurredAtMs);
+}
+
 function getSupplierPayableStatus(input: {
   originalAmountMinor: number;
   paidAmountMinor: number;
@@ -612,14 +620,14 @@ export function App() {
   const today = new Date();
   const salesTodayTotal = sales.reduce(
     (total, sale) =>
-      isSameLocalDay(new Date(sale.occurredAtMs), today)
+      isSameLocalDay(getSaleIssuedDate(sale), today)
         ? total + sale.totalMinor
         : total,
     0
   );
   const salesMonthTotal = sales.reduce(
     (total, sale) =>
-      isSameLocalMonth(new Date(sale.occurredAtMs), today)
+      isSameLocalMonth(getSaleIssuedDate(sale), today)
         ? total + sale.totalMinor
         : total,
     0
@@ -629,14 +637,14 @@ export function App() {
   );
   const creditNotesTodayTotal = confirmedCreditNotes.reduce(
     (total, creditNote) =>
-      isSameLocalDay(new Date(creditNote.occurredAtMs), today)
+      isSameLocalDay(getCreditNoteIssuedDate(creditNote), today)
         ? total + creditNote.totalMinor
         : total,
     0
   );
   const creditNotesMonthTotal = confirmedCreditNotes.reduce(
     (total, creditNote) =>
-      isSameLocalMonth(new Date(creditNote.occurredAtMs), today)
+      isSameLocalMonth(getCreditNoteIssuedDate(creditNote), today)
         ? total + creditNote.totalMinor
         : total,
     0

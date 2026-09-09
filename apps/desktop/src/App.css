@@ -467,6 +467,29 @@ button,
   background: #fcfcfd;
 }
 
+.sales-history { margin-bottom: 24px; }
+.sales-history > p { color: var(--text-secondary); margin: 0 0 20px; }
+.sales-history-controls { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.sales-history-controls .field { min-width: 210px; }
+.sales-history-month { display: flex; align-items: center; gap: 24px; padding: 18px; background: var(--surface-muted); border: 1px solid var(--border-soft); border-radius: var(--radius-control); }
+.sales-history-month > div:first-child { flex: 1; }
+.sales-history-month > div:not(.sale-actions-menu) { display: grid; gap: 6px; }
+.sales-history-month span, .sales-history-sale small { color: var(--text-secondary); font-size: 13px; }
+.sales-history-list { display: grid; gap: 10px; margin-top: 18px; }
+.sales-history-sale { border: 1px solid var(--border-soft); border-radius: var(--radius-control); }
+.sales-history-sale summary { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 2fr) 100px auto; align-items: center; gap: 16px; padding: 16px; cursor: pointer; }
+.sales-history-sale summary > span:first-child { display: grid; gap: 5px; }
+.sales-history-sale summary > span:first-child strong::before { content: "▸ "; }
+.sales-history-sale[open] summary > span:first-child strong::before { content: "▾ "; }
+.sales-history-sale summary:hover { background: var(--surface-muted); }
+.sales-history-sale summary:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
+.sales-history-detail { padding: 0 16px 16px; }
+.sales-history-table { overflow-x: auto; }
+@media (max-width: 700px) {
+  .sales-history-sale summary { grid-template-columns: 1fr 1fr; }
+  .sales-history-month { gap: 12px; padding: 12px; }
+}
+
 .empty-state {
   display: grid;
   place-items: center;

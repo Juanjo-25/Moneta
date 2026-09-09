@@ -155,6 +155,7 @@ describe("App navigation", () => {
 
   afterEach(() => {
     setTauriInvoke();
+    vi.useRealTimers();
   });
 
   it("switches active section from the sidebar", async () => {
@@ -1539,6 +1540,39 @@ describe("App navigation", () => {
     expect(within(productPieChart).getAllByText("Arroz libra").length).toBeGreaterThan(0);
     expect(screen.getByText("Ana Perez")).toBeTruthy();
     expect(screen.getByText("Ana Perez").closest(".dashboard-ranking-row")).toBeTruthy();
+    expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
+  });
+
+  it("uses the sale issue date for dashboard month totals", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date(2026, 8, 5, 10, 0, 0));
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Agosto");
+    await user.type(screen.getByLabelText("NIT o C.C."), "900123456");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.clear(screen.getByLabelText("Fecha de elaboracion"));
+    await user.type(screen.getByLabelText("Fecha de elaboracion"), "2026-08-15");
+    await user.selectOptions(
+      screen.getByLabelText("Producto"),
+      screen.getByRole("option", { name: "Arroz libra" })
+    );
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.click(screen.getByLabelText("Pagada"));
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
+
+    expect(screen.getByText("Ventas de hoy").nextElementSibling?.textContent).toMatch(/\$\s*0/);
+    expect(screen.getByText("Ventas del mes").nextElementSibling?.textContent).toMatch(/\$\s*0/);
+    expect((screen.getByLabelText("Periodo 2 ventas diarias") as HTMLSelectElement).value).toBe(
+      "2026-08"
+    );
     expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
   });
 

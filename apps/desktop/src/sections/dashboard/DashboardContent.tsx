@@ -2,6 +2,8 @@ import { useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
 import { PanelHeader } from "../../components/PanelHeader";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
+import { parseLocalDate } from "../../lib/dates";
+import { SalesHistory } from "./SalesHistory";
 import type { CreditNoteRecord, ProductRecord, SaleRecord } from "../../types";
 
 type DashboardTrendRow = {
@@ -192,6 +194,8 @@ export function DashboardContent({
         </div>
       </section>
 
+      <SalesHistory sales={sales} formatCurrency={formatCurrency} />
+
       <section className="dashboard-operational-grid" aria-label="Alertas operativas">
         <div className="panel dashboard-operational-panel">
           <PanelHeader
@@ -233,6 +237,14 @@ function isSameLocalMonth(left: Date, right: Date): boolean {
   );
 }
 
+function getSaleDashboardDate(sale: SaleRecord): Date {
+  return parseLocalDate(sale.issuedAt) ?? new Date(sale.occurredAtMs);
+}
+
+function getCreditNoteDashboardDate(creditNote: CreditNoteRecord): Date {
+  return parseLocalDate(creditNote.issuedAt) ?? new Date(creditNote.occurredAtMs);
+}
+
 function buildDashboardDailySalesRows(
   sales: SaleRecord[],
   creditNotes: CreditNoteRecord[],
@@ -241,7 +253,7 @@ function buildDashboardDailySalesRows(
   const totalsByDay = new Map<number, number>();
 
   sales.forEach((sale) => {
-    const occurredAt = new Date(sale.occurredAtMs);
+    const occurredAt = getSaleDashboardDate(sale);
 
     if (!isSameLocalMonth(occurredAt, referenceDate)) {
       return;
@@ -254,7 +266,7 @@ function buildDashboardDailySalesRows(
   });
 
   creditNotes.forEach((creditNote) => {
-    const occurredAt = new Date(creditNote.occurredAtMs);
+    const occurredAt = getCreditNoteDashboardDate(creditNote);
 
     if (!isSameLocalMonth(occurredAt, referenceDate)) {
       return;
@@ -321,10 +333,10 @@ function buildDashboardPeriodOptions(
   ]);
 
   sales.forEach((sale) => {
-    periodValues.add(formatDashboardPeriodValue(new Date(sale.occurredAtMs)));
+    periodValues.add(formatDashboardPeriodValue(getSaleDashboardDate(sale)));
   });
   creditNotes.forEach((creditNote) => {
-    periodValues.add(formatDashboardPeriodValue(new Date(creditNote.occurredAtMs)));
+    periodValues.add(formatDashboardPeriodValue(getCreditNoteDashboardDate(creditNote)));
   });
 
   return [...periodValues]
@@ -344,7 +356,7 @@ function buildDashboardMonthlySalesRows(
   const formatter = new Intl.DateTimeFormat("es-CO", { month: "short" });
 
   sales.forEach((sale) => {
-    const occurredAt = new Date(sale.occurredAtMs);
+    const occurredAt = getSaleDashboardDate(sale);
 
     if (occurredAt.getFullYear() !== referenceDate.getFullYear()) {
       return;
@@ -357,7 +369,7 @@ function buildDashboardMonthlySalesRows(
   });
 
   creditNotes.forEach((creditNote) => {
-    const occurredAt = new Date(creditNote.occurredAtMs);
+    const occurredAt = getCreditNoteDashboardDate(creditNote);
 
     if (occurredAt.getFullYear() !== referenceDate.getFullYear()) {
       return;
