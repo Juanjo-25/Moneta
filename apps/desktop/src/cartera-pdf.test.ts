@@ -44,6 +44,32 @@ const carteraInput: CarteraPdfInput = {
   ],
   receivables: [
     {
+      amountMinor: 25000,
+      balanceMinor: 25000,
+      customerId: "customer-2",
+      customerName: "Alquiler Amaga",
+      dueAt: "2026-08-05",
+      id: "receivable-2",
+      invoiceNumber: "FV-2026-002",
+      originalAmountMinor: 25000,
+      paidAmountMinor: 0,
+      saleId: "sale-2",
+      status: "pending"
+    },
+    {
+      amountMinor: 18000,
+      balanceMinor: 12000,
+      customerId: "customer-2",
+      customerName: "Alquiler Amaga",
+      dueAt: "2026-07-15",
+      id: "receivable-3",
+      invoiceNumber: "FV-2026-003",
+      originalAmountMinor: 18000,
+      paidAmountMinor: 6000,
+      saleId: "sale-3",
+      status: "partial"
+    },
+    {
       amountMinor: 13500,
       balanceMinor: 8500,
       customerId: "customer-1",
@@ -62,6 +88,16 @@ const carteraInput: CarteraPdfInput = {
       id: "sale-1",
       invoiceNumber: "FV-2026-001",
       issuedAt: "2026-07-10"
+    } as SaleRecord,
+    {
+      id: "sale-2",
+      invoiceNumber: "FV-2026-002",
+      issuedAt: "2026-08-01"
+    } as SaleRecord,
+    {
+      id: "sale-3",
+      invoiceNumber: "FV-2026-003",
+      issuedAt: "2026-07-01"
     } as SaleRecord
   ],
   supplierPayables: [
@@ -95,6 +131,14 @@ describe("cartera PDF", () => {
     const renderedText = textMock.mock.calls
       .map((call) => String(call[0]))
       .join(" ");
+    const renderedValues = textMock.mock.calls.map((call) => String(call[0]));
+    const getRenderedIndex = (text: string) => {
+      const index = renderedValues.findIndex((value) => value.includes(text));
+
+      expect(index).toBeGreaterThanOrEqual(0);
+
+      return index;
+    };
 
     expect(renderedText).toContain("CARTERA PENDIENTE");
     expect(renderedText).toContain("Generado: 14/08/2026, 8:00 a. m.");
@@ -103,7 +147,14 @@ describe("cartera PDF", () => {
     expect(renderedText).toContain("Por cobrar");
     expect(renderedText).toContain("Factura");
     expect(renderedText).toContain("Emitida");
+    expect(renderedText).toContain("Cliente: Alquiler Amaga");
     expect(renderedText).toContain("Carlos Ruiz");
+    expect(getRenderedIndex("Cliente: Alquiler Amaga")).toBeLessThan(
+      getRenderedIndex("Cliente: Carlos Ruiz")
+    );
+    expect(getRenderedIndex("FV-2026-003")).toBeLessThan(
+      getRenderedIndex("FV-2026-002")
+    );
     expect(renderedText).toContain("FV-2026-001");
     expect(renderedText).not.toContain("sale-1");
     expect(renderedText).toContain("2026-07-10");

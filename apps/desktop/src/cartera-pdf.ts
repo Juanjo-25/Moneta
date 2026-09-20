@@ -31,12 +31,23 @@ type CompanyPrintSettings = {
   phone: string;
 };
 
+type ReceivableCustomerGroup = {
+  customerId: string;
+  customerName: string;
+  receivables: ReceivableRecord[];
+  totalBalanceMinor: number;
+};
+
 function formatCurrency(minor: number): string {
   const amount = new Intl.NumberFormat("es-CO", {
     maximumFractionDigits: 0
   }).format(minor);
 
   return `$ ${amount}`;
+}
+
+function formatReceivableCount(count: number): string {
+  return `${count} ${count === 1 ? "cuenta" : "cuentas"}`;
 }
 
 function fieldValue(value: string): string {
@@ -102,6 +113,57 @@ function getGeneratedAtLabel(inputLabel?: string): string {
 
 export function buildCarteraFileName(): string {
   return "cartera-pendiente.pdf";
+}
+
+function compareCustomerNames(
+  left: ReceivableCustomerGroup,
+  right: ReceivableCustomerGroup
+): number {
+  return (
+    left.customerName.localeCompare(right.customerName, "es", {
+      sensitivity: "base"
+    }) || left.customerId.localeCompare(right.customerId)
+  );
+}
+
+function compareReceivables(left: ReceivableRecord, right: ReceivableRecord): number {
+  return (
+    left.dueAt.localeCompare(right.dueAt) ||
+    (left.invoiceNumber ?? left.saleId).localeCompare(right.invoiceNumber ?? right.saleId)
+  );
+}
+
+function groupReceivablesByCustomer(
+  receivables: ReceivableRecord[]
+): ReceivableCustomerGroup[] {
+  const groupsByCustomer = new Map<string, ReceivableCustomerGroup>();
+
+  receivables.forEach((receivable) => {
+    const customerKey =
+      receivable.customerId.trim() ||
+      receivable.customerName.trim().toLocaleLowerCase("es");
+    const currentGroup = groupsByCustomer.get(customerKey);
+
+    if (currentGroup) {
+      currentGroup.receivables.push(receivable);
+      currentGroup.totalBalanceMinor += receivable.balanceMinor;
+      return;
+    }
+
+    groupsByCustomer.set(customerKey, {
+      customerId: customerKey,
+      customerName: receivable.customerName,
+      receivables: [receivable],
+      totalBalanceMinor: receivable.balanceMinor
+    });
+  });
+
+  return [...groupsByCustomer.values()]
+    .map((group) => ({
+      ...group,
+      receivables: [...group.receivables].sort(compareReceivables)
+    }))
+    .sort(compareCustomerNames);
 }
 
 function renderPageHeader(
@@ -177,16 +239,37 @@ function renderSectionTitle(
   writeText(doc, title, 18, y + 5.5);
 }
 
+function renderReceivableCustomerTitle(
+  doc: jsPDF,
+  group: ReceivableCustomerGroup,
+  y: number
+): void {
+  doc.setDrawColor(226, 232, 240);
+  doc.setFillColor(248, 250, 252);
+  doc.rect(14, y, 182, 8, "FD");
+  doc.setTextColor(17, 24, 39);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  writeText(doc, `Cliente: ${fitText(group.customerName, 54)}`, 16, y + 5.5);
+  doc.setFont("helvetica", "normal");
+  writeText(
+    doc,
+    `${formatReceivableCount(group.receivables.length)} | Saldo ${formatCurrency(group.totalBalanceMinor)}`,
+    194,
+    y + 5.5,
+    { align: "right" }
+  );
+}
+
 function renderReceivableHeader(doc: jsPDF, y: number): void {
   doc.setTextColor(17, 24, 39);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.5);
-  writeText(doc, "Cliente", 16, y + 5);
-  writeText(doc, "Factura", 58, y + 5);
-  writeText(doc, "Emitida", 84, y + 5);
-  writeText(doc, "Vence", 110, y + 5);
-  writeText(doc, "Original", 142, y + 5, { align: "right" });
-  writeText(doc, "Recibido", 168, y + 5, { align: "right" });
+  writeText(doc, "Factura", 16, y + 5);
+  writeText(doc, "Emitida", 52, y + 5);
+  writeText(doc, "Vence", 82, y + 5);
+  writeText(doc, "Original", 130, y + 5, { align: "right" });
+  writeText(doc, "Recibido", 162, y + 5, { align: "right" });
   writeText(doc, "Saldo", 194, y + 5, { align: "right" });
 }
 
@@ -202,21 +285,19 @@ function renderReceivableRow(
   doc.setTextColor(17, 24, 39);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  writeText(doc, fitText(receivable.customerName, 26), 16, y + 5, {
-    maxWidth: 40
-  });
   writeText(
     doc,
-    fitText(receivable.invoiceNumber ?? invoiceNumber ?? receivable.saleId, 13),
-    58,
-    y + 5
+    fitText(receivable.invoiceNumber ?? invoiceNumber ?? receivable.saleId, 24),
+    16,
+    y + 5,
+    { maxWidth: 31 }
   );
-  writeText(doc, dateValue(issuedAt), 84, y + 5);
-  writeText(doc, dateValue(receivable.dueAt), 110, y + 5);
-  writeText(doc, formatCurrency(receivable.originalAmountMinor), 142, y + 5, {
+  writeText(doc, dateValue(issuedAt), 52, y + 5);
+  writeText(doc, dateValue(receivable.dueAt), 82, y + 5);
+  writeText(doc, formatCurrency(receivable.originalAmountMinor), 130, y + 5, {
     align: "right"
   });
-  writeText(doc, formatCurrency(receivable.paidAmountMinor), 168, y + 5, {
+  writeText(doc, formatCurrency(receivable.paidAmountMinor), 162, y + 5, {
     align: "right"
   });
   writeText(doc, formatCurrency(receivable.balanceMinor), 194, y + 5, {
@@ -274,14 +355,12 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
   const purchaseIssuedAtById = new Map(
     (input.purchases ?? []).map((purchase) => [purchase.id, purchase.issuedAt])
   );
-  const sortedReceivables = [...input.receivables].sort((left, right) =>
-    left.dueAt.localeCompare(right.dueAt)
-  );
+  const receivableGroups = groupReceivablesByCustomer(input.receivables);
   const openPayables = input.supplierPayables
     .filter((payable) => payable.balanceMinor > 0)
     .sort((left, right) => left.dueAt.localeCompare(right.dueAt));
-  const receivableBalanceMinor = sortedReceivables.reduce(
-    (total, receivable) => total + receivable.balanceMinor,
+  const receivableBalanceMinor = receivableGroups.reduce(
+    (total, group) => total + group.totalBalanceMinor,
     0
   );
   const payableBalanceMinor = openPayables.reduce(
@@ -305,33 +384,48 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
 
   renderSummaryCard(doc, "Total por cobrar", formatCurrency(receivableBalanceMinor), 14, cursorY, 42);
   renderSummaryCard(doc, "Total por pagar", formatCurrency(payableBalanceMinor), 61, cursorY, 42);
-  renderSummaryCard(doc, "Cuentas por cobrar", String(sortedReceivables.length), 108, cursorY, 42);
+  renderSummaryCard(doc, "Cuentas por cobrar", String(input.receivables.length), 108, cursorY, 42);
   renderSummaryCard(doc, "Cuentas por pagar", String(openPayables.length), 155, cursorY, 41);
   cursorY += 28;
 
   ensureSpace(24);
   renderSectionTitle(doc, "Por cobrar", cursorY, accent);
   cursorY += 10;
-  renderReceivableHeader(doc, cursorY);
-  cursorY += 8;
 
-  if (sortedReceivables.length === 0) {
+  if (receivableGroups.length === 0) {
     doc.setTextColor(100, 116, 139);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     writeText(doc, "Sin cuentas por cobrar abiertas.", 16, cursorY + 5);
     cursorY += 12;
   } else {
-    sortedReceivables.forEach((receivable) => {
-      ensureSpace(10);
-      renderReceivableRow(
-        doc,
-        receivable,
-        salesById.get(receivable.saleId)?.invoiceNumber,
-        salesById.get(receivable.saleId)?.issuedAt,
-        cursorY
-      );
+    receivableGroups.forEach((group) => {
+      ensureSpace(28);
+      renderReceivableCustomerTitle(doc, group, cursorY);
+      cursorY += 10;
+      renderReceivableHeader(doc, cursorY);
       cursorY += 8;
+
+      group.receivables.forEach((receivable) => {
+        if (cursorY + 10 > 276) {
+          addPage();
+          renderReceivableCustomerTitle(doc, group, cursorY);
+          cursorY += 10;
+          renderReceivableHeader(doc, cursorY);
+          cursorY += 8;
+        }
+
+        renderReceivableRow(
+          doc,
+          receivable,
+          salesById.get(receivable.saleId)?.invoiceNumber,
+          salesById.get(receivable.saleId)?.issuedAt,
+          cursorY
+        );
+        cursorY += 8;
+      });
+
+      cursorY += 4;
     });
   }
 
