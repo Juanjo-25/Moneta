@@ -7,6 +7,7 @@ import { generateCashReceiptPdf } from "./cash-receipt-pdf";
 import { generateInvoicePdf } from "./invoice-pdf";
 import { generateInventoryPdf } from "./inventory-pdf";
 import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
+import type { CustomerReceiptRecord } from "./types";
 
 vi.mock("./cartera-pdf", () => ({
   generateCarteraPdf: vi.fn()
@@ -1852,6 +1853,110 @@ describe("App navigation", () => {
     expect(within(receivablesTable).getAllByText(/\$\s*13\.500/)).toHaveLength(2);
     expect(within(receivablesTable).getByText(/\$\s*0/)).toBeTruthy();
     expect(within(receivablesTable).getByText("Pendiente")).toBeTruthy();
+  });
+
+  it("keeps cash receipt ids unique when two receipts share the same receipt date", async () => {
+    const user = userEvent.setup();
+    const storedReceivable = {
+      amountMinor: 12000,
+      balanceMinor: 12000,
+      customerId: "customer-stored",
+      customerName: "Carlos Ruiz",
+      dueAt: "2026-09-30",
+      id: "receivable-sale-legacy",
+      originalAmountMinor: 12000,
+      paidAmountMinor: 0,
+      saleId: "sale-legacy",
+      status: "pending" as const
+    };
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") {
+        return Promise.resolve("Moneta Tauri conectado");
+      }
+      if (command === "database_status") {
+        return Promise.resolve({
+          migrationCount: 5,
+          path: "/tmp/moneta.sqlite3"
+        });
+      }
+      if (command === "create_automatic_database_backup") {
+        return Promise.resolve({
+          backup: null,
+          created: false,
+          deletedOldBackups: 0
+        });
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_receivables") {
+        return Promise.resolve([storedReceivable]);
+      }
+
+      return Promise.resolve([]);
+    });
+    setTauriInvoke(invoke);
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Tesoreria" }));
+    await screen.findByRole("option", { name: /Carlos Ruiz - sale-legacy/ });
+
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1770000000000);
+
+    try {
+      await user.selectOptions(
+        screen.getByLabelText("Cuenta por cobrar"),
+        "receivable-sale-legacy"
+      );
+      await user.clear(screen.getByLabelText("Fecha recibo"));
+      await user.type(screen.getByLabelText("Fecha recibo"), "2026-09-22");
+      await user.type(screen.getByLabelText("Valor recibido"), "5000");
+      await user.click(screen.getByRole("button", { name: "Guardar recibo" }));
+
+      await waitFor(() => {
+        const saveCalls = invoke.mock.calls.filter(
+          ([command]) => command === "save_customer_receipt"
+        );
+        expect(saveCalls).toHaveLength(1);
+      });
+
+      await user.selectOptions(
+        screen.getByLabelText("Cuenta por cobrar"),
+        "receivable-sale-legacy"
+      );
+      await user.clear(screen.getByLabelText("Fecha recibo"));
+      await user.type(screen.getByLabelText("Fecha recibo"), "2026-09-22");
+      await user.type(screen.getByLabelText("Valor recibido"), "4000");
+      await user.click(screen.getByRole("button", { name: "Guardar recibo" }));
+
+      await waitFor(() => {
+        const saveCalls = invoke.mock.calls.filter(
+          ([command]) => command === "save_customer_receipt"
+        );
+        expect(saveCalls).toHaveLength(2);
+      });
+
+      const receiptIds = invoke.mock.calls
+        .filter(([command]) => command === "save_customer_receipt")
+        .map(
+          ([, args]) =>
+            (
+              args as {
+                input: {
+                  receipt: CustomerReceiptRecord;
+                };
+              }
+            ).input.receipt.id
+        );
+
+      expect(receiptIds).toEqual([
+        "cash-receipt-1770000000000",
+        "cash-receipt-1770000000000-1"
+      ]);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("uses cash receipts as real inflows and keeps the remaining receivable projected", async () => {

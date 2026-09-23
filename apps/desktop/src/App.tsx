@@ -411,6 +411,22 @@ function formatNativePersistenceError(
   return fallbackMessage;
 }
 
+function createUniqueRecordId(
+  prefix: string,
+  existingIds: ReadonlySet<string>
+): string {
+  const timestamp = Date.now();
+  let candidate = `${prefix}-${timestamp}`;
+  let suffix = 1;
+
+  while (existingIds.has(candidate)) {
+    candidate = `${prefix}-${timestamp}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
 export function App() {
   const [nativeConnectionStatus, setNativeConnectionStatus] =
     useState<NativeConnectionStatus>({
@@ -2241,7 +2257,10 @@ export function App() {
       concept: input.concept.trim() || "Abono cartera cliente",
       customerId: selectedReceivable.customerId,
       customerName: selectedReceivable.customerName,
-      id: `cash-receipt-${receivedAtMs}`,
+      id: createUniqueRecordId(
+        "cash-receipt",
+        new Set(customerReceipts.map((receipt) => receipt.id))
+      ),
       number: `RC-${String(customerReceipts.length + 1).padStart(3, "0")}`,
       receivableBalanceMinorBefore: selectedReceivable.balanceMinor,
       receivableDueAt: selectedReceivable.dueAt,
@@ -2258,12 +2277,16 @@ export function App() {
 
     try {
       await saveNativeCustomerReceipt({ receipt, receivable });
-    } catch {
+    } catch (error) {
+      const message = formatNativePersistenceError(
+        "No se pudo guardar el recibo de caja local.",
+        error
+      );
       setNativeConnectionStatus({
         kind: "error",
-        message: "No se pudo guardar el recibo de caja local."
+        message
       });
-      return "No se pudo guardar el recibo de caja local.";
+      return message;
     }
 
     setCustomerReceipts((currentReceipts) => [receipt, ...currentReceipts]);
