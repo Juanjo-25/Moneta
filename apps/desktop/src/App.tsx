@@ -2621,6 +2621,7 @@ export function App() {
 
         {activeSection.id === "dashboard" ? (
           <DashboardContent
+            receivables={receivables}
             creditNotes={confirmedCreditNotes}
             formatCurrency={formatCurrency}
             lowStockProducts={lowStockProducts}

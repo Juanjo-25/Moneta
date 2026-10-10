@@ -1649,6 +1649,12 @@ describe("App navigation", () => {
     expect(within(salesTable).getByText("Pendiente")).toBeTruthy();
     expect(within(salesTable).getByText(/\$\s*13\.500/)).toBeTruthy();
 
+    await user.click(within(salesTable).getByRole("button", { name: /Ver detalle de venta/ }));
+    const detail = screen.getByRole("region", { name: /Detalle de venta/ });
+    expect(within(detail).getByText("987654321")).toBeTruthy();
+    expect(within(detail).getByText("Saldo pendiente").nextElementSibling?.textContent).toMatch(/13\.500/);
+    expect(within(detail).getByText("Fecha de vencimiento").nextElementSibling?.textContent).toBe("20/7/2026");
+
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
@@ -2353,6 +2359,18 @@ describe("App navigation", () => {
     expect(within(salesTable).getByText("2 productos")).toBeTruthy();
     expect(within(salesTable).getByText("4")).toBeTruthy();
     expect(within(salesTable).getByText(/\$\s*16\.000/)).toBeTruthy();
+
+    const detailButton = within(salesTable).getByRole("button", { name: /Ver detalle de venta/ });
+    await user.click(detailButton);
+    const detail = screen.getByRole("region", { name: /Detalle de venta/ });
+    const detailProducts = within(detail).getByRole("table");
+    expect(within(detailProducts).getByText("Arroz libra")).toBeTruthy();
+    expect(within(detailProducts).getByText("Panela unidad")).toBeTruthy();
+    expect(within(detail).getByText("123456789")).toBeTruthy();
+    expect(within(detail).getByText("Total de la venta").nextElementSibling?.textContent).toMatch(/16\.000/);
+    expect(within(detail).getByText("Saldo pendiente").nextElementSibling?.textContent).toMatch(/0/);
+    await user.click(detailButton);
+    expect(screen.queryByRole("region", { name: /Detalle de venta/ })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
 
@@ -3644,6 +3662,18 @@ describe("App navigation", () => {
     expect(within(purchasesTable).getByText("2 productos")).toBeTruthy();
     expect(within(purchasesTable).getByText(/\$\s*19\.000/)).toBeTruthy();
 
+    const detailButton = within(purchasesTable).getByRole("button", { name: /Ver detalle de compra/ });
+    await user.click(detailButton);
+    const detail = screen.getByRole("region", { name: "Detalle de compra 001" });
+    const lines = within(detail).getByRole("table", { name: "Productos de compra 001" });
+    expect(within(lines).getByText("Arroz libra")).toBeTruthy();
+    expect(within(lines).getByText("Panela unidad")).toBeTruthy();
+    expect(within(detail).getByText("Total de la compra").nextElementSibling?.textContent).toMatch(/19\.000/);
+    expect(within(detail).getByText("Saldo pendiente").nextElementSibling?.textContent).toMatch(/19\.000/);
+    expect(within(detail).getByText("Fecha de vencimiento").nextElementSibling?.textContent).toBe("30/7/2026");
+    await user.click(detailButton);
+    expect(screen.queryByRole("region", { name: "Detalle de compra 001" })).toBeNull();
+
     await user.click(screen.getByRole("button", { name: "Productos" }));
     const productsTable = screen.getByRole("table", { name: "Productos registrados" });
     expect(within(productsTable).getByRole("row", { name: /Arroz libra.*7/ })).toBeTruthy();
@@ -3669,6 +3699,13 @@ describe("App navigation", () => {
     expect(within(payablesTable).getByText("Abonada")).toBeTruthy();
     expect(within(payablesTable).getByText(/\$\s*5\.000/)).toBeTruthy();
     expect(within(payablesTable).getByText(/\$\s*10\.000/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    await user.click(screen.getByRole("button", { name: "Ver detalle de compra 001" }));
+    const detail = screen.getByRole("region", { name: "Detalle de compra 001" });
+    expect(within(detail).getByText("Abonada")).toBeTruthy();
+    expect(within(detail).getByText("Abonos registrados").nextElementSibling?.textContent).toMatch(/5\.000/);
+    expect(within(detail).getByText("Saldo pendiente").nextElementSibling?.textContent).toMatch(/10\.000/);
   });
 
   it("registers supplier payments from tesoreria", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -6,6 +6,7 @@ import { FormActions } from "../../components/FormActions";
 import { InlineActionGroup } from "../../components/InlineActionGroup";
 import { InlineFormSection } from "../../components/InlineFormSection";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
+import { PurchaseDetails } from "../../components/PurchaseDetails";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
@@ -16,7 +17,8 @@ import type {
   PurchaseRecord,
   SupplierFormErrors,
   SupplierFormState,
-  SupplierRecord
+  SupplierRecord,
+  SupplierPayableRecord
 } from "../../types";
 
 type PurchaseDraftLine = {
@@ -114,6 +116,7 @@ type PurchasesSectionProps = {
   products: ProductRecord[];
   purchases: PurchaseRecord[];
   suppliers: SupplierRecord[];
+  supplierPayables: SupplierPayableRecord[];
 };
 
 type PurchaseDeleteNotice = {
@@ -190,7 +193,8 @@ export function PurchasesSection({
   parseNonNegativeInteger,
   products,
   purchases,
-  suppliers
+  suppliers,
+  supplierPayables
 }: PurchasesSectionProps) {
   const [form, setForm] = useState<PurchaseFormState>(emptyPurchaseForm);
   const [errors, setErrors] = useState<PurchaseFormErrors>({});
@@ -205,6 +209,7 @@ export function PurchasesSection({
   const [purchaseLines, setPurchaseLines] = useState<PurchaseDraftLine[]>([]);
   const [deleteCandidate, setDeleteCandidate] = useState<PurchaseRecord | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<PurchaseDeleteNotice | null>(null);
+  const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
@@ -789,28 +794,45 @@ export function PurchasesSection({
           />
           <tbody>
             {purchases.map((purchase) => (
-              <tr key={purchase.id}>
-                <td>{purchase.occurredAtLabel}</td>
-                <td>{purchase.supplierName}</td>
-                <td>{purchase.invoiceNumber}</td>
-                <td>{formatExpenseCategory(purchase.expenseCategory)}</td>
-                <td>{purchase.productName}</td>
-                <td>{purchase.quantity}</td>
-                <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
-                <td>{formatCurrency(purchase.totalMinor)}</td>
-                <td>
-                  <SecondaryActionButton
-                    className="danger-action"
-                    onClick={() => {
-                      setDeleteCandidate(purchase);
-                      setDeleteNotice(null);
-                    }}
-                    variant="compact"
-                  >
-                    Eliminar
-                  </SecondaryActionButton>
-                </td>
-              </tr>
+              <Fragment key={purchase.id}>
+                <tr>
+                  <td>{purchase.occurredAtLabel}</td>
+                  <td>{purchase.supplierName}</td>
+                  <td>{purchase.invoiceNumber}</td>
+                  <td>{formatExpenseCategory(purchase.expenseCategory)}</td>
+                  <td>{purchase.productName}</td>
+                  <td>{purchase.quantity}</td>
+                  <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                  <td>{formatCurrency(purchase.totalMinor)}</td>
+                  <td>
+                    <SecondaryActionButton
+                      className="document-detail-trigger"
+                      variant="compact"
+                      aria-label={`${detailPurchaseId === purchase.id ? "Ocultar" : "Ver"} detalle de compra ${purchase.invoiceNumber}`}
+                      aria-expanded={detailPurchaseId === purchase.id}
+                      aria-controls={`purchase-detail-${purchase.id}`}
+                      onClick={() => setDetailPurchaseId((current) => current === purchase.id ? null : purchase.id)}
+                    >
+                      {detailPurchaseId === purchase.id ? "Ocultar detalle" : "Ver detalle"}
+                    </SecondaryActionButton>
+                    <SecondaryActionButton
+                      className="danger-action"
+                      onClick={() => {
+                        setDeleteCandidate(purchase);
+                        setDeleteNotice(null);
+                      }}
+                      variant="compact"
+                    >
+                      Eliminar
+                    </SecondaryActionButton>
+                  </td>
+                </tr>
+                {detailPurchaseId === purchase.id && <tr className="document-detail-row" id={`purchase-detail-${purchase.id}`}>
+                  <td colSpan={9}>
+                    <PurchaseDetails purchase={purchase} payable={supplierPayables.find((record) => record.purchaseId === purchase.id)} categoryLabel={formatExpenseCategory(purchase.expenseCategory)} formatCurrency={formatCurrency} />
+                  </td>
+                </tr>}
+              </Fragment>
             ))}
           </tbody>
         </DataTable>

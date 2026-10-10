@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { DataTable } from "../../components/DataTable";
-import { DataTableHeader } from "../../components/DataTableHeader";
+import { SaleDetails } from "../../components/SaleDetails";
 import { EmptyState } from "../../components/EmptyState";
 import { PanelHeader } from "../../components/PanelHeader";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { parseLocalDate } from "../../lib/dates";
-import type { SaleRecord } from "../../types";
+import type { ReceivableRecord, SaleRecord } from "../../types";
 
 function previousMonth() {
   const now = new Date();
@@ -13,8 +12,9 @@ function previousMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function SalesHistory({ sales, formatCurrency }: {
+export function SalesHistory({ sales, receivables, formatCurrency }: {
   sales: SaleRecord[];
+  receivables?: ReceivableRecord[] | undefined;
   formatCurrency: (minor: number) => string;
 }) {
   const [month, setMonth] = useState(previousMonth);
@@ -76,18 +76,7 @@ export function SalesHistory({ sales, formatCurrency }: {
               <strong>{formatCurrency(sale.totalMinor)}</strong>
             </summary>
             <div className="sales-history-detail">
-              <p>Vendedor: {sale.seller || "Sin vendedor"}</p>
-              <div className="sales-history-table">
-                <DataTable ariaLabel={`Productos de venta ${sale.invoiceNumber}`}>
-                  <DataTableHeader labels={["Producto", "Cantidad", "Precio unitario", "Descuento", "Impuesto", "Total"]} />
-                  <tbody>{sale.lines.map((line) => <tr key={line.id}>
-                    <td>{line.productName}</td><td>{line.quantity} {line.unit}</td>
-                    <td>{formatCurrency(line.unitPriceMinor)}</td><td>{formatCurrency(line.discountMinor)}</td>
-                    <td>{formatCurrency(line.taxMinor)}</td><td>{formatCurrency(line.totalMinor)}</td>
-                  </tr>)}</tbody>
-                </DataTable>
-              </div>
-              {sale.observations && <p>Observaciones: {sale.observations}</p>}
+              <SaleDetails sale={sale} receivables={receivables} formatCurrency={formatCurrency} />
             </div>
           </details>
         ))}

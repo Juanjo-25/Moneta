@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useState,
   type Dispatch,
@@ -14,6 +15,7 @@ import { InlineFormSection } from "../../components/InlineFormSection";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
+import { SaleDetails } from "../../components/SaleDetails";
 import { TextField } from "../../components/TextField";
 import type { InvoicePdfResult } from "../../invoice-pdf";
 import type {
@@ -255,6 +257,7 @@ export function SalesSection({
   );
   const [editError, setEditError] = useState<string | null>(null);
   const [openSaleActionsId, setOpenSaleActionsId] = useState<string | null>(null);
+  const [detailSaleId, setDetailSaleId] = useState<string | null>(null);
 
   const activeCustomers = customers.filter((customer) => customer.active);
   const selectedCustomer =
@@ -1342,75 +1345,92 @@ export function SalesSection({
             />
             <tbody>
               {sales.map((sale) => (
-                <tr key={sale.id}>
-                  <td>{sale.issuedAt}</td>
-                  <td>{sale.invoiceNumber}</td>
-                  <td>{sale.customerName}</td>
-                  <td>{sale.seller}</td>
-                  <td>{sale.productName}</td>
-                  <td>{sale.quantity}</td>
-                  <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
-                  <td>{formatCurrency(sale.totalMinor)}</td>
-                  <td className="sale-actions-cell">
-                    <div
-                      className="sale-actions-menu"
-                      onBlur={(event) => {
-                        if (!event.currentTarget.contains(event.relatedTarget)) {
-                          setOpenSaleActionsId(null);
-                        }
-                      }}
-                    >
-                      <button
-                        aria-expanded={openSaleActionsId === sale.id}
-                        aria-haspopup="menu"
-                        aria-label={`Acciones de venta ${sale.invoiceNumber}`}
-                        className="sale-actions-trigger"
-                        onClick={() =>
-                          setOpenSaleActionsId((currentId) =>
-                            currentId === sale.id ? null : sale.id
-                          )
-                        }
-                        type="button"
+                <Fragment key={sale.id}>
+                  <tr>
+                    <td>{sale.issuedAt}</td>
+                    <td>{sale.invoiceNumber}</td>
+                    <td>{sale.customerName}</td>
+                    <td>{sale.seller}</td>
+                    <td>{sale.productName}</td>
+                    <td>{sale.quantity}</td>
+                    <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
+                    <td>{formatCurrency(sale.totalMinor)}</td>
+                    <td className="sale-actions-cell">
+                      <SecondaryActionButton
+                        className="document-detail-trigger"
+                        variant="compact"
+                        aria-label={`${detailSaleId === sale.id ? "Ocultar" : "Ver"} detalle de venta ${sale.invoiceNumber}`}
+                        aria-expanded={detailSaleId === sale.id}
+                        aria-controls={`sale-detail-${sale.id}`}
+                        onClick={() => setDetailSaleId((current) => current === sale.id ? null : sale.id)}
                       >
-                        ...
-                      </button>
-                      {openSaleActionsId === sale.id ? (
-                        <div className="sale-actions-list" role="menu">
-                          <button
-                            onClick={() => {
-                              setOpenSaleActionsId(null);
-                              beginSaleEdit(sale);
-                            }}
-                            role="menuitem"
-                            type="button"
-                          >
-                            Editar venta
-                          </button>
-                          <button
-                            onClick={() => {
-                              setOpenSaleActionsId(null);
-                              void generateInvoiceForSale(sale);
-                            }}
-                            role="menuitem"
-                            type="button"
-                          >
-                            Generar factura PDF
-                          </button>
-                          <button
-                            onClick={() => {
-                              setOpenSaleActionsId(null);
-                              removeSale(sale.id);
-                            }}
-                            role="menuitem"
-                            type="button"
-                          >
-                            Eliminar venta
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
+                        {detailSaleId === sale.id ? "Ocultar detalle" : "Ver detalle"}
+                      </SecondaryActionButton>
+                      <div
+                        className="sale-actions-menu"
+                        onBlur={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget)) {
+                            setOpenSaleActionsId(null);
+                          }
+                        }}
+                      >
+                        <button
+                          aria-expanded={openSaleActionsId === sale.id}
+                          aria-haspopup="menu"
+                          aria-label={`Acciones de venta ${sale.invoiceNumber}`}
+                          className="sale-actions-trigger"
+                          onClick={() =>
+                            setOpenSaleActionsId((currentId) =>
+                              currentId === sale.id ? null : sale.id
+                            )
+                          }
+                          type="button"
+                        >
+                          ...
+                        </button>
+                        {openSaleActionsId === sale.id ? (
+                          <div className="sale-actions-list" role="menu">
+                            <button
+                              onClick={() => {
+                                setOpenSaleActionsId(null);
+                                beginSaleEdit(sale);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              Editar venta
+                            </button>
+                            <button
+                              onClick={() => {
+                                setOpenSaleActionsId(null);
+                                void generateInvoiceForSale(sale);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              Generar factura PDF
+                            </button>
+                            <button
+                              onClick={() => {
+                                setOpenSaleActionsId(null);
+                                removeSale(sale.id);
+                              }}
+                              role="menuitem"
+                              type="button"
+                            >
+                              Eliminar venta
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                  {detailSaleId === sale.id && <tr className="document-detail-row" id={`sale-detail-${sale.id}`}>
+                    <td colSpan={9}>
+                      <SaleDetails sale={sale} receivables={receivables} formatCurrency={formatCurrency} />
+                    </td>
+                  </tr>}
+                </Fragment>
               ))}
             </tbody>
           </DataTable>

@@ -316,6 +316,7 @@ export function SectionContent({
   if (section.id === "purchases") {
     return (
       <PurchasesSection
+        supplierPayables={supplierPayables}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
         onCreateProduct={onCreateProduct}

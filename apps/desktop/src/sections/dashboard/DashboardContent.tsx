@@ -4,7 +4,7 @@ import { PanelHeader } from "../../components/PanelHeader";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { parseLocalDate } from "../../lib/dates";
 import { SalesHistory } from "./SalesHistory";
-import type { CreditNoteRecord, ProductRecord, SaleRecord } from "../../types";
+import type { CreditNoteRecord, ProductRecord, ReceivableRecord, SaleRecord } from "../../types";
 
 type DashboardTrendRow = {
   label: string;
@@ -37,6 +37,7 @@ type DashboardContentProps = {
   onOpenProducts: () => void;
   onOpenReports: () => void;
   sales: SaleRecord[];
+  receivables: ReceivableRecord[];
 };
 
 export function DashboardContent({
@@ -46,7 +47,8 @@ export function DashboardContent({
   metrics,
   onOpenProducts,
   onOpenReports,
-  sales
+  sales,
+  receivables
 }: DashboardContentProps) {
   const dailyPeriodOptions = buildDashboardPeriodOptions(sales, creditNotes);
   const [periodOne, setPeriodOne] = useState(dailyPeriodOptions[0]!.value);
@@ -194,7 +196,7 @@ export function DashboardContent({
         </div>
       </section>
 
-      <SalesHistory sales={sales} formatCurrency={formatCurrency} />
+      <SalesHistory sales={sales} receivables={receivables} formatCurrency={formatCurrency} />
 
       <section className="dashboard-operational-grid" aria-label="Alertas operativas">
         <div className="panel dashboard-operational-panel">

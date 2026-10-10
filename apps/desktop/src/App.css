@@ -484,7 +484,6 @@ button,
 .sales-history-sale summary:hover { background: var(--surface-muted); }
 .sales-history-sale summary:focus-visible { outline: 2px solid #0f766e; outline-offset: 2px; }
 .sales-history-detail { padding: 0 16px 16px; }
-.sales-history-table { overflow-x: auto; }
 @media (max-width: 700px) {
   .sales-history-sale summary { grid-template-columns: 1fr 1fr; }
   .sales-history-month { gap: 12px; padding: 12px; }
@@ -1713,6 +1712,38 @@ button,
   display: grid;
   gap: 18px;
 }
+
+.document-detail-trigger { margin-bottom: 8px; white-space: nowrap; }
+.document-detail-row > td { background: var(--surface-soft); }
+.document-detail {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  background: var(--surface-elevated);
+  text-align: left;
+  white-space: normal;
+}
+.document-detail h3 { margin: 0; }
+.document-detail dl { margin: 0; }
+.document-detail-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+.document-detail dt { color: var(--text-secondary); font-size: 13px; margin-bottom: 6px; }
+.document-detail dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+.document-detail-table { min-width: 0; overflow-x: auto; }
+.document-detail-table .data-table { margin: 0; }
+.document-detail-table small { display: block; color: var(--text-secondary); }
+.document-detail-totals { display: grid; gap: 10px; justify-self: end; width: min(100%, 380px); }
+.document-detail-totals > div { display: flex; justify-content: space-between; gap: 20px; }
+.document-detail-totals > div:last-child { border-top: 1px solid var(--border-default); padding-top: 12px; font-weight: 700; }
+.document-detail-payment { border-top: 1px solid var(--border-soft); padding-top: 16px; }
+.document-detail-notes { display: grid; gap: 14px; }
+.document-detail-notes dd { white-space: pre-wrap; }
 
 .sales-form,
 .credit-note-form {
