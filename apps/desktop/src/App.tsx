@@ -450,6 +450,8 @@ export function App() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [productFormVisible, setProductFormVisible] = useState(false);
   const [productDeleteAllRequestId, setProductDeleteAllRequestId] = useState(0);
+  const [zeroAllInventoryRequestId, setZeroAllInventoryRequestId] = useState(0);
+  const [productHeaderMenuOpen, setProductHeaderMenuOpen] = useState(false);
   const [supplierFormVisible, setSupplierFormVisible] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("dashboard");
   const activeSection: SectionConfig = useMemo(
@@ -725,12 +727,50 @@ export function App() {
           </PrimaryActionButton>
         ) : null}
         {showDeleteInventoryAction ? (
-          <SecondaryActionButton
-            className="danger-action"
-            onClick={() => setProductDeleteAllRequestId((currentId) => currentId + 1)}
+          <div
+            className="product-header-menu"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setProductHeaderMenuOpen(false);
+              }
+            }}
           >
-            Eliminar todo el inventario
-          </SecondaryActionButton>
+            <button
+              aria-expanded={productHeaderMenuOpen}
+              aria-haspopup="menu"
+              aria-label="Más acciones de inventario"
+              className="product-actions-trigger"
+              onClick={() => setProductHeaderMenuOpen((isOpen) => !isOpen)}
+              type="button"
+            >
+              ⋯
+            </button>
+            {productHeaderMenuOpen ? (
+              <div className="product-header-menu-list" role="menu">
+                <button
+                  className="danger-action"
+                  onClick={() => {
+                    setProductHeaderMenuOpen(false);
+                    setProductDeleteAllRequestId((currentId) => currentId + 1);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Eliminar todo el inventario
+                </button>
+                <button
+                  onClick={() => {
+                    setProductHeaderMenuOpen(false);
+                    setZeroAllInventoryRequestId((currentId) => currentId + 1);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Poner todo el stock en cero
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </>
     ) : null;
@@ -863,6 +903,70 @@ export function App() {
         error: message
       };
     }
+  }
+
+  async function zeroAllInventoryInSession(): Promise<string | null> {
+    const productsToAdjust = products.filter((product) => product.stock > 0);
+    const occurredAt = new Date();
+    const occurredAtMs = occurredAt.getTime();
+    const occurredAtLabel = formatOccurredAtLabel(occurredAt);
+    const adjustments: InventoryAdjustmentRecord[] = [];
+    const updatedProductIds: string[] = [];
+
+    for (const [index, product] of productsToAdjust.entries()) {
+      const adjustment: InventoryAdjustmentRecord = {
+        adjustmentType: "set",
+        id: `inventory-adjustment-zero-all-${occurredAtMs}-${index}`,
+        nextStock: 0,
+        occurredAtLabel,
+        occurredAtMs,
+        previousStock: product.stock,
+        productId: product.id,
+        productName: product.name,
+        quantity: 0,
+        reason: "Puesta en cero de todo el inventario",
+        unit: product.unit
+      };
+
+      try {
+        await saveNativeInventoryAdjustment({
+          adjustment,
+          product: { ...product, stock: 0 }
+        });
+      } catch (error) {
+        setProducts((currentProducts) =>
+          currentProducts.map((currentProduct) =>
+            updatedProductIds.includes(currentProduct.id)
+              ? { ...currentProduct, stock: 0 }
+              : currentProduct
+          )
+        );
+        setInventoryAdjustments((currentAdjustments) => [
+          ...adjustments,
+          ...currentAdjustments
+        ]);
+        const message = formatNativePersistenceError(
+          `Se puso en cero el stock de ${updatedProductIds.length} productos, pero no se pudo completar el ajuste.`,
+          error
+        );
+        setNativeConnectionStatus({ kind: "error", message });
+        return message;
+      }
+
+      adjustments.push(adjustment);
+      updatedProductIds.push(product.id);
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) =>
+        updatedProductIds.includes(product.id) ? { ...product, stock: 0 } : product
+      )
+    );
+    setInventoryAdjustments((currentAdjustments) => [
+      ...adjustments,
+      ...currentAdjustments
+    ]);
+    return null;
   }
 
   async function registerInventoryAdjustment(input: {
@@ -2658,6 +2762,7 @@ export function App() {
             onDeleteCreditNote={deleteCreditNoteInSession}
             onRegisterCustomerReceipt={registerCustomerReceipt}
             onRegisterInventoryAdjustment={registerInventoryAdjustment}
+            onZeroAllInventory={zeroAllInventoryInSession}
             onVoidCustomerReceipt={voidCustomerReceipt}
             onDeleteReceivable={deleteReceivableInSession}
             onSetCreditNoteStatus={setCreditNoteStatus}
@@ -2674,6 +2779,7 @@ export function App() {
             onUpdateProduct={saveProductInSession}
             parseNonNegativeInteger={parseNonNegativeInteger}
             productDeleteAllRequestId={productDeleteAllRequestId}
+            zeroAllInventoryRequestId={zeroAllInventoryRequestId}
             productFormVisible={productFormVisible}
             supplierFormVisible={supplierFormVisible}
             products={products}

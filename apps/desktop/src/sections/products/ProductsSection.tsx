@@ -70,6 +70,9 @@ type ProductDeleteDraft =
       kind: "all";
     }
   | {
+      kind: "zero-stock";
+    }
+  | {
       kind: "product";
       productId: string;
     };
@@ -113,6 +116,7 @@ const inventoryMovementSourceLabels: Record<InventoryMovementSource, string> = {
 type ProductsSectionProps = {
   creditNotes: CreditNoteRecord[];
   deleteAllProductsRequestId: number;
+  zeroAllInventoryRequestId: number;
   formVisible: boolean;
   formatCurrency: (minor: number) => string;
   formatIntegerInput: (value: string) => string;
@@ -133,6 +137,7 @@ type ProductsSectionProps = {
     quantity: number;
     reason: string;
   }) => Promise<string | null>;
+  onZeroAllInventory: () => Promise<string | null>;
   onUpdateProduct: (product: ProductRecord) => Promise<boolean>;
   parseNonNegativeInteger: (value: string) => number | null;
   products: ProductRecord[];
@@ -144,6 +149,7 @@ type ProductsSectionProps = {
 export function ProductsSection({
   creditNotes,
   deleteAllProductsRequestId,
+  zeroAllInventoryRequestId,
   formVisible,
   formatCurrency,
   formatIntegerInput,
@@ -154,6 +160,7 @@ export function ProductsSection({
   onDeleteAllProducts,
   onDeleteProduct,
   onRegisterInventoryAdjustment,
+  onZeroAllInventory,
   onUpdateProduct,
   parseNonNegativeInteger,
   products,
@@ -187,6 +194,7 @@ export function ProductsSection({
   const [generatingInventoryPdf, setGeneratingInventoryPdf] = useState(false);
   const editFormRef = useRef<HTMLFormElement | null>(null);
   const previousDeleteAllProductsRequestId = useRef(deleteAllProductsRequestId);
+  const previousZeroAllInventoryRequestId = useRef(zeroAllInventoryRequestId);
   const editingProduct =
     products.find((product) => product.id === editingProductId) ?? null;
   const deleteDraftProduct =
@@ -244,6 +252,16 @@ export function ProductsSection({
     setDeleteDraft({ kind: "all" });
     setDeleteNotice(null);
   }, [deleteAllProductsRequestId]);
+
+  useEffect(() => {
+    if (zeroAllInventoryRequestId === previousZeroAllInventoryRequestId.current) {
+      return;
+    }
+
+    previousZeroAllInventoryRequestId.current = zeroAllInventoryRequestId;
+    setDeleteDraft({ kind: "zero-stock" });
+    setDeleteNotice(null);
+  }, [zeroAllInventoryRequestId]);
 
   function updateField(
     field: "sku" | "name" | "unit" | "quantity" | "minimumStock",
@@ -408,6 +426,16 @@ export function ProductsSection({
 
   async function confirmProductDeletion() {
     if (!deleteDraft) {
+      return;
+    }
+
+    if (deleteDraft.kind === "zero-stock") {
+      const error = await onZeroAllInventory();
+      setDeleteDraft(null);
+      setDeleteNotice({
+        kind: error ? "error" : "success",
+        message: error ?? "Se puso en cero el stock de todos los productos."
+      });
       return;
     }
 
@@ -675,13 +703,17 @@ export function ProductsSection({
             <span>
               {deleteDraft.kind === "all"
                 ? "Eliminar todo el inventario"
-                : deleteDraftProduct?.name ?? "Producto"}
+                : deleteDraft.kind === "zero-stock"
+                  ? "Poner todo el inventario en cero"
+                  : deleteDraftProduct?.name ?? "Producto"}
             </span>
           </div>
           <p>
             {deleteDraft.kind === "all"
               ? "Se quitara el inventario visible y los documentos anteriores se conservan."
-              : "Se quitara del inventario visible y sus documentos anteriores se conservan."}
+              : deleteDraft.kind === "zero-stock"
+                ? "Las cantidades de todos los productos quedaran en cero. Los productos y documentos anteriores se conservan."
+                : "Se quitara del inventario visible y sus documentos anteriores se conservan."}
           </p>
           <FormActions>
             <SecondaryActionButton onClick={() => setDeleteDraft(null)}>

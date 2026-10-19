@@ -182,6 +182,7 @@ type SectionContentProps = {
     quantity: number;
     reason: string;
   }) => Promise<string | null>;
+  onZeroAllInventory: () => Promise<string | null>;
   onVoidCustomerReceipt: (receiptId: string) => Promise<string | null>;
   onDeleteReceivable: (receivableId: string) => Promise<string | null>;
   onSetCreditNoteStatus: (
@@ -213,6 +214,7 @@ type SectionContentProps = {
   onSettingsChange: (settings: AppSettings) => void;
   parseNonNegativeInteger: (value: string) => number | null;
   productDeleteAllRequestId: number;
+  zeroAllInventoryRequestId: number;
   productFormVisible: boolean;
   supplierFormVisible: boolean;
   products: ProductRecord[];
@@ -256,6 +258,7 @@ export function SectionContent({
   onDeleteCreditNote,
   onRegisterCustomerReceipt,
   onRegisterInventoryAdjustment,
+  onZeroAllInventory,
   onVoidCustomerReceipt,
   onDeleteReceivable,
   onSetCreditNoteStatus,
@@ -275,6 +278,7 @@ export function SectionContent({
   onSettingsChange,
   parseNonNegativeInteger,
   productDeleteAllRequestId,
+  zeroAllInventoryRequestId,
   productFormVisible,
   supplierFormVisible,
   products,
@@ -302,9 +306,11 @@ export function SectionContent({
         onDeleteAllProducts={onDeleteAllProducts}
         onDeleteProduct={onDeleteProduct}
         onRegisterInventoryAdjustment={onRegisterInventoryAdjustment}
+        onZeroAllInventory={onZeroAllInventory}
         onUpdateProduct={onUpdateProduct}
         parseNonNegativeInteger={parseNonNegativeInteger}
         deleteAllProductsRequestId={productDeleteAllRequestId}
+        zeroAllInventoryRequestId={zeroAllInventoryRequestId}
         products={products}
         purchases={purchases}
         sales={sales}
