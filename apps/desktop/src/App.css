@@ -2015,6 +2015,35 @@ button,
   clip: rect(0 0 0 0);
 }
 
+.receivable-picker-menu {
+  max-height: 320px;
+}
+
+.receivable-picker > label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.receivable-picker .receivable-picker-hint {
+  color: var(--text-tertiary);
+}
+
+.receivable-picker-customer {
+  position: sticky;
+  top: -6px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.receivable-picker-active {
+  background: var(--surface-muted);
+}
+
 .document-header,
 .document-lines {
   padding: 18px;

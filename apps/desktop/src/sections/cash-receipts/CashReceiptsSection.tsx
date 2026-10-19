@@ -21,6 +21,7 @@ import type {
 } from "../../types";
 import type { CashReceiptPdfResult } from "../../cash-receipt-pdf";
 import type { SupplierPaymentPdfResult } from "../../supplier-payment-pdf";
+import { ReceivablePicker } from "./ReceivablePicker";
 
 type CashReceiptFormState = {
   amount: string;
@@ -217,26 +218,13 @@ export function CashReceiptsSection({
         <>
           <section className="section-panel">
             <form className="document-form" onSubmit={submitReceipt}>
-              <label className="field" htmlFor="cash-receipt-receivable">
-                <span>Cuenta por cobrar</span>
-                <select
-                  aria-label="Cuenta por cobrar"
-                  id="cash-receipt-receivable"
-                  onChange={(event) => updateField("receivableId", event.target.value)}
-                  value={form.receivableId}
-                >
-                  <option value="">Selecciona una cuenta</option>
-                  {receivables.map((receivable) => (
-                    <option key={receivable.id} value={receivable.id}>
-                      {receivable.customerName} - {receivable.saleId} -{" "}
-                      {formatCurrency(receivable.balanceMinor)}
-                    </option>
-                  ))}
-                </select>
-                {errors.receivableId ? (
-                  <small className="field-error">{errors.receivableId}</small>
-                ) : null}
-              </label>
+              <ReceivablePicker
+                error={errors.receivableId}
+                formatCurrency={formatCurrency}
+                onSelect={(id) => updateField("receivableId", id)}
+                receivables={receivables}
+                value={form.receivableId}
+              />
 
               <TextField
                 error={errors.receivedAt}
@@ -261,6 +249,7 @@ export function CashReceiptsSection({
               {selectedReceivable ? (
                 <SummaryCard compact>
                   <span>{selectedReceivable.customerName}</span>
+                  <span>Factura {selectedReceivable.invoiceNumber?.trim() || selectedReceivable.saleId}</span>
                   <strong>Saldo {formatCurrency(selectedReceivable.balanceMinor)}</strong>
                 </SummaryCard>
               ) : null}
@@ -442,13 +431,13 @@ function OpenReceivablesTable({
   return (
     <DataTable ariaLabel="Cartera abierta para recibos">
       <DataTableHeader
-        labels={["Cliente", "Venta", "Original", "Recibido", "Saldo", "Vence"]}
+        labels={["Cliente", "Factura", "Original", "Recibido", "Saldo", "Vence"]}
       />
       <tbody>
         {receivables.map((receivable) => (
           <tr key={receivable.id}>
             <td>{receivable.customerName}</td>
-            <td>{receivable.saleId}</td>
+            <td>{receivable.invoiceNumber?.trim() || receivable.saleId}</td>
             <td>{formatCurrency(receivable.originalAmountMinor)}</td>
             <td>{formatCurrency(receivable.paidAmountMinor)}</td>
             <td>{formatCurrency(receivable.balanceMinor)}</td>

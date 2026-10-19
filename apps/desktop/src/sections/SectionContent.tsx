@@ -405,7 +405,12 @@ export function SectionContent({
         onRegisterSupplierPayment={onRegisterSupplierPayment}
         onVoidCustomerReceipt={onVoidCustomerReceipt}
         parseNonNegativeInteger={parseNonNegativeInteger}
-        receivables={receivables}
+        receivables={receivables.map((receivable) => ({
+          ...receivable,
+          invoiceNumber: receivable.invoiceNumber?.trim() ||
+            sales.find((sale) => sale.id === receivable.saleId)?.invoiceNumber ||
+            receivable.saleId
+        }))}
         settings={settings}
         supplierPayables={supplierPayables}
         supplierPayments={supplierPayments}

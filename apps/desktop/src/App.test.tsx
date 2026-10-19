@@ -1860,10 +1860,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Tesoreria" }));
-    await user.selectOptions(
-      screen.getByLabelText("Cuenta por cobrar"),
-      screen.getByRole("option", { name: /Carlos Ruiz - sale-/ })
-    );
+    await user.type(screen.getByRole("combobox", { name: "Cuenta por cobrar" }), "001");
+    await user.click(within(screen.getByRole("group", { name: "Carlos Ruiz" })).getByRole("option", { name: /Factura 001/ }));
     await user.clear(screen.getByLabelText("Fecha recibo"));
     await user.type(screen.getByLabelText("Fecha recibo"), "2026-07-21");
     await user.type(screen.getByLabelText("Valor recibido"), "5000");
@@ -1954,15 +1952,14 @@ describe("App navigation", () => {
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "Tesoreria" }));
-    await screen.findByRole("option", { name: /Carlos Ruiz - sale-legacy/ });
+    await user.click(screen.getByRole("combobox", { name: "Cuenta por cobrar" }));
+    await screen.findByRole("option", { name: /Factura sale-legacy/ });
 
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1770000000000);
 
     try {
-      await user.selectOptions(
-        screen.getByLabelText("Cuenta por cobrar"),
-        "receivable-sale-legacy"
-      );
+      await user.click(screen.getByRole("combobox", { name: "Cuenta por cobrar" }));
+      await user.click(screen.getByRole("option", { name: /Factura sale-legacy/ }));
       await user.clear(screen.getByLabelText("Fecha recibo"));
       await user.type(screen.getByLabelText("Fecha recibo"), "2026-09-22");
       await user.type(screen.getByLabelText("Valor recibido"), "5000");
@@ -1975,10 +1972,8 @@ describe("App navigation", () => {
         expect(saveCalls).toHaveLength(1);
       });
 
-      await user.selectOptions(
-        screen.getByLabelText("Cuenta por cobrar"),
-        "receivable-sale-legacy"
-      );
+      await user.click(screen.getByRole("combobox", { name: "Cuenta por cobrar" }));
+      await user.click(screen.getByRole("option", { name: /Factura sale-legacy/ }));
       await user.clear(screen.getByLabelText("Fecha recibo"));
       await user.type(screen.getByLabelText("Fecha recibo"), "2026-09-22");
       await user.type(screen.getByLabelText("Valor recibido"), "4000");
@@ -2034,10 +2029,8 @@ describe("App navigation", () => {
     await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
     await user.click(screen.getByRole("button", { name: "Tesoreria" }));
-    await user.selectOptions(
-      screen.getByLabelText("Cuenta por cobrar"),
-      screen.getByRole("option", { name: /Carlos Ruiz - sale-/ })
-    );
+    await user.click(screen.getByRole("combobox", { name: "Cuenta por cobrar" }));
+    await user.click(screen.getByRole("option", { name: /Factura/ }));
     await user.type(screen.getByLabelText("Valor recibido"), "5000");
     await user.click(screen.getByRole("button", { name: "Guardar recibo" }));
 
