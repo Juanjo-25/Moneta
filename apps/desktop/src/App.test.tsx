@@ -1278,6 +1278,11 @@ describe("App navigation", () => {
 
     await user.click(
       within(productHeaderActions as HTMLElement).getByRole("button", {
+        name: "Más acciones de inventario"
+      })
+    );
+    await user.click(
+      within(productHeaderActions as HTMLElement).getByRole("menuitem", {
         name: "Eliminar todo el inventario"
       })
     );
@@ -1286,6 +1291,49 @@ describe("App navigation", () => {
     expect(screen.getByText("Inventario eliminado: 2 productos.")).toBeTruthy();
     expect(screen.queryByRole("table", { name: "Productos registrados" })).toBeNull();
     expect(screen.getByText("Sin productos registrados")).toBeTruthy();
+  });
+
+  it("sets every product stock to zero from the inventory actions menu", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+
+    const productHeaderActions = screen
+      .getByRole("button", { name: "Nuevo producto" })
+      .closest(".topbar-action");
+    expect(productHeaderActions).toBeTruthy();
+
+    await user.click(
+      within(productHeaderActions as HTMLElement).getByRole("button", {
+        name: "Más acciones de inventario"
+      })
+    );
+    await user.click(
+      within(productHeaderActions as HTMLElement).getByRole("menuitem", {
+        name: "Poner todo el stock en cero"
+      })
+    );
+    expect(
+      screen.getByText(/Las cantidades de todos los productos quedaran en cero/)
+    ).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Confirmar eliminacion" }));
+
+    expect(
+      screen.getByText("Se puso en cero el stock de todos los productos.")
+    ).toBeTruthy();
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(
+      within(productsTable).getByRole("row", {
+        name: /ARZ-001\s+Arroz libra\s+Unidad.*\s0\s1\sBajo stock/
+      })
+    ).toBeTruthy();
+    expect(within(productsTable).getByRole("cell", { name: "Panela unidad" })).toBeTruthy();
+    expect(
+      screen.getByRole("table", { name: "Ajustes de inventario" })
+    ).toBeTruthy();
   });
 
   it("registers an inventory adjustment and keeps a movement history", async () => {
