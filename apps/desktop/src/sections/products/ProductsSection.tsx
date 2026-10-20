@@ -80,6 +80,8 @@ type ProductDeleteNotice = {
   kind: "error" | "success";
   message: string;
 };
+type ProductStockFilter = "all" | "in-stock" | "low-stock" | "out-of-stock";
+type ProductStatusFilter = "all" | "active" | "inactive";
 
 const emptyProductForm: ProductFormState = {
   sku: "",
@@ -170,6 +172,10 @@ export function ProductsSection({
 }: ProductsSectionProps) {
   const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [errors, setErrors] = useState<ProductFormErrors>({});
+  const [productSearch, setProductSearch] = useState("");
+  const [productStockFilter, setProductStockFilter] = useState<ProductStockFilter>("all");
+  const [productStatusFilter, setProductStatusFilter] = useState<ProductStatusFilter>("all");
+  const productSearchRef = useRef<HTMLInputElement | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ProductEditFormState | null>(null);
   const [editErrors, setEditErrors] = useState<ProductEditFormErrors>({});
@@ -202,6 +208,26 @@ export function ProductsSection({
       ? products.find((product) => product.id === deleteDraft.productId) ?? null
       : null;
   const activeProducts = products.filter((product) => product.active);
+  const filteredProducts = useMemo(() => {
+    const terms = normalizeProductSearch(productSearch).split(/\s+/).filter(Boolean);
+
+    return products.filter((product) => {
+      const text = normalizeProductSearch(`${product.name} ${product.sku}`);
+      const matchesSearch = terms.every((term) => text.includes(term));
+      const matchesStock =
+        productStockFilter === "all" ||
+        (productStockFilter === "in-stock" && product.stock > 0) ||
+        (productStockFilter === "low-stock" && product.stock <= product.minimumStock) ||
+        (productStockFilter === "out-of-stock" && product.stock === 0);
+      const matchesStatus =
+        productStatusFilter === "all" ||
+        (productStatusFilter === "active" ? product.active : !product.active);
+
+      return matchesSearch && matchesStock && matchesStatus;
+    });
+  }, [products, productSearch, productStockFilter, productStatusFilter]);
+  const hasProductFilters =
+    productSearch !== "" || productStockFilter !== "all" || productStatusFilter !== "all";
   const selectedAdjustmentProduct =
     products.find((product) => product.id === adjustmentForm.productId) ?? null;
   const adjustmentQuantity = parseNonNegativeInteger(adjustmentForm.quantity);
@@ -940,6 +966,96 @@ export function ProductsSection({
         </form>
       ) : null}
 
+      <section className="product-catalog section-surface" aria-labelledby="product-catalog-title">
+        <div className="product-catalog-toolbar">
+          <div className="product-catalog-heading">
+            <div>
+              <h2 id="product-catalog-title">Catálogo de productos</h2>
+              <p>Encuentra tus productos por nombre o código.</p>
+            </div>
+            {hasProductFilters ? (
+              <SecondaryActionButton
+                variant="compact"
+                onClick={() => {
+                  setProductSearch("");
+                  setProductStockFilter("all");
+                  setProductStatusFilter("all");
+                  productSearchRef.current?.focus();
+                }}
+              >
+                Limpiar filtros
+              </SecondaryActionButton>
+            ) : null}
+          </div>
+          <div className="product-catalog-filters">
+            <div className="field product-catalog-search">
+              <label htmlFor="product-catalog-search">Buscar productos</label>
+              <div className="product-catalog-search-control">
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                  <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="m16 16 4.5 4.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                </svg>
+                <input
+                  autoComplete="off"
+                  id="product-catalog-search"
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Escribe un nombre o código…"
+                  ref={productSearchRef}
+                  type="search"
+                  value={productSearch}
+                />
+              </div>
+            </div>
+            <label className="field" htmlFor="product-catalog-stock">
+              <span>Existencias</span>
+              <select
+                id="product-catalog-stock"
+                onChange={(event) => setProductStockFilter(event.target.value as ProductStockFilter)}
+                value={productStockFilter}
+              >
+                <option value="all">Todas las existencias</option>
+                <option value="in-stock">Con stock</option>
+                <option value="low-stock">Stock bajo</option>
+                <option value="out-of-stock">Sin stock</option>
+              </select>
+            </label>
+            <label className="field" htmlFor="product-catalog-status">
+              <span>Estado del producto</span>
+              <select
+                id="product-catalog-status"
+                onChange={(event) => setProductStatusFilter(event.target.value as ProductStatusFilter)}
+                value={productStatusFilter}
+              >
+                <option value="all">Todos los estados</option>
+                <option value="active">Activos</option>
+                <option value="inactive">Inactivos</option>
+              </select>
+            </label>
+          </div>
+          <p className="product-catalog-count" role="status" aria-live="polite" aria-atomic="true">
+            Mostrando {filteredProducts.length} de {products.length} productos
+          </p>
+        </div>
+        {filteredProducts.length > 0 ? (
+          <ProductTable
+            formatCurrency={formatCurrency}
+            isLowStock={isLowStock}
+            onDeleteProduct={startProductDeletion}
+            onEditProduct={startEditProduct}
+            onSetProductActive={setProductActive}
+            products={filteredProducts}
+          />
+        ) : (
+          <EmptyState
+            body={products.length === 0
+              ? "Crea productos para empezar a controlar inventario."
+              : "Prueba con otro nombre o código, o limpia los filtros para ver todo el catálogo."}
+            className="product-catalog-empty"
+            title={products.length === 0 ? "Sin productos registrados" : "No se encontraron productos"}
+          />
+        )}
+      </section>
+
       <form className="product-form section-form-shell" onSubmit={submitInventoryAdjustment}>
         <div className="form-grid">
           <label className="field" htmlFor="producto-ajuste-inventario">
@@ -1020,14 +1136,6 @@ export function ProductsSection({
 
       {products.length > 0 ? (
         <>
-          <ProductTable
-            formatCurrency={formatCurrency}
-            isLowStock={isLowStock}
-            onDeleteProduct={startProductDeletion}
-            onEditProduct={startEditProduct}
-            onSetProductActive={setProductActive}
-            products={products}
-          />
           <InventoryAdjustmentTable adjustments={inventoryAdjustments} />
           <InventoryMovementsTable
             movements={filteredInventoryMovements}
@@ -1038,15 +1146,13 @@ export function ProductsSection({
             sourceFilter={movementSourceFilter}
           />
         </>
-      ) : (
-        <EmptyState
-          body="Crea productos para empezar a controlar inventario."
-          className="section-empty"
-          title="Sin productos registrados"
-        />
-      )}
+      ) : null}
     </section>
   );
+}
+
+function normalizeProductSearch(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
 }
 
 function readFileAsText(file: File): Promise<string> {
