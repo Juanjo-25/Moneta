@@ -3878,6 +3878,60 @@ describe("App navigation", () => {
     expect(within(payablesTable).getAllByText(/\$\s*19\.000/).length).toBeGreaterThan(0);
   });
 
+  it("registers only the edited purchase lines in inventory and supplier payables", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await createSupplierFixture(user, "Proveedor Mixto");
+    await user.type(screen.getByLabelText("Fecha emision"), "2026-10-20");
+    await user.click(screen.getByLabelText("Pendiente"));
+    await user.type(screen.getByLabelText("Fecha vencimiento"), "2026-11-20");
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad compra"), "2");
+    await user.type(screen.getByLabelText("Costo unitario"), "3000");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad compra"), "1");
+    await user.type(screen.getByLabelText("Costo unitario"), "1000");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+
+    await user.click(screen.getAllByRole("button", { name: "Editar Arroz libra" })[0]!);
+    await user.selectOptions(screen.getByLabelText("Producto de la linea"), within(screen.getByLabelText("Producto de la linea")).getByRole("option", { name: "Panela unidad" }));
+    await user.clear(screen.getByLabelText("Cantidad del producto"));
+    await user.type(screen.getByLabelText("Cantidad del producto"), "4");
+    await user.clear(screen.getByLabelText("Costo unitario del producto"));
+    await user.type(screen.getByLabelText("Costo unitario del producto"), "2500");
+    await user.clear(screen.getByLabelText("Descuento del producto %"));
+    await user.type(screen.getByLabelText("Descuento del producto %"), "10");
+    await user.selectOptions(screen.getByLabelText("Impuesto del producto"), "19");
+    await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+    await user.click(screen.getByRole("button", { name: "Eliminar Arroz libra" }));
+    expect(screen.getByText(/Total factura/).textContent).toMatch(/10\.710/);
+    await user.click(screen.getByRole("button", { name: "Registrar compra" }));
+
+    await user.click(screen.getByRole("button", { name: "Ver detalle de compra 001" }));
+    const detail = screen.getByRole("region", { name: "Detalle de compra 001" });
+    expect(within(detail).queryByText("Arroz libra")).toBeNull();
+    expect(within(detail).getByText("Panela unidad")).toBeTruthy();
+    expect(within(detail).getByText("Subtotal", { selector: "dt" }).nextElementSibling?.textContent).toMatch(/10\.000/);
+    expect(within(detail).getByText("Descuentos").nextElementSibling?.textContent).toMatch(/1\.000/);
+    expect(within(detail).getByText("Impuestos").nextElementSibling?.textContent).toMatch(/1\.710/);
+    expect(within(detail).getByText("Saldo pendiente").nextElementSibling?.textContent).toMatch(/10\.710/);
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    const riceRow = within(productsTable).getByRole("row", { name: /Arroz libra/ });
+    const panelaRow = within(productsTable).getByRole("row", { name: /Panela unidad/ });
+    expect(within(riceRow).getByText("4")).toBeTruthy();
+    expect(within(panelaRow).getByText("7")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    const payablesTable = screen.getByRole("table", { name: "Cuentas por pagar" });
+    expect(within(payablesTable).getAllByText(/\$\s*10\.710/).length).toBeGreaterThan(0);
+  });
+
   it("registers a partial supplier payment and marks payable as abonada", async () => {
     const user = userEvent.setup();
 

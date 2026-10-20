@@ -67,6 +67,11 @@ type PurchaseFormErrors = {
   taxPercent?: string | undefined;
 };
 
+type PurchaseLineFormState = Pick<
+  PurchaseFormState,
+  "productId" | "unit" | "quantity" | "unitCost" | "discountPercent" | "taxPercent"
+>;
+
 type PurchaseProductFormState = {
   sku: string;
   name: string;
@@ -207,6 +212,11 @@ export function PurchasesSection({
     useState<PurchaseProductFormState>(emptyPurchaseProductForm);
   const [productErrors, setProductErrors] = useState<PurchaseProductFormErrors>({});
   const [purchaseLines, setPurchaseLines] = useState<PurchaseDraftLine[]>([]);
+  const [editingDraftLine, setEditingDraftLine] = useState<{
+    id: string;
+    form: PurchaseLineFormState;
+    errors: PurchaseFormErrors;
+  } | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<PurchaseRecord | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<PurchaseDeleteNotice | null>(null);
   const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
@@ -355,7 +365,7 @@ export function PurchasesSection({
     setProductFormVisible(false);
   }
 
-  function validateDraftLine(): {
+  function validateDraftLine(draft: PurchaseLineFormState = form): {
     errors: PurchaseFormErrors;
     parsedQuantity: number | null;
     parsedUnitCost: number | null;
@@ -363,12 +373,12 @@ export function PurchasesSection({
     parsedTaxPercent: number | null;
   } {
     const nextErrors: PurchaseFormErrors = {};
-    const parsedQuantity = parseNonNegativeInteger(form.quantity);
-    const parsedUnitCost = parseNonNegativeInteger(form.unitCost);
-    const parsedDiscountPercent = parsePercentage(form.discountPercent);
-    const parsedTaxPercent = parsePercentage(form.taxPercent);
+    const parsedQuantity = parseNonNegativeInteger(draft.quantity);
+    const parsedUnitCost = parseNonNegativeInteger(draft.unitCost);
+    const parsedDiscountPercent = parsePercentage(draft.discountPercent);
+    const parsedTaxPercent = parsePercentage(draft.taxPercent);
 
-    if (!selectedProduct) {
+    if (!products.some((product) => product.id === draft.productId && product.active)) {
       nextErrors.productId = "Debes seleccionar un producto.";
     }
     if (parsedQuantity === null || parsedQuantity <= 0) {
@@ -394,6 +404,103 @@ export function PurchasesSection({
     };
   }
 
+  function beginDraftLineEdit(line: PurchaseDraftLine) {
+    setEditingDraftLine({
+      id: line.id,
+      form: {
+        productId: line.product.id,
+        unit: line.unit,
+        quantity: String(line.quantity),
+        unitCost: formatIntegerInput(String(line.unitCostMinor)),
+        discountPercent: String(line.discountPercent),
+        taxPercent: String(line.taxPercent)
+      },
+      errors: {}
+    });
+    setErrors((currentErrors) => ({ ...currentErrors, submit: undefined }));
+  }
+
+  function updateDraftLineField(field: keyof PurchaseLineFormState, value: string) {
+    setEditingDraftLine((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const product = field === "productId"
+        ? products.find((candidate) => candidate.id === value)
+        : null;
+
+      return {
+        ...current,
+        form: {
+          ...current.form,
+          [field]: value,
+          ...(product ? { unit: product.unit } : {})
+        },
+        errors: { ...current.errors, [field]: undefined }
+      };
+    });
+  }
+
+  function finishDraftLineEdit() {
+    setEditingDraftLine(null);
+    setErrors((currentErrors) => ({ ...currentErrors, submit: undefined }));
+  }
+
+  function saveDraftLineEdit() {
+    if (!editingDraftLine) {
+      return;
+    }
+
+    const validation = validateDraftLine(editingDraftLine.form);
+    const product = products.find((candidate) => candidate.id === editingDraftLine.form.productId);
+
+    if (
+      Object.keys(validation.errors).length > 0 ||
+      !product ||
+      validation.parsedQuantity === null ||
+      validation.parsedUnitCost === null ||
+      validation.parsedDiscountPercent === null ||
+      validation.parsedTaxPercent === null
+    ) {
+      setEditingDraftLine({ ...editingDraftLine, errors: validation.errors });
+      return;
+    }
+
+    const calculation = calculateDocumentLine({
+      quantity: validation.parsedQuantity,
+      unitAmountMinor: validation.parsedUnitCost,
+      discountPercent: validation.parsedDiscountPercent,
+      taxPercent: validation.parsedTaxPercent
+    });
+    const updatedLine: PurchaseDraftLine = {
+      id: editingDraftLine.id,
+      product,
+      unit: editingDraftLine.form.unit,
+      quantity: validation.parsedQuantity,
+      unitCostMinor: validation.parsedUnitCost,
+      discountPercent: validation.parsedDiscountPercent,
+      discountMinor: calculation.discountMinor,
+      taxPercent: validation.parsedTaxPercent,
+      taxMinor: calculation.taxMinor,
+      subtotalMinor: calculation.subtotalMinor,
+      totalMinor: calculation.totalMinor
+    };
+
+    setPurchaseLines((currentLines) => currentLines.map((line) =>
+      line.id === updatedLine.id ? updatedLine : line
+    ));
+    finishDraftLineEdit();
+  }
+
+  function removeDraftLine(lineId: string) {
+    setPurchaseLines((currentLines) => currentLines.filter((line) => line.id !== lineId));
+    if (editingDraftLine?.id === lineId) {
+      finishDraftLineEdit();
+    }
+    setErrors((currentErrors) => ({ ...currentErrors, submit: undefined }));
+  }
+
   function addPurchaseLine() {
     const validation = validateDraftLine();
 
@@ -401,7 +508,9 @@ export function PurchasesSection({
       ...currentErrors,
       productId: validation.errors.productId,
       quantity: validation.errors.quantity,
-      unitCost: validation.errors.unitCost
+      unitCost: validation.errors.unitCost,
+      discountPercent: validation.errors.discountPercent,
+      taxPercent: validation.errors.taxPercent
     }));
 
     if (
@@ -430,7 +539,7 @@ export function PurchasesSection({
     setPurchaseLines((currentLines) => [
       ...currentLines,
       {
-        id: `purchase-line-${Date.now()}`,
+        id: `purchase-line-${crypto.randomUUID()}`,
         product: selectedProduct,
         unit: form.unit,
         quantity: parsedQuantity,
@@ -464,6 +573,11 @@ export function PurchasesSection({
 
   async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (editingDraftLine) {
+      setErrors({ submit: "Guarda o cancela la edicion del producto antes de registrar la compra." });
+      return;
+    }
 
     const nextErrors: PurchaseFormErrors = {};
     const lineValidation = validateDraftLine();
@@ -712,19 +826,101 @@ export function PurchasesSection({
         {purchaseLines.length > 0 ? (
           <DataTable ariaLabel="Productos de la compra" className="purchase-lines-table">
             <DataTableHeader
-              labels={["Producto", "Unidad", "Cantidad", "Costo unitario", "Descuento", "Impuesto", "Total"]}
+              labels={["Producto", "Unidad", "Cantidad", "Costo unitario", "Descuento", "Impuesto", "Total", "Acciones"]}
             />
             <tbody>
               {purchaseLines.map((line) => (
-                <tr key={line.id}>
-                  <td>{line.product.name}</td>
-                  <td>{line.unit}</td>
-                  <td>{line.quantity}</td>
-                  <td>{formatCurrency(line.unitCostMinor)}</td>
-                  <td>{line.discountPercent}%</td>
-                  <td>{line.taxPercent}%</td>
-                  <td>{formatCurrency(line.totalMinor)}</td>
-                </tr>
+                <Fragment key={line.id}>
+                  <tr>
+                    <td>{line.product.name}</td>
+                    <td>{line.unit}</td>
+                    <td>{line.quantity}</td>
+                    <td>{formatCurrency(line.unitCostMinor)}</td>
+                    <td>{line.discountPercent}%</td>
+                    <td>{line.taxPercent}%</td>
+                    <td>{formatCurrency(line.totalMinor)}</td>
+                    <td>
+                      <InlineActionGroup className="table-inline-actions">
+                        <SecondaryActionButton
+                          aria-label={`Editar ${line.product.name}`}
+                          disabled={editingDraftLine !== null}
+                          onClick={() => beginDraftLineEdit(line)}
+                          variant="compact"
+                        >
+                          Editar
+                        </SecondaryActionButton>
+                        <SecondaryActionButton
+                          aria-label={`Eliminar ${line.product.name}`}
+                          className="danger-action"
+                          onClick={() => removeDraftLine(line.id)}
+                          variant="compact"
+                        >
+                          Eliminar
+                        </SecondaryActionButton>
+                      </InlineActionGroup>
+                    </td>
+                  </tr>
+                  {editingDraftLine?.id === line.id ? (
+                    <tr>
+                      <td colSpan={8}>
+                        <section aria-label={`Editar producto ${line.product.name}`} className="sales-grid">
+                          <label className="field" htmlFor="producto-linea-compra">
+                            <span>Producto de la linea</span>
+                            <select
+                              aria-invalid={Boolean(editingDraftLine.errors.productId)}
+                              id="producto-linea-compra"
+                              onChange={(event) => updateDraftLineField("productId", event.target.value)}
+                              value={editingDraftLine.form.productId}
+                            >
+                              {activeProducts.map((product) => (
+                                <option key={product.id} value={product.id}>{product.name}</option>
+                              ))}
+                            </select>
+                            {editingDraftLine.errors.productId ? <small>{editingDraftLine.errors.productId}</small> : null}
+                          </label>
+                          <label className="field" htmlFor="unidad-linea-compra">
+                            <span>Unidad del producto</span>
+                            <select id="unidad-linea-compra" onChange={(event) => updateDraftLineField("unit", event.target.value)} value={editingDraftLine.form.unit}>
+                              <option>Unidad</option><option>Kg</option><option>Libra</option><option>Metro</option><option>Caja</option><option>Paquete</option>
+                            </select>
+                          </label>
+                          <TextField
+                            error={editingDraftLine.errors.quantity}
+                            inputMode="numeric"
+                            label="Cantidad del producto"
+                            onChange={(value) => updateDraftLineField("quantity", value)}
+                            value={editingDraftLine.form.quantity}
+                          />
+                          <TextField
+                            error={editingDraftLine.errors.unitCost}
+                            inputMode="numeric"
+                            label="Costo unitario del producto"
+                            onChange={(value) => updateDraftLineField("unitCost", formatIntegerInput(value))}
+                            value={editingDraftLine.form.unitCost}
+                          />
+                          <TextField
+                            error={editingDraftLine.errors.discountPercent}
+                            inputMode="numeric"
+                            label="Descuento del producto %"
+                            onChange={(value) => updateDraftLineField("discountPercent", value.replace(/[^0-9]/g, ""))}
+                            value={editingDraftLine.form.discountPercent}
+                          />
+                          <label className="field" htmlFor="impuesto-linea-compra">
+                            <span>Impuesto del producto</span>
+                            <select aria-invalid={Boolean(editingDraftLine.errors.taxPercent)} id="impuesto-linea-compra" onChange={(event) => updateDraftLineField("taxPercent", event.target.value)} value={editingDraftLine.form.taxPercent}>
+                              <option value="0">Sin IVA</option><option value="5">IVA 5%</option><option value="19">IVA 19%</option>
+                            </select>
+                            {editingDraftLine.errors.taxPercent ? <small>{editingDraftLine.errors.taxPercent}</small> : null}
+                          </label>
+                          <InlineActionGroup>
+                            <SecondaryActionButton onClick={saveDraftLineEdit}>Guardar producto</SecondaryActionButton>
+                            <SecondaryActionButton onClick={finishDraftLineEdit}>Cancelar edicion</SecondaryActionButton>
+                          </InlineActionGroup>
+                        </section>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </DataTable>
@@ -734,6 +930,8 @@ export function PurchasesSection({
           <span>Productos agregados {purchaseLines.length}</span>
           <strong>Total factura {formatCurrency(totalMinor)}</strong>
         </SummaryCard>
+
+        {errors.submit ? <p className="form-error" role="alert">{errors.submit}</p> : null}
 
         <FormActions>
           <PrimaryActionButton type="submit">Registrar compra</PrimaryActionButton>
