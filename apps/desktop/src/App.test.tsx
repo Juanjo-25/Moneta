@@ -1545,6 +1545,31 @@ describe("App navigation", () => {
     expect(within(salesTable).getByText("Panela unidad")).toBeTruthy();
   });
 
+  it("updates the sale price when changing products through the search and keeps the quantity", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    const search = screen.getByRole("combobox", { name: "Producto buscable" });
+    await user.type(search, "arroz{Enter}");
+    await user.type(screen.getByLabelText("Cantidad"), "2");
+    await user.clear(screen.getByLabelText("Precio venta unitario"));
+    await user.type(screen.getByLabelText("Precio venta unitario"), "4000");
+    await user.click(screen.getByRole("button", { name: "Limpiar búsqueda de productos" }));
+    await user.type(search, "PNL-001{Enter}");
+
+    expect((screen.getByLabelText("Precio venta unitario") as HTMLInputElement).value).toBe("3.500");
+    expect((screen.getByLabelText("Cantidad") as HTMLInputElement).value).toBe("2");
+    expect((screen.getByLabelText("Total linea") as HTMLInputElement).value).toMatch(/7\.000/);
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    const lines = screen.getByRole("table", { name: "Productos de la venta" });
+    expect(within(lines).getByText("Panela unidad")).toBeTruthy();
+    expect(within(lines).getByText(/\$\s*7\.000/)).toBeTruthy();
+  });
+
   it("shows sales charts on the dashboard from registered sales", async () => {
     const user = userEvent.setup();
 

@@ -17,6 +17,7 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { SaleDetails } from "../../components/SaleDetails";
 import { TextField } from "../../components/TextField";
+import { ProductPicker } from "./ProductPicker";
 import type { InvoicePdfResult } from "../../invoice-pdf";
 import type {
   CustomerFormErrors,
@@ -246,8 +247,6 @@ export function SalesSection({
     form: SaleEditLineDraft;
     errors: SalesFormErrors;
   } | null>(null);
-  const [productSearch, setProductSearch] = useState("");
-  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
   const [customerForm, setCustomerForm] =
     useState<CustomerFormState>(emptyCustomerForm);
@@ -270,20 +269,6 @@ export function SalesSection({
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const activeProducts = products.filter((product) => product.active);
-  const normalizedProductSearch = normalizeSearchText(productSearch);
-  const filteredProducts =
-    normalizedProductSearch === ""
-      ? activeProducts
-      : activeProducts.filter((product) =>
-          normalizeSearchText(`${product.name} ${product.sku}`).includes(
-            normalizedProductSearch
-          )
-        );
-  const visibleProducts =
-    selectedProduct &&
-    !filteredProducts.some((product) => product.id === selectedProduct.id)
-      ? [selectedProduct, ...filteredProducts]
-      : filteredProducts;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
   const unitPriceMinor = parseNonNegativeInteger(form.unitPrice) ?? 0;
   const discountPercent = parsePercentage(form.discountPercent);
@@ -367,22 +352,18 @@ export function SalesSection({
     updateField(field, value.replace(/[^0-9]/g, ""));
   }
 
-  function selectProduct(product: ProductRecord) {
-    updateField("productId", product.id);
-    setProductSearch(product.name);
-    setProductDropdownOpen(false);
-  }
-
-  function updateProductSearch(value: string) {
-    setProductSearch(value);
-    setProductDropdownOpen(true);
-
-    if (
-      selectedProduct &&
-      normalizeSearchText(value) !== normalizeSearchText(selectedProduct.name)
-    ) {
-      updateField("productId", "");
-    }
+  function selectProduct(product: ProductRecord | null) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      productId: product?.id ?? "",
+      unit: product?.unit ?? "Unidad",
+      unitPrice: product
+        ? currentForm.productId === product.id
+          ? currentForm.unitPrice
+          : formatIntegerInput(String(product.salePriceMinor))
+        : ""
+    }));
+    setErrors((currentErrors) => ({ ...currentErrors, productId: undefined, unitPrice: undefined }));
   }
 
   function validateDraftLine(draft: SaleEditLineDraft = form): {
@@ -563,7 +544,6 @@ export function SalesSection({
       discountPercent: "0",
       taxPercent: "0"
     }));
-    setProductSearch("");
     setErrors((currentErrors) => ({
       ...currentErrors,
       productId: undefined,
@@ -1138,127 +1118,52 @@ export function SalesSection({
             <h2>Detalle de facturacion</h2>
             <span>Agrega los productos y sus valores antes de registrar la venta.</span>
           </div>
-          <div className="sales-grid">
-          <div className="field searchable-select">
-            <span>Producto</span>
-            <div
-              className="searchable-select-control"
-              onBlur={() => window.setTimeout(() => setProductDropdownOpen(false), 120)}
-            >
-              <input
-                aria-autocomplete="list"
-                aria-controls="producto-venta-options"
-                aria-expanded={productDropdownOpen}
-                aria-invalid={Boolean(errors.productId)}
-                aria-label="Producto buscable"
-                id="producto-venta-buscable"
-                onChange={(event) => updateProductSearch(event.target.value)}
-                onFocus={() => setProductDropdownOpen(true)}
-                placeholder="Busca por nombre o codigo"
-                role="combobox"
-                type="text"
-                value={productSearch}
-              />
-              <button
-                aria-label="Abrir productos"
-                className="searchable-select-toggle"
-                onClick={() => setProductDropdownOpen((open) => !open)}
-                type="button"
-              >
-                ▾
-              </button>
-              {productDropdownOpen ? (
-                <div
-                  className="searchable-select-menu"
-                  id="producto-venta-options"
-                  role="listbox"
-                >
-                  {visibleProducts.length > 0 ? (
-                    visibleProducts.map((product) => (
-                      <button
-                        aria-label={product.name}
-                        aria-selected={form.productId === product.id}
-                        className="searchable-select-option"
-                        key={product.id}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => selectProduct(product)}
-                        role="option"
-                        type="button"
-                      >
-                        <strong>{product.name}</strong>
-                        <span>{product.sku} · Stock {product.stock}</span>
-                      </button>
-                    ))
-                  ) : (
-                    <span className="searchable-select-empty">
-                      Sin productos coincidentes
-                    </span>
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <select
-              aria-label="Producto"
-              className="native-select-compat"
-              onChange={(event) => {
-                const product =
-                  activeProducts.find((currentProduct) => currentProduct.id === event.target.value) ??
-                  null;
-
-                updateField("productId", event.target.value);
-                setProductSearch(product?.name ?? "");
-              }}
+          <div className="sales-entry">
+            <ProductPicker
+              error={errors.productId}
+              formatCurrency={formatCurrency}
+              onSelect={selectProduct}
+              products={products}
               value={form.productId}
-            >
-              <option value="">Selecciona un producto</option>
-              {activeProducts.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name}
-                </option>
-              ))}
-            </select>
-            <small>
-              {visibleProducts.length === activeProducts.length
-                ? `${activeProducts.length} productos disponibles`
-                : `${visibleProducts.length} de ${activeProducts.length} productos`}
-            </small>
-            {errors.productId ? <small>{errors.productId}</small> : null}
+            />
+            <div className="sales-line-fields">
+              <label className="field" htmlFor="unidad-venta">
+                <span>Unidad</span>
+                <select id="unidad-venta" onChange={(event) => updateField("unit", event.target.value)} value={form.unit}>
+                  <option>Unidad</option><option>Kg</option><option>Libra</option><option>Metro</option><option>Caja</option><option>Paquete</option>
+                </select>
+              </label>
+
+              <TextField
+                error={errors.quantity}
+                inputMode="numeric"
+                label="Cantidad"
+                onChange={(value) => {
+                  updateField("quantity", value);
+                }}
+                value={form.quantity}
+              />
+              <TextField
+                error={errors.unitPrice}
+                inputMode="numeric"
+                label="Precio venta unitario"
+                onChange={(value) => {
+                  updateField("unitPrice", formatIntegerInput(value));
+                }}
+                value={form.unitPrice}
+              />
+              <TextField error={errors.discountPercent} inputMode="numeric" label="Descuento %" onChange={(value) => updatePercentageField("discountPercent", value)} value={form.discountPercent} />
+              <label className="field" htmlFor="impuesto-venta"><span>Impuesto</span><select aria-invalid={Boolean(errors.taxPercent)} id="impuesto-venta" onChange={(event) => updateField("taxPercent", event.target.value)} value={form.taxPercent}><option value="0">Sin IVA</option><option value="5">IVA 5%</option><option value="19">IVA 19%</option></select>{errors.taxPercent ? <small>{errors.taxPercent}</small> : null}</label>
+            </div>
+            <div className="sales-line-footer">
+              <div className="sales-line-total">
+                <TextField label="Total linea" onChange={() => undefined} readOnly value={formatCurrency(draftLineTotalMinor)} />
+              </div>
+              <SecondaryActionButton onClick={addSaleLine}>
+                Agregar producto
+              </SecondaryActionButton>
+            </div>
           </div>
-
-          <label className="field" htmlFor="unidad-venta">
-            <span>Unidad</span>
-            <select id="unidad-venta" onChange={(event) => updateField("unit", event.target.value)} value={form.unit}>
-              <option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option>
-            </select>
-          </label>
-
-          <TextField
-            error={errors.quantity}
-            inputMode="numeric"
-            label="Cantidad"
-            onChange={(value) => {
-              updateField("quantity", value);
-            }}
-            value={form.quantity}
-          />
-          <TextField
-            error={errors.unitPrice}
-            inputMode="numeric"
-            label="Precio venta unitario"
-            onChange={(value) => {
-              updateField("unitPrice", formatIntegerInput(value));
-            }}
-            value={form.unitPrice}
-          />
-          <TextField error={errors.discountPercent} inputMode="numeric" label="Descuento %" onChange={(value) => updatePercentageField("discountPercent", value)} value={form.discountPercent} />
-          <label className="field" htmlFor="impuesto-venta"><span>Impuesto</span><select aria-invalid={Boolean(errors.taxPercent)} id="impuesto-venta" onChange={(event) => updateField("taxPercent", event.target.value)} value={form.taxPercent}><option value="0">Sin IVA</option><option value="5">IVA 5%</option><option value="19">IVA 19%</option></select>{errors.taxPercent ? <small>{errors.taxPercent}</small> : null}</label>
-          <TextField label="Total linea" onChange={() => undefined} readOnly value={formatCurrency(draftLineTotalMinor)} />
-          <InlineActionGroup>
-            <SecondaryActionButton onClick={addSaleLine}>
-              Agregar producto
-            </SecondaryActionButton>
-          </InlineActionGroup>
-        </div>
         </section>
 
         {customerFormVisible ? (
@@ -1357,7 +1262,7 @@ export function SalesSection({
                           <label className="field" htmlFor="unidad-linea-venta">
                             <span>Unidad del producto</span>
                             <select id="unidad-linea-venta" onChange={(event) => updateDraftLineField("unit", event.target.value)} value={editingDraftLine.form.unit}>
-                              <option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option>
+                              <option>Unidad</option><option>Kg</option><option>Libra</option><option>Metro</option><option>Caja</option><option>Paquete</option>
                             </select>
                           </label>
                           <TextField
@@ -1477,7 +1382,7 @@ export function SalesSection({
                 <label className="field" htmlFor="unidad-edicion-venta">
                   <span>Unidad</span>
                   <select id="unidad-edicion-venta" onChange={(event) => updateEditLineDraft("unit", event.target.value)} value={editLineDraft.unit}>
-                    <option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option>
+                    <option>Unidad</option><option>Kg</option><option>Libra</option><option>Metro</option><option>Caja</option><option>Paquete</option>
                   </select>
                 </label>
                 <TextField inputMode="numeric" label="Cantidad nuevo item" onChange={(value) => updateEditLineDraft("quantity", value)} value={editLineDraft.quantity} />
@@ -1496,7 +1401,7 @@ export function SalesSection({
                 {editLines.map((line) => (
                   <tr key={line.id}>
                     <td><input aria-label={`Descripcion ${line.productName}`} onChange={(event) => updateEditLine(line.id, "productName", event.target.value)} value={line.productName} /></td>
-                    <td><select aria-label={`Unidad ${line.productName}`} onChange={(event) => updateEditLine(line.id, "unit", event.target.value)} value={line.unit}><option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option></select></td>
+                    <td><select aria-label={`Unidad ${line.productName}`} onChange={(event) => updateEditLine(line.id, "unit", event.target.value)} value={line.unit}><option>Unidad</option><option>Kg</option><option>Libra</option><option>Metro</option><option>Caja</option><option>Paquete</option></select></td>
                     <td><input aria-label={`Cantidad ${line.productName}`} inputMode="numeric" onChange={(event) => updateEditLine(line.id, "quantity", event.target.value)} value={line.quantity} /></td>
                     <td><input aria-label={`Precio ${line.productName}`} inputMode="numeric" onChange={(event) => updateEditLine(line.id, "unitPriceMinor", event.target.value)} value={line.unitPriceMinor} /></td>
                     <td><input aria-label={`Descuento ${line.productName}`} inputMode="numeric" onChange={(event) => updateEditLine(line.id, "discountPercent", event.target.value)} value={line.discountPercent} /></td>
@@ -1763,14 +1668,6 @@ function getDocumentSequenceNumber(invoiceNumber: string): number | null {
   return Number.isSafeInteger(parsedSequence) && parsedSequence >= 1
     ? parsedSequence
     : null;
-}
-
-function normalizeSearchText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .trim();
 }
 
 type SellerSelectProps = {
