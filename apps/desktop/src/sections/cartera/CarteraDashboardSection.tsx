@@ -211,8 +211,6 @@ export function CarteraDashboardSection({
         </div>
       </section>
 
-      <CarteraAlerts formatCurrency={formatCurrency} items={alertItems} />
-
       <section className="cartera-view-switch-shell" aria-label="Selector de cartera">
         <ViewSwitch
           ariaLabel="Vistas de cartera"
@@ -224,6 +222,13 @@ export function CarteraDashboardSection({
           selectedValue={activeView}
         />
       </section>
+
+      <CarteraAlerts
+        formatCurrency={formatCurrency}
+        items={alertItems}
+        overdueCount={overdueCount}
+        upcomingCount={upcomingCount}
+      />
 
       {activeView === "receivables" ? (
         <section
@@ -261,10 +266,14 @@ export function CarteraDashboardSection({
 
 function CarteraAlerts({
   formatCurrency,
-  items
+  items,
+  overdueCount,
+  upcomingCount
 }: {
   formatCurrency: (minor: number) => string;
   items: CarteraAlertItem[];
+  overdueCount: number;
+  upcomingCount: number;
 }) {
   if (items.length === 0) {
     return (
@@ -276,20 +285,32 @@ function CarteraAlerts({
   }
 
   return (
-    <section className="cartera-alerts" aria-label="Alertas de cartera">
-      <strong>Alertas automaticas</strong>
-      <ul>
-        {items.map((item) => (
-          <li key={`${item.directionLabel}-${item.id}`}>
-            <span>{item.metadata.alertLabel}</span>
-            <strong>{item.partyName}</strong>
-            <span>{item.directionLabel}</span>
-            <span>{item.reference}</span>
-            <span>{item.dueAt || "Sin vencimiento"}</span>
-            <span>{formatCurrency(item.balanceMinor)}</span>
-          </li>
-        ))}
-      </ul>
+    <section className="cartera-alerts cartera-alerts-collapsible" aria-label="Alertas de cartera">
+      <details>
+        <summary className="cartera-alerts-summary">
+          <strong>Alertas automáticas</strong>
+          <span className="cartera-alerts-counts">
+            <span className="cartera-alerts-overdue">{overdueCount} vencidas</span>
+            <span>{upcomingCount} próximas a vencer</span>
+          </span>
+          <span className="cartera-alerts-toggle" aria-hidden="true">
+            <span className="cartera-alerts-show">Ver alertas</span>
+            <span className="cartera-alerts-hide">Ocultar alertas</span>
+          </span>
+        </summary>
+        <ul aria-label="Facturas con alertas" tabIndex={0}>
+          {items.map((item) => (
+            <li key={`${item.directionLabel}-${item.id}`}>
+              <span>{item.metadata.alertLabel}</span>
+              <strong>{item.partyName}</strong>
+              <span>{item.directionLabel}</span>
+              <span>{item.reference}</span>
+              <span>{item.dueAt || "Sin vencimiento"}</span>
+              <span>{formatCurrency(item.balanceMinor)}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   );
 }

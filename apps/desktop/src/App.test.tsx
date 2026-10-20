@@ -3415,10 +3415,10 @@ describe("App navigation", () => {
     expect(screen.getByRole("radio", { name: "Por pagar" })).toBeTruthy();
     expect(screen.getByRole("table", { name: "Cartera por cobrar" })).toBeTruthy();
     expect(
-      summary.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING
+      summary.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      alerts.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING
+      views.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
       views.compareDocumentPosition(receivablesContent) & Node.DOCUMENT_POSITION_FOLLOWING
