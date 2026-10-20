@@ -805,26 +805,28 @@ export function PurchasesSection({
                   <td>{purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                   <td>{formatCurrency(purchase.totalMinor)}</td>
                   <td>
-                    <SecondaryActionButton
-                      className="document-detail-trigger"
-                      variant="compact"
-                      aria-label={`${detailPurchaseId === purchase.id ? "Ocultar" : "Ver"} detalle de compra ${purchase.invoiceNumber}`}
-                      aria-expanded={detailPurchaseId === purchase.id}
-                      aria-controls={`purchase-detail-${purchase.id}`}
-                      onClick={() => setDetailPurchaseId((current) => current === purchase.id ? null : purchase.id)}
-                    >
-                      {detailPurchaseId === purchase.id ? "Ocultar detalle" : "Ver detalle"}
-                    </SecondaryActionButton>
-                    <SecondaryActionButton
-                      className="danger-action"
-                      onClick={() => {
-                        setDeleteCandidate(purchase);
-                        setDeleteNotice(null);
-                      }}
-                      variant="compact"
-                    >
-                      Eliminar
-                    </SecondaryActionButton>
+                    <InlineActionGroup className="table-inline-actions">
+                      <SecondaryActionButton
+                        className="document-detail-trigger"
+                        variant="compact"
+                        aria-label={`${detailPurchaseId === purchase.id ? "Ocultar" : "Ver"} detalle de compra ${purchase.invoiceNumber}`}
+                        aria-expanded={detailPurchaseId === purchase.id}
+                        aria-controls={`purchase-detail-${purchase.id}`}
+                        onClick={() => setDetailPurchaseId((current) => current === purchase.id ? null : purchase.id)}
+                      >
+                        {detailPurchaseId === purchase.id ? "Ocultar detalle" : "Ver detalle"}
+                      </SecondaryActionButton>
+                      <SecondaryActionButton
+                        className="danger-action"
+                        onClick={() => {
+                          setDeleteCandidate(purchase);
+                          setDeleteNotice(null);
+                        }}
+                        variant="compact"
+                      >
+                        Eliminar
+                      </SecondaryActionButton>
+                    </InlineActionGroup>
                   </td>
                 </tr>
                 {detailPurchaseId === purchase.id && <tr className="document-detail-row" id={`purchase-detail-${purchase.id}`}>

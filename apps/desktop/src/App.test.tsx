@@ -2428,6 +2428,133 @@ describe("App navigation", () => {
     ).toBeTruthy();
   });
 
+  it("edits an added sale product and registers its recalculated values without duplicating it", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await createSecondProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Edicion");
+    await user.type(screen.getByLabelText("NIT o C.C."), "123");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+
+    // Keep a second product in progress while editing the previously added one.
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Panela unidad" }));
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Editar Arroz libra" }));
+    const editor = screen.getByRole("region", { name: "Editar producto Arroz libra" });
+    await user.selectOptions(within(editor).getByLabelText("Producto de la linea"), within(editor).getByRole("option", { name: "Panela unidad" }));
+    expect((within(editor).getByLabelText("Precio unitario del producto") as HTMLInputElement).value).toBe("3.500");
+    await user.selectOptions(within(editor).getByLabelText("Producto de la linea"), within(editor).getByRole("option", { name: "Arroz libra" }));
+    await user.clear(within(editor).getByLabelText("Cantidad del producto"));
+    await user.type(within(editor).getByLabelText("Cantidad del producto"), "2");
+    await user.clear(within(editor).getByLabelText("Precio unitario del producto"));
+    await user.type(within(editor).getByLabelText("Precio unitario del producto"), "5000");
+    await user.selectOptions(within(editor).getByLabelText("Unidad del producto"), "Libra");
+    await user.clear(within(editor).getByLabelText("Descuento del producto %"));
+    await user.type(within(editor).getByLabelText("Descuento del producto %"), "10");
+    await user.selectOptions(within(editor).getByLabelText("Impuesto del producto"), "19");
+    await user.click(within(editor).getByRole("button", { name: "Guardar producto" }));
+
+    const linesTable = screen.getByRole("table", { name: "Productos de la venta" });
+    expect(within(linesTable).getAllByRole("row")).toHaveLength(2);
+    expect(within(linesTable).getByText(/\$\s*10\.710/)).toBeTruthy();
+    expect(within(linesTable).getByText("Libra")).toBeTruthy();
+    expect((screen.getByLabelText("Producto buscable") as HTMLInputElement).value).toBe("Panela unidad");
+    expect((screen.getByLabelText("Cantidad") as HTMLInputElement).value).toBe("1");
+    expect(screen.getByText(/Total \$\s*14\.210/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    const salesTable = screen.getByRole("table", { name: "Ventas registradas" });
+    expect(within(salesTable).getByText("2 productos")).toBeTruthy();
+    expect(within(salesTable).getByText(/\$\s*14\.210/)).toBeTruthy();
+    await user.click(within(salesTable).getByRole("button", { name: /Ver detalle de venta/ }));
+    const detail = screen.getByRole("region", { name: /Detalle de venta/ });
+    const riceRow = within(detail).getByRole("row", { name: /Arroz libra/ });
+    expect(within(riceRow).getByText("2")).toBeTruthy();
+    expect(within(riceRow).getByText(/\$\s*10\.710/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("row", {
+      name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+2\s+1/
+    })).toBeTruthy();
+    expect(within(productsTable).getByRole("row", {
+      name: /PNL-001\s+Panela unidad\s+Unidad\s+\$\s*2\.500\s+\$\s*3\.500\s+2\s+1/
+    })).toBeTruthy();
+  });
+
+  it("validates added-product edits and lets the user cancel without changing the invoice", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+    await user.type(screen.getByLabelText("Cantidad"), "1");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.click(screen.getByRole("button", { name: "Editar Arroz libra" }));
+    const editor = screen.getByRole("region", { name: "Editar producto Arroz libra" });
+    await user.clear(within(editor).getByLabelText("Cantidad del producto"));
+    await user.clear(within(editor).getByLabelText("Precio unitario del producto"));
+    await user.type(within(editor).getByLabelText("Precio unitario del producto"), "0");
+    await user.clear(within(editor).getByLabelText("Descuento del producto %"));
+    await user.type(within(editor).getByLabelText("Descuento del producto %"), "101");
+    await user.click(within(editor).getByRole("button", { name: "Guardar producto" }));
+    expect(within(editor).getByText("La cantidad debe ser un entero mayor a cero.")).toBeTruthy();
+    expect(within(editor).getByText("El precio de venta debe ser un entero mayor a cero.")).toBeTruthy();
+    expect(within(editor).getByText("El descuento debe estar entre 0 y 100.")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    expect(screen.getByText("Guarda o cancela la edicion del producto antes de registrar la venta.")).toBeTruthy();
+    await user.click(within(editor).getByRole("button", { name: "Cancelar edicion" }));
+    expect(screen.queryByRole("region", { name: "Editar producto Arroz libra" })).toBeNull();
+    expect(screen.getByText(/Total \$\s*4\.500/)).toBeTruthy();
+    expect(screen.queryByText("Guarda o cancela la edicion del producto antes de registrar la venta.")).toBeNull();
+    expect(screen.queryByRole("table", { name: "Ventas registradas" })).toBeNull();
+  });
+
+  it("removes individual added products including repeated products and the final line", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    for (const quantity of ["1", "2"]) {
+      await user.selectOptions(screen.getByLabelText("Producto"), screen.getByRole("option", { name: "Arroz libra" }));
+      await user.type(screen.getByLabelText("Cantidad"), quantity);
+      await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    }
+
+    await user.click(screen.getAllByRole("button", { name: "Eliminar Arroz libra" })[0]!);
+    const linesTable = screen.getByRole("table", { name: "Productos de la venta" });
+    expect(within(linesTable).getAllByRole("row")).toHaveLength(2);
+    expect(within(linesTable).getByText("2")).toBeTruthy();
+    expect(screen.getByText(/Total \$\s*9\.000/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Editar Arroz libra" }));
+    await user.click(screen.getByRole("button", { name: "Eliminar Arroz libra" }));
+    expect(screen.queryByRole("table", { name: "Productos de la venta" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Editar producto Arroz libra" })).toBeNull();
+    expect(screen.getByText(/Total \$\s*0/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Registrar venta" }));
+    expect(screen.getByText("Debes seleccionar un producto.")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Ventas registradas" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productsTable = screen.getByRole("table", { name: "Productos registrados" });
+    expect(within(productsTable).getByRole("row", {
+      name: /ARZ-001\s+Arroz libra\s+Unidad\s+\$\s*3\.200\s+\$\s*4\.500\s+4\s+1/
+    })).toBeTruthy();
+  });
+
   it("registers a pending sale with several products and creates one receivable", async () => {
     const user = userEvent.setup();
 

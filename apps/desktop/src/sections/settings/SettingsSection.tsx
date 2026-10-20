@@ -547,7 +547,7 @@ export function SettingsSection({
                   <tr key={seller}>
                     <td>{seller}</td>
                     <td>
-                      <div className="settings-seller-actions">
+                      <div className="table-inline-actions settings-seller-actions">
                         <SecondaryActionButton
                           onClick={() => editSeller(index)}
                           type="button"

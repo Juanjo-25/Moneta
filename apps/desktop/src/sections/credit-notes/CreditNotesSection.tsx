@@ -9,6 +9,7 @@ import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
+import { InlineActionGroup } from "../../components/InlineActionGroup";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -563,55 +564,57 @@ export function CreditNotesSection({
                     <td>{creditNote.lines.length}</td>
                     <td>{formatCurrency(creditNote.totalMinor)}</td>
                     <td>
-                      {creditNote.status === "draft" ? (
-                        <PrimaryActionButton
-                          onClick={() =>
-                            setReviewCreditNoteId(isReviewing ? null : creditNote.id)
-                          }
-                        >
-                          Detalle
-                        </PrimaryActionButton>
-                      ) : null}
-                      {creditNote.status === "confirmed" ? (
-                        <>
+                      <InlineActionGroup className="table-inline-actions">
+                        {creditNote.status === "draft" ? (
+                          <PrimaryActionButton
+                            onClick={() =>
+                              setReviewCreditNoteId(isReviewing ? null : creditNote.id)
+                            }
+                          >
+                            Detalle
+                          </PrimaryActionButton>
+                        ) : null}
+                        {creditNote.status === "confirmed" ? (
+                          <>
+                            <SecondaryActionButton
+                              onClick={() =>
+                                setReviewCreditNoteId(
+                                  isReviewing ? null : creditNote.id
+                                )
+                              }
+                              variant="compact"
+                            >
+                              Detalle
+                            </SecondaryActionButton>
+                            <SecondaryActionButton
+                              onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
+                              variant="compact"
+                            >
+                              Anular
+                            </SecondaryActionButton>
+                          </>
+                        ) : null}
+                        {creditNote.status === "void" ? (
                           <SecondaryActionButton
                             onClick={() =>
-                              setReviewCreditNoteId(
-                                isReviewing ? null : creditNote.id
-                              )
+                              setReviewCreditNoteId(isReviewing ? null : creditNote.id)
                             }
                             variant="compact"
                           >
                             Detalle
                           </SecondaryActionButton>
-                          <SecondaryActionButton
-                            onClick={() => onSetCreditNoteStatus(creditNote.id, "void")}
-                            variant="compact"
-                          >
-                            Anular
-                          </SecondaryActionButton>
-                        </>
-                      ) : null}
-                      {creditNote.status === "void" ? (
+                        ) : null}
                         <SecondaryActionButton
-                          onClick={() =>
-                            setReviewCreditNoteId(isReviewing ? null : creditNote.id)
-                          }
+                          className="danger-action"
+                          onClick={() => {
+                            setDeleteCandidate(creditNote);
+                            setDeleteNotice(null);
+                          }}
                           variant="compact"
                         >
-                          Detalle
+                          Eliminar
                         </SecondaryActionButton>
-                      ) : null}
-                      <SecondaryActionButton
-                        className="danger-action"
-                        onClick={() => {
-                          setDeleteCandidate(creditNote);
-                          setDeleteNotice(null);
-                        }}
-                        variant="compact"
-                      >
-                        Eliminar
-                      </SecondaryActionButton>
+                      </InlineActionGroup>
                     </td>
                   </tr>
                   {isReviewing ? (

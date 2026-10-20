@@ -460,7 +460,7 @@ export function SuppliersSection({
                     </StatusBadge>
                   </td>
                   <td className="supplier-actions-cell">
-                    <div className="supplier-row-actions">
+                    <div className="table-inline-actions supplier-row-actions">
                       <SecondaryActionButton
                         aria-label={`Editar proveedor ${supplier.name}`}
                         onClick={() => startEditingSupplier(supplier)}

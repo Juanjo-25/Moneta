@@ -241,6 +241,11 @@ export function SalesSection({
 }: SalesSectionProps) {
   const { form, saleLines } = salesDraft;
   const [errors, setErrors] = useState<SalesFormErrors>({});
+  const [editingDraftLine, setEditingDraftLine] = useState<{
+    id: string;
+    form: SaleEditLineDraft;
+    errors: SalesFormErrors;
+  } | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [customerFormVisible, setCustomerFormVisible] = useState(false);
@@ -302,6 +307,12 @@ export function SalesSection({
   );
   const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
   const configuredSellers = settings.sellers;
+
+  useEffect(() => {
+    if (editingDraftLine && !saleLines.some((line) => line.id === editingDraftLine.id)) {
+      setEditingDraftLine(null);
+    }
+  }, [editingDraftLine, saleLines]);
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -374,7 +385,7 @@ export function SalesSection({
     }
   }
 
-  function validateDraftLine(): {
+  function validateDraftLine(draft: SaleEditLineDraft = form): {
     errors: SalesFormErrors;
     parsedQuantity: number | null;
     parsedUnitPrice: number | null;
@@ -382,12 +393,12 @@ export function SalesSection({
     parsedTaxPercent: number | null;
   } {
     const nextErrors: SalesFormErrors = {};
-    const parsedQuantity = parseNonNegativeInteger(form.quantity);
-    const parsedUnitPrice = parseNonNegativeInteger(form.unitPrice);
-    const parsedDiscountPercent = parsePercentage(form.discountPercent);
-    const parsedTaxPercent = parsePercentage(form.taxPercent);
+    const parsedQuantity = parseNonNegativeInteger(draft.quantity);
+    const parsedUnitPrice = parseNonNegativeInteger(draft.unitPrice);
+    const parsedDiscountPercent = parsePercentage(draft.discountPercent);
+    const parsedTaxPercent = parsePercentage(draft.taxPercent);
 
-    if (!selectedProduct) {
+    if (!products.some((product) => product.id === draft.productId && product.active)) {
       nextErrors.productId = "Debes seleccionar un producto.";
     }
     if (parsedQuantity === null || parsedQuantity <= 0) {
@@ -413,6 +424,95 @@ export function SalesSection({
     };
   }
 
+  function beginDraftLineEdit(line: SaleDraftLine) {
+    setEditingDraftLine({
+      id: line.id,
+      form: {
+        productId: line.product.id,
+        unit: line.unit,
+        quantity: String(line.quantity),
+        unitPrice: formatIntegerInput(String(line.unitPriceMinor)),
+        discountPercent: String(line.discountPercent),
+        taxPercent: String(line.taxPercent)
+      },
+      errors: {}
+    });
+    setErrors((currentErrors) => ({ ...currentErrors, submit: undefined }));
+  }
+
+  function updateDraftLineField(field: keyof SaleEditLineDraft, value: string) {
+    setEditingDraftLine((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const product = field === "productId"
+        ? products.find((candidate) => candidate.id === value)
+        : null;
+
+      return {
+        ...current,
+        form: {
+          ...current.form,
+          [field]: value,
+          ...(product ? {
+            unit: product.unit,
+            unitPrice: formatIntegerInput(String(product.salePriceMinor))
+          } : {})
+        },
+        errors: { ...current.errors, [field]: undefined }
+      };
+    });
+  }
+
+  function finishDraftLineEdit() {
+    setEditingDraftLine(null);
+    setErrors((currentErrors) => ({ ...currentErrors, submit: undefined }));
+  }
+
+  function saveDraftLineEdit() {
+    if (!editingDraftLine) {
+      return;
+    }
+
+    const validation = validateDraftLine(editingDraftLine.form);
+    const product = products.find((candidate) => candidate.id === editingDraftLine.form.productId);
+
+    if (
+      Object.keys(validation.errors).length > 0 ||
+      !product ||
+      validation.parsedQuantity === null ||
+      validation.parsedUnitPrice === null ||
+      validation.parsedDiscountPercent === null ||
+      validation.parsedTaxPercent === null
+    ) {
+      setEditingDraftLine({ ...editingDraftLine, errors: validation.errors });
+      return;
+    }
+
+    const updatedLine = buildSaleLineSnapshot({
+      product,
+      unit: editingDraftLine.form.unit,
+      quantity: validation.parsedQuantity,
+      unitPriceMinor: validation.parsedUnitPrice,
+      discountPercent: validation.parsedDiscountPercent,
+      taxPercent: validation.parsedTaxPercent
+    });
+
+    setSaleLines((currentLines) => currentLines.map((line) =>
+      line.id === editingDraftLine.id ? { ...updatedLine, id: line.id } : line
+    ));
+    finishDraftLineEdit();
+  }
+
+  function removeDraftLine(lineId: string) {
+    setSaleLines((currentLines) => currentLines.filter((line) => line.id !== lineId));
+    if (editingDraftLine?.id === lineId) {
+      finishDraftLineEdit();
+    }
+    setErrors((currentErrors) => ({ ...currentErrors, submit: undefined }));
+  }
+
   function addSaleLine() {
     const validation = validateDraftLine();
 
@@ -420,7 +520,9 @@ export function SalesSection({
       ...currentErrors,
       productId: validation.errors.productId,
       quantity: validation.errors.quantity,
-      unitPrice: validation.errors.unitPrice
+      unitPrice: validation.errors.unitPrice,
+      discountPercent: validation.errors.discountPercent,
+      taxPercent: validation.errors.taxPercent
     }));
 
     if (
@@ -474,6 +576,11 @@ export function SalesSection({
 
   async function submitSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (editingDraftLine && saleLines.some((line) => line.id === editingDraftLine.id)) {
+      setErrors({ submit: "Guarda o cancela la edicion del producto antes de registrar la venta." });
+      return;
+    }
 
     const nextErrors: SalesFormErrors = {};
     const lineValidation = validateDraftLine();
@@ -1195,19 +1302,101 @@ export function SalesSection({
         {saleLines.length > 0 ? (
           <DataTable ariaLabel="Productos de la venta" className="purchase-lines-table">
             <DataTableHeader
-              labels={["Producto", "Unidad", "Cantidad", "Precio unitario", "Descuento", "Impuesto", "Total"]}
+              labels={["Producto", "Unidad", "Cantidad", "Precio unitario", "Descuento", "Impuesto", "Total", "Acciones"]}
             />
             <tbody>
               {saleLines.map((line) => (
-                <tr key={line.id}>
-                  <td>{line.product.name}</td>
-                  <td>{line.unit}</td>
-                  <td>{line.quantity}</td>
-                  <td>{formatCurrency(line.unitPriceMinor)}</td>
-                  <td>{line.discountPercent}%</td>
-                  <td>{line.taxPercent}%</td>
-                  <td>{formatCurrency(line.totalMinor)}</td>
-                </tr>
+                <Fragment key={line.id}>
+                  <tr>
+                    <td>{line.product.name}</td>
+                    <td>{line.unit}</td>
+                    <td>{line.quantity}</td>
+                    <td>{formatCurrency(line.unitPriceMinor)}</td>
+                    <td>{line.discountPercent}%</td>
+                    <td>{line.taxPercent}%</td>
+                    <td>{formatCurrency(line.totalMinor)}</td>
+                    <td>
+                      <InlineActionGroup className="table-inline-actions">
+                        <SecondaryActionButton
+                          aria-label={`Editar ${line.product.name}`}
+                          disabled={editingDraftLine !== null}
+                          onClick={() => beginDraftLineEdit(line)}
+                          variant="compact"
+                        >
+                          Editar
+                        </SecondaryActionButton>
+                        <SecondaryActionButton
+                          aria-label={`Eliminar ${line.product.name}`}
+                          className="danger-action"
+                          onClick={() => removeDraftLine(line.id)}
+                          variant="compact"
+                        >
+                          Eliminar
+                        </SecondaryActionButton>
+                      </InlineActionGroup>
+                    </td>
+                  </tr>
+                  {editingDraftLine?.id === line.id ? (
+                    <tr>
+                      <td colSpan={8}>
+                        <section aria-label={`Editar producto ${line.product.name}`} className="sales-grid">
+                          <label className="field" htmlFor="producto-linea-venta">
+                            <span>Producto de la linea</span>
+                            <select
+                              aria-invalid={Boolean(editingDraftLine.errors.productId)}
+                              id="producto-linea-venta"
+                              onChange={(event) => updateDraftLineField("productId", event.target.value)}
+                              value={editingDraftLine.form.productId}
+                            >
+                              {activeProducts.map((product) => (
+                                <option key={product.id} value={product.id}>{product.name}</option>
+                              ))}
+                            </select>
+                            {editingDraftLine.errors.productId ? <small>{editingDraftLine.errors.productId}</small> : null}
+                          </label>
+                          <label className="field" htmlFor="unidad-linea-venta">
+                            <span>Unidad del producto</span>
+                            <select id="unidad-linea-venta" onChange={(event) => updateDraftLineField("unit", event.target.value)} value={editingDraftLine.form.unit}>
+                              <option>Unidad</option><option>Kg</option><option>Libra</option><option>Caja</option><option>Paquete</option>
+                            </select>
+                          </label>
+                          <TextField
+                            error={editingDraftLine.errors.quantity}
+                            inputMode="numeric"
+                            label="Cantidad del producto"
+                            onChange={(value) => updateDraftLineField("quantity", value)}
+                            value={editingDraftLine.form.quantity}
+                          />
+                          <TextField
+                            error={editingDraftLine.errors.unitPrice}
+                            inputMode="numeric"
+                            label="Precio unitario del producto"
+                            onChange={(value) => updateDraftLineField("unitPrice", formatIntegerInput(value))}
+                            value={editingDraftLine.form.unitPrice}
+                          />
+                          <TextField
+                            error={editingDraftLine.errors.discountPercent}
+                            inputMode="numeric"
+                            label="Descuento del producto %"
+                            onChange={(value) => updateDraftLineField("discountPercent", value.replace(/[^0-9]/g, ""))}
+                            value={editingDraftLine.form.discountPercent}
+                          />
+                          <label className="field" htmlFor="impuesto-linea-venta">
+                            <span>Impuesto del producto</span>
+                            <select aria-invalid={Boolean(editingDraftLine.errors.taxPercent)} id="impuesto-linea-venta" onChange={(event) => updateDraftLineField("taxPercent", event.target.value)} value={editingDraftLine.form.taxPercent}>
+                              <option value="0">Sin IVA</option><option value="5">IVA 5%</option><option value="19">IVA 19%</option>
+                            </select>
+                            {editingDraftLine.errors.taxPercent ? <small>{editingDraftLine.errors.taxPercent}</small> : null}
+                          </label>
+                          <InlineActionGroup>
+                            <SecondaryActionButton onClick={saveDraftLineEdit}>Guardar producto</SecondaryActionButton>
+                            <SecondaryActionButton onClick={finishDraftLineEdit}>Cancelar edicion</SecondaryActionButton>
+                          </InlineActionGroup>
+                        </section>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </DataTable>
@@ -1356,73 +1545,76 @@ export function SalesSection({
                     <td>{sale.paymentStatus === "paid" ? "Pagada" : "Pendiente"}</td>
                     <td>{formatCurrency(sale.totalMinor)}</td>
                     <td className="sale-actions-cell">
-                      <SecondaryActionButton
-                        className="document-detail-trigger"
-                        variant="compact"
-                        aria-label={`${detailSaleId === sale.id ? "Ocultar" : "Ver"} detalle de venta ${sale.invoiceNumber}`}
-                        aria-expanded={detailSaleId === sale.id}
-                        aria-controls={`sale-detail-${sale.id}`}
-                        onClick={() => setDetailSaleId((current) => current === sale.id ? null : sale.id)}
-                      >
-                        {detailSaleId === sale.id ? "Ocultar detalle" : "Ver detalle"}
-                      </SecondaryActionButton>
-                      <div
-                        className="sale-actions-menu"
-                        onBlur={(event) => {
-                          if (!event.currentTarget.contains(event.relatedTarget)) {
-                            setOpenSaleActionsId(null);
-                          }
-                        }}
-                      >
-                        <button
-                          aria-expanded={openSaleActionsId === sale.id}
-                          aria-haspopup="menu"
-                          aria-label={`Acciones de venta ${sale.invoiceNumber}`}
-                          className="sale-actions-trigger"
-                          onClick={() =>
-                            setOpenSaleActionsId((currentId) =>
-                              currentId === sale.id ? null : sale.id
-                            )
-                          }
-                          type="button"
+                      <InlineActionGroup className="table-inline-actions">
+                        <SecondaryActionButton
+                          className="document-detail-trigger"
+                          variant="compact"
+                          aria-label={`${detailSaleId === sale.id ? "Ocultar" : "Ver"} detalle de venta ${sale.invoiceNumber}`}
+                          aria-expanded={detailSaleId === sale.id}
+                          aria-controls={`sale-detail-${sale.id}`}
+                          onClick={() => setDetailSaleId((current) => current === sale.id ? null : sale.id)}
                         >
-                          ...
-                        </button>
-                        {openSaleActionsId === sale.id ? (
-                          <div className="sale-actions-list" role="menu">
-                            <button
-                              onClick={() => {
-                                setOpenSaleActionsId(null);
-                                beginSaleEdit(sale);
-                              }}
-                              role="menuitem"
-                              type="button"
-                            >
-                              Editar venta
-                            </button>
-                            <button
-                              onClick={() => {
-                                setOpenSaleActionsId(null);
-                                void generateInvoiceForSale(sale);
-                              }}
-                              role="menuitem"
-                              type="button"
-                            >
-                              Generar factura PDF
-                            </button>
-                            <button
-                              onClick={() => {
-                                setOpenSaleActionsId(null);
-                                removeSale(sale.id);
-                              }}
-                              role="menuitem"
-                              type="button"
-                            >
-                              Eliminar venta
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                          {detailSaleId === sale.id ? "Ocultar detalle" : "Ver detalle"}
+                        </SecondaryActionButton>
+                        <div
+                          className="sale-actions-menu"
+                          onBlur={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget)) {
+                              setOpenSaleActionsId(null);
+                            }
+                          }}
+                        >
+                          <button
+                            aria-expanded={openSaleActionsId === sale.id}
+                            aria-haspopup="menu"
+                            aria-label={`Acciones de venta ${sale.invoiceNumber}`}
+                            className="sale-actions-trigger"
+                            onClick={() =>
+                              setOpenSaleActionsId((currentId) =>
+                                currentId === sale.id ? null : sale.id
+                              )
+                            }
+                            type="button"
+                          >
+                            ...
+                          </button>
+                          {openSaleActionsId === sale.id ? (
+                            <div className="sale-actions-list" role="menu">
+                              <button
+                                onClick={() => {
+                                  setOpenSaleActionsId(null);
+                                  beginSaleEdit(sale);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                Editar venta
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenSaleActionsId(null);
+                                  void generateInvoiceForSale(sale);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                Generar factura PDF
+                              </button>
+                              <button
+                                className="danger-action"
+                                onClick={() => {
+                                  setOpenSaleActionsId(null);
+                                  removeSale(sale.id);
+                                }}
+                                role="menuitem"
+                                type="button"
+                              >
+                                Eliminar venta
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </InlineActionGroup>
                     </td>
                   </tr>
                   {detailSaleId === sale.id && <tr className="document-detail-row" id={`sale-detail-${sale.id}`}>
@@ -1487,7 +1679,7 @@ function buildSaleLineSnapshot(input: {
     costMinor,
     discountMinor: calculation.discountMinor,
     discountPercent: input.discountPercent,
-    id: `sale-line-${Date.now()}`,
+    id: `sale-line-${crypto.randomUUID()}`,
     marginMinor,
     marginPercent,
     product: input.product,

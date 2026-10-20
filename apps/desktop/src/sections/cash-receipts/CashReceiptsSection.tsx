@@ -3,6 +3,7 @@ import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
+import { InlineActionGroup } from "../../components/InlineActionGroup";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
@@ -526,28 +527,30 @@ function CashReceiptsTable({
                   </td>
                   <td>{formatCurrency(receipt.amountMinor)}</td>
                   <td>
-                    <SecondaryActionButton
-                      onClick={() =>
-                        setSelectedReceiptId(isSelected ? null : receipt.id)
-                      }
-                      variant="compact"
-                    >
-                      Detalle
-                    </SecondaryActionButton>
-                    {receipt.active ? (
+                    <InlineActionGroup className="table-inline-actions">
                       <SecondaryActionButton
-                        onClick={() => void onVoidReceipt(receipt.id)}
+                        onClick={() =>
+                          setSelectedReceiptId(isSelected ? null : receipt.id)
+                        }
                         variant="compact"
                       >
-                        Anular
+                        Detalle
                       </SecondaryActionButton>
-                    ) : null}
-                    <SecondaryActionButton
-                      onClick={() => void generateReceiptPdf(receipt)}
-                      variant="compact"
-                    >
-                      Generar PDF
-                    </SecondaryActionButton>
+                      {receipt.active ? (
+                        <SecondaryActionButton
+                          onClick={() => void onVoidReceipt(receipt.id)}
+                          variant="compact"
+                        >
+                          Anular
+                        </SecondaryActionButton>
+                      ) : null}
+                      <SecondaryActionButton
+                        onClick={() => void generateReceiptPdf(receipt)}
+                        variant="compact"
+                      >
+                        Generar PDF
+                      </SecondaryActionButton>
+                    </InlineActionGroup>
                   </td>
                 </tr>
                 {isSelected ? (

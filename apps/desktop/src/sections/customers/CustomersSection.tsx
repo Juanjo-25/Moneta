@@ -3,6 +3,7 @@ import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { FormActions } from "../../components/FormActions";
+import { InlineActionGroup } from "../../components/InlineActionGroup";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -364,18 +365,22 @@ export function CustomersSection({
                   <td>{formatCurrency(summary.pendingReceivableMinor)}</td>
                   <td>{summary.lastSaleLabel}</td>
                   <td>
-                    <SecondaryActionButton
-                      onClick={() => selectCustomer(customer)}
-                      variant="compact"
-                    >
-                      Ver cliente {customer.name}
-                    </SecondaryActionButton>
-                    <SecondaryActionButton
-                      onClick={() => startDeletingCustomer(customer)}
-                      variant="compact"
-                    >
-                      Eliminar
-                    </SecondaryActionButton>
+                    <InlineActionGroup className="table-inline-actions">
+                      <SecondaryActionButton
+                        aria-label={`Ver cliente ${customer.name}`}
+                        onClick={() => selectCustomer(customer)}
+                        variant="compact"
+                      >
+                        Ver cliente
+                      </SecondaryActionButton>
+                      <SecondaryActionButton
+                        className="danger-action"
+                        onClick={() => startDeletingCustomer(customer)}
+                        variant="compact"
+                      >
+                        Eliminar
+                      </SecondaryActionButton>
+                    </InlineActionGroup>
                   </td>
                 </tr>
               );

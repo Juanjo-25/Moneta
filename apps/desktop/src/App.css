@@ -37,6 +37,10 @@ button {
   font: inherit;
 }
 
+form {
+  min-width: 0;
+}
+
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -322,6 +326,11 @@ button,
 }
 
 .primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  max-width: 100%;
   min-height: 42px;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
@@ -329,7 +338,10 @@ button,
   color: white;
   padding: 10px 16px;
   font-weight: 700;
-  white-space: nowrap;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .primary-action:hover {
@@ -1149,6 +1161,7 @@ button,
 .field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .field span {
@@ -1338,9 +1351,18 @@ button,
 
 .form-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   justify-content: flex-end;
   margin-top: 18px;
+}
+
+.data-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-card);
 }
 
 .data-table {
@@ -1388,11 +1410,21 @@ button,
   background: #f0fdf4;
 }
 
-.table-inline-actions {
+.data-table .table-inline-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 148px;
+  max-width: 320px;
+}
+
+.table-inline-actions > .primary-action,
+.table-inline-actions > .secondary-action {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
 .suppliers-layout {
@@ -1497,6 +1529,11 @@ button,
   min-width: 0;
 }
 
+.suppliers-directory-table .table-inline-actions,
+.payables-table .table-inline-actions {
+  min-width: 0;
+}
+
 .supplier-row-actions,
 .payables-row-actions {
   display: flex;
@@ -1551,7 +1588,7 @@ button,
 }
 
 .sale-actions-cell {
-  width: 96px;
+  width: 184px;
 }
 
 .sale-actions-menu {
@@ -1615,32 +1652,52 @@ button,
   color: var(--text-primary);
 }
 
+.sale-actions-list .danger-action {
+  color: var(--danger);
+}
+
+.sale-actions-list .danger-action:hover,
+.sale-actions-list .danger-action:focus-visible {
+  background: var(--danger-soft);
+}
+
 .secondary-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  max-width: 100%;
   min-height: 42px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   background: var(--surface-muted);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 0 14px;
+  padding: 10px 14px;
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-decoration: none;
 }
 
 .secondary-action-compact {
   min-height: 36px;
   padding: 8px 11px;
-  white-space: nowrap;
 }
 
-.secondary-action:hover {
+.secondary-action:hover:not(:disabled) {
   border-color: #cbd5e1;
   background: #e6edf5;
   color: var(--text-primary);
+}
+
+.secondary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
 }
 
 .secondary-action.danger-action {
@@ -1751,7 +1808,7 @@ button,
   gap: 18px;
 }
 
-.document-detail-trigger { margin-bottom: 8px; white-space: nowrap; }
+.document-detail-trigger { white-space: nowrap; }
 .document-detail-row > td { background: var(--surface-soft); }
 .document-detail {
   display: grid;
@@ -1850,6 +1907,8 @@ button,
 
 .credit-note-review-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   justify-content: flex-end;
 }
@@ -2125,7 +2184,20 @@ button,
 
 .inline-action-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar,
+.panel-header,
+.suppliers-block-header,
+.credit-note-review-heading,
+.invoice-preview-header,
+.report-detail-header,
+.section-heading {
+  flex-wrap: wrap;
 }
 
 .inline-form-section {
@@ -2146,6 +2218,7 @@ button,
 
 .payment-status-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-top: 18px;
 }

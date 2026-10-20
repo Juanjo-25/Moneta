@@ -10,8 +10,10 @@ export function DataTable({ ariaLabel, children, className }: DataTableProps) {
   const classNames = ["data-table", className].filter(Boolean).join(" ");
 
   return (
-    <table aria-label={ariaLabel} className={classNames}>
-      {children}
-    </table>
+    <div className="data-table-scroll">
+      <table aria-label={ariaLabel} className={classNames}>
+        {children}
+      </table>
+    </div>
   );
 }
