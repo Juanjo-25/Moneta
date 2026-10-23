@@ -3199,3 +3199,67 @@ button,
   color: var(--text-tertiary);
   font-size: 14px;
 }
+.purchase-print-sheet {
+  display: none;
+}
+
+@media print {
+  body:has(> .purchase-print-sheet) > :not(.purchase-print-sheet) {
+    display: none !important;
+  }
+
+  body:has(> .purchase-print-sheet) {
+    margin: 0;
+    background: white;
+    color: black;
+  }
+
+  .purchase-print-sheet {
+    display: block;
+    padding: 12mm;
+    font: 10pt Arial, sans-serif;
+  }
+
+  .purchase-print-sheet .document-detail {
+    display: block;
+    border: 0;
+    padding: 0;
+    background: white;
+  }
+
+  .purchase-print-sheet .document-detail > * {
+    margin-bottom: 5mm;
+  }
+
+  .purchase-print-sheet .data-table {
+    overflow: visible;
+  }
+
+  .purchase-print-sheet .document-detail-table,
+  .purchase-print-sheet .data-table-scroll {
+    overflow: visible;
+  }
+
+  .purchase-print-sheet table {
+    width: 100%;
+    min-width: 0;
+    border-collapse: collapse;
+    font-size: 8pt;
+  }
+
+  .purchase-print-sheet th,
+  .purchase-print-sheet td {
+    padding: 2mm;
+    white-space: normal;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .purchase-print-sheet thead {
+    display: table-header-group;
+  }
+
+  .purchase-print-sheet tr,
+  .purchase-print-sheet dl {
+    break-inside: avoid;
+  }
+}

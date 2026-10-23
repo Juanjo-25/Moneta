@@ -16,6 +16,7 @@ function setup() {
       onCreateSupplier={vi.fn()}
       onDeletePurchase={vi.fn()}
       onRegisterPurchase={onRegisterPurchase}
+      onUpdatePurchase={vi.fn().mockResolvedValue(null)}
       products={[
         { id: "rice", sku: "1", name: "Arroz", unit: "Libra", costMinor: 3000, salePriceMinor: 4500, stock: 4, minimumStock: 1, active: true },
         { id: "sugar", sku: "2", name: "Azucar", unit: "Kg", costMinor: 2000, salePriceMinor: 3000, stock: 5, minimumStock: 1, active: true }

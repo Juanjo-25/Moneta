@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -7,6 +7,7 @@ import { generateCashReceiptPdf } from "./cash-receipt-pdf";
 import { generateInvoicePdf } from "./invoice-pdf";
 import { generateInventoryPdf } from "./inventory-pdf";
 import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
+import { generatePurchasePdf } from "./purchase-pdf";
 import type { CustomerReceiptRecord } from "./types";
 
 vi.mock("./cartera-pdf", () => ({
@@ -28,6 +29,8 @@ vi.mock("./inventory-pdf", () => ({
 vi.mock("./supplier-payment-pdf", () => ({
   generateSupplierPaymentPdf: vi.fn()
 }));
+
+vi.mock("./purchase-pdf", () => ({ generatePurchasePdf: vi.fn() }));
 
 const generateCarteraPdfMock = vi.mocked(generateCarteraPdf);
 const generateCashReceiptPdfMock = vi.mocked(generateCashReceiptPdf);
@@ -3640,6 +3643,88 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Proveedores" }));
     expect(screen.getByText("Sin cuentas por pagar")).toBeTruthy();
+  });
+
+  it("edits a saved purchase, reconciles stock and payable, persists and prints the edited values", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+    await user.click(screen.getByRole("button", { name: "Editar compra" }));
+    await user.clear(screen.getByLabelText("Numero"));
+    await user.type(screen.getByLabelText("Numero"), "PR-075");
+    await user.click(screen.getByRole("button", { name: "Editar Arroz libra" }));
+    await user.clear(screen.getByLabelText("Cantidad del producto"));
+    await user.type(screen.getByLabelText("Cantidad del producto"), "3");
+    await user.clear(screen.getByLabelText("Descuento del producto %"));
+    await user.type(screen.getByLabelText("Descuento del producto %"), "10");
+    await user.selectOptions(screen.getByLabelText("Impuesto del producto"), "19");
+    await user.click(screen.getByRole("button", { name: "Guardar producto" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios de compra" }));
+    expect(screen.getByText("Factura de compra actualizada.")).toBeTruthy();
+    expect(invoke).toHaveBeenCalledWith("update_purchase", { input: {
+      purchase: expect.objectContaining({ invoiceNumber: "PR-075", quantity: 3, totalMinor: 9639 }),
+      supplierPayable: expect.objectContaining({ invoiceNumber: "PR-075", balanceMinor: 9639 })
+    } });
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    vi.mocked(generatePurchasePdf).mockReturnValue({ dataUri: "data:application/pdf;base64,purchase", fileName: "compra-PR-075.pdf" });
+    await user.click(screen.getByRole("button", { name: "Imprimir" }));
+    await waitFor(() => expect(print).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole("link", { name: "Descargar PDF" })).toBeTruthy());
+    expect(generatePurchasePdf).toHaveBeenCalledWith(expect.objectContaining({ purchase: expect.objectContaining({ invoiceNumber: "PR-075", totalMinor: 9639 }) }));
+    expect(document.querySelector(".purchase-print-sheet")?.textContent).toContain("PR-075");
+    fireEvent(window, new Event("afterprint"));
+    await waitFor(() => expect(document.querySelector(".purchase-print-sheet")).toBeNull());
+    print.mockRestore();
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const productRow = within(screen.getByRole("table", { name: "Productos registrados" })).getByRole("row", { name: /Arroz libra/ });
+    expect(within(productRow).getByRole("cell", { name: "7" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    expect(within(screen.getByRole("table", { name: "Cuentas por pagar" })).getByText("PR-075")).toBeTruthy();
+  });
+
+  it("keeps a purchase unchanged after a persistence failure and allows retrying as paid", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    await user.click(screen.getByRole("button", { name: "Editar compra" }));
+    await user.click(screen.getByLabelText("Pagada"));
+    const invoke = vi.fn().mockRejectedValueOnce("Error de escritura").mockResolvedValue(undefined);
+    setTauriInvoke(invoke);
+    await user.click(screen.getByRole("button", { name: "Guardar cambios de compra" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/No se pudo guardar/);
+    expect(within(screen.getByRole("table", { name: "Compras registradas" })).getByText("Pendiente")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Guardar cambios de compra" }));
+    expect(invoke).toHaveBeenLastCalledWith("update_purchase", { input: { purchase: expect.objectContaining({ paymentStatus: "paid" }), supplierPayable: null } });
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    expect(screen.getByText("Sin cuentas por pagar")).toBeTruthy();
+  });
+
+  it("restores a new purchase draft when cancelling edits and blocks edits to purchases with supplier payments", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await createPendingPurchaseFixture(user);
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    await user.type(screen.getByLabelText("Concepto"), "Borrador nuevo");
+    const concept = (screen.getByLabelText("Concepto") as HTMLInputElement).value;
+    await user.click(screen.getByRole("button", { name: "Editar compra" }));
+    await user.clear(screen.getByLabelText("Numero"));
+    await user.type(screen.getByLabelText("Numero"), "Cancelado");
+    await user.click(screen.getByRole("button", { name: "Cancelar edicion de compra" }));
+    expect((screen.getByLabelText("Concepto") as HTMLInputElement).value).toBe(concept);
+    expect((screen.getByLabelText("Numero") as HTMLInputElement).value).toBe("002");
+    await user.click(screen.getByRole("button", { name: "Proveedores" }));
+    await user.click(screen.getByRole("button", { name: "Registrar abono" }));
+    await user.type(screen.getByLabelText("Valor abono"), "5000");
+    await user.click(screen.getByRole("button", { name: "Guardar abono" }));
+    await user.click(screen.getByRole("button", { name: "Compras" }));
+    await user.click(screen.getByRole("button", { name: "Editar compra" }));
+    await user.click(screen.getByRole("button", { name: "Guardar cambios de compra" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/abonos.*no se puede modificar/);
+    expect(within(screen.getByRole("table", { name: "Compras registradas" })).getByText("001")).toBeTruthy();
   });
 
   it("deletes a purchase and reverses its inventory entry", async () => {

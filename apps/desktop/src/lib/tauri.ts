@@ -568,6 +568,20 @@ export async function deleteNativePurchase(input: {
   return true;
 }
 
+export async function updateNativePurchase(input: {
+  purchase: PurchaseRecord;
+  supplierPayable: SupplierPayableRecord | null;
+}): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (!invoke) {
+    return false;
+  }
+
+  await invoke<void>("update_purchase", { input });
+  return true;
+}
+
 export async function deleteNativeSupplierPayable(input: {
   payableId: string;
 }): Promise<boolean> {

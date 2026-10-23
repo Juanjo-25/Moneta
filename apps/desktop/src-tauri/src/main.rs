@@ -3088,9 +3088,63 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
         .transaction()
         .map_err(|error| format!("No se pudo iniciar la transaccion de compra: {error}"))?;
 
+    persist_purchase(&transaction, &input, None)?;
+
     transaction
-        .execute(
-            "
+        .commit()
+        .map_err(|error| format!("No se pudo confirmar la compra: {error}"))?;
+
+    Ok(())
+}
+
+fn persist_purchase(
+    connection: &Connection,
+    input: &PurchasePersistence,
+    previous_costs: Option<&std::collections::BTreeMap<String, i64>>,
+) -> Result<(), String> {
+    let updating = previous_costs.is_some();
+    if updating {
+        let affected = connection
+            .execute(
+                "UPDATE purchases SET
+              supplier_id = ?1, supplier_name = ?2, expense_category = ?3,
+              branch = ?4, prefix = ?5, currency = ?6, concept = ?7,
+              invoice_number = ?8, issued_at = ?9, due_at = ?10,
+              occurred_at_ms = ?11, product_id = ?12, product_name = ?13,
+              quantity = ?14, unit_cost_minor = ?15, total_minor = ?16,
+              payment_status = ?17, occurred_at_label = ?18,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?19",
+                params![
+                    &input.purchase.supplier_id,
+                    &input.purchase.supplier_name,
+                    &input.purchase.expense_category,
+                    &input.purchase.branch,
+                    &input.purchase.prefix,
+                    &input.purchase.currency,
+                    &input.purchase.concept,
+                    &input.purchase.invoice_number,
+                    &input.purchase.issued_at,
+                    &input.purchase.due_at,
+                    input.purchase.occurred_at_ms,
+                    &input.purchase.product_id,
+                    &input.purchase.product_name,
+                    input.purchase.quantity,
+                    input.purchase.unit_cost_minor,
+                    input.purchase.total_minor,
+                    &input.purchase.payment_status,
+                    &input.purchase.occurred_at_label,
+                    &input.purchase.id
+                ],
+            )
+            .map_err(|error| format!("No se pudo actualizar la compra: {error}"))?;
+        if affected == 0 {
+            return Err("La compra ya no existe en SQLite.".to_string());
+        }
+    } else {
+        connection
+            .execute(
+                "
             INSERT INTO purchases (
               id,
               supplier_id,
@@ -3119,32 +3173,33 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
               CURRENT_TIMESTAMP
             )
             ",
-            params![
-                &input.purchase.id,
-                &input.purchase.supplier_id,
-                &input.purchase.supplier_name,
-                &input.purchase.expense_category,
-                &input.purchase.branch,
-                &input.purchase.prefix,
-                &input.purchase.currency,
-                &input.purchase.concept,
-                &input.purchase.invoice_number,
-                &input.purchase.issued_at,
-                &input.purchase.due_at,
-                input.purchase.occurred_at_ms,
-                &input.purchase.product_id,
-                &input.purchase.product_name,
-                input.purchase.quantity,
-                input.purchase.unit_cost_minor,
-                input.purchase.total_minor,
-                &input.purchase.payment_status,
-                &input.purchase.occurred_at_label,
-            ],
-        )
-        .map_err(|error| format!("No se pudo guardar la compra: {error}"))?;
+                params![
+                    &input.purchase.id,
+                    &input.purchase.supplier_id,
+                    &input.purchase.supplier_name,
+                    &input.purchase.expense_category,
+                    &input.purchase.branch,
+                    &input.purchase.prefix,
+                    &input.purchase.currency,
+                    &input.purchase.concept,
+                    &input.purchase.invoice_number,
+                    &input.purchase.issued_at,
+                    &input.purchase.due_at,
+                    input.purchase.occurred_at_ms,
+                    &input.purchase.product_id,
+                    &input.purchase.product_name,
+                    input.purchase.quantity,
+                    input.purchase.unit_cost_minor,
+                    input.purchase.total_minor,
+                    &input.purchase.payment_status,
+                    &input.purchase.occurred_at_label,
+                ],
+            )
+            .map_err(|error| format!("No se pudo guardar la compra: {error}"))?;
+    }
 
     for line in &input.purchase.lines {
-        transaction
+        connection
             .execute(
                 "
                 INSERT INTO purchase_lines (
@@ -3182,9 +3237,30 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
             )
             .map_err(|error| format!("No se pudo guardar una linea de compra: {error}"))?;
 
-        let affected = transaction
-            .execute(
-                "
+        if updating {
+            let last_cost = input
+                .purchase
+                .lines
+                .iter()
+                .rev()
+                .find(|candidate| candidate.product_id == line.product_id)
+                .map(|candidate| candidate.unit_cost_minor)
+                .unwrap_or(line.unit_cost_minor);
+            let cost_changed = previous_costs
+                .and_then(|costs| costs.get(&line.product_id))
+                .copied()
+                != Some(last_cost);
+            let affected = connection.execute(
+                "UPDATE products SET cost_minor = CASE WHEN ?3 THEN ?1 ELSE cost_minor END, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+                params![last_cost, &line.product_id, cost_changed],
+            ).map_err(|error| format!("No se pudo actualizar el costo: {error}"))?;
+            if affected == 0 {
+                return Err("Un producto de la compra ya no existe.".to_string());
+            }
+        } else {
+            let affected = connection
+                .execute(
+                    "
                 UPDATE products
                 SET
                   stock = stock + ?1,
@@ -3196,20 +3272,21 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
                   updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?3
                 ",
-                (line.quantity, line.unit_cost_minor, &line.product_id),
-            )
-            .map_err(|error| format!("No se pudo actualizar inventario: {error}"))?;
+                    (line.quantity, line.unit_cost_minor, &line.product_id),
+                )
+                .map_err(|error| format!("No se pudo actualizar inventario: {error}"))?;
 
-        if affected == 0 {
-            return Err(format!(
-                "El producto {} no existe en SQLite.",
-                line.product_name
-            ));
+            if affected == 0 {
+                return Err(format!(
+                    "El producto {} no existe en SQLite.",
+                    line.product_name
+                ));
+            }
         }
     }
 
     if let Some(payable) = &input.supplier_payable {
-        transaction
+        connection
             .execute(
                 "
                 INSERT INTO supplier_payables (
@@ -3245,10 +3322,105 @@ fn save_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<()
             .map_err(|error| format!("No se pudo guardar la cuenta por pagar: {error}"))?;
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+fn update_purchase(app: tauri::AppHandle, input: PurchasePersistence) -> Result<(), String> {
+    let database_path = database_path(&app)?;
+    let mut connection = open_database(&database_path)?;
+    apply_migrations(&connection)?;
+    update_purchase_in_connection(&mut connection, &input)
+}
+
+fn update_purchase_in_connection(
+    connection: &mut Connection,
+    input: &PurchasePersistence,
+) -> Result<(), String> {
+    let transaction = connection
+        .transaction()
+        .map_err(|error| format!("No se pudo iniciar la edicion de compra: {error}"))?;
+    ensure_purchase_has_no_supplier_payments(&transaction, &input.purchase.id)
+        .map_err(|error| error.replace("eliminar", "modificar"))?;
+    let previous = transaction
+        .query_row(
+            "SELECT product_id, quantity, unit_cost_minor FROM purchases WHERE id = ?1",
+            [&input.purchase.id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| format!("No se pudo leer la compra: {error}"))?
+        .ok_or("La compra ya no existe en SQLite.")?;
+    if input.purchase.lines.is_empty()
+        || input
+            .purchase
+            .lines
+            .iter()
+            .any(|line| line.quantity <= 0 || line.unit_cost_minor < 0)
+    {
+        return Err("La compra debe tener productos con cantidades y costos validos.".to_string());
+    }
+    let mut quantities = std::collections::BTreeMap::<String, i64>::new();
+    let mut previous_costs = std::collections::BTreeMap::<String, i64>::new();
+    {
+        let mut statement = transaction
+            .prepare("SELECT product_id, quantity, unit_cost_minor FROM purchase_lines WHERE purchase_id = ?1 ORDER BY rowid")
+            .map_err(|error| format!("No se pudieron leer las lineas de compra: {error}"))?;
+        let rows = statement
+            .query_map([&input.purchase.id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|error| format!("No se pudieron leer las lineas de compra: {error}"))?;
+        for row in rows {
+            let (id, quantity, cost) = row.map_err(|error| error.to_string())?;
+            previous_costs.insert(id.clone(), cost);
+            *quantities.entry(id).or_default() -= quantity;
+        }
+    }
+    if quantities.is_empty() {
+        previous_costs.insert(previous.0.clone(), previous.2);
+        quantities.insert(previous.0, -previous.1);
+    }
+    for line in &input.purchase.lines {
+        *quantities.entry(line.product_id.clone()).or_default() += line.quantity;
+    }
+    for (product_id, quantity_delta) in quantities {
+        if quantity_delta != 0 {
+            apply_product_stock_adjustment(
+                &transaction,
+                &ProductStockAdjustment {
+                    product_id,
+                    quantity_delta,
+                },
+            )?;
+        }
+    }
+    transaction
+        .execute(
+            "DELETE FROM purchase_lines WHERE purchase_id = ?1",
+            [&input.purchase.id],
+        )
+        .map_err(|error| format!("No se pudieron actualizar las lineas: {error}"))?;
+    transaction
+        .execute(
+            "DELETE FROM supplier_payables WHERE purchase_id = ?1",
+            [&input.purchase.id],
+        )
+        .map_err(|error| format!("No se pudo actualizar la cuenta por pagar: {error}"))?;
+    persist_purchase(&transaction, input, Some(&previous_costs))?;
     transaction
         .commit()
-        .map_err(|error| format!("No se pudo confirmar la compra: {error}"))?;
-
+        .map_err(|error| format!("No se pudo confirmar la edicion de compra: {error}"))?;
     Ok(())
 }
 
@@ -4140,6 +4312,146 @@ fn ensure_column(
 mod tests {
     use super::*;
 
+    fn purchase_input(quantity: i64, pending: bool) -> PurchasePersistence {
+        serde_json::from_value(serde_json::json!({
+            "purchase": {
+                "id": "purchase-edit", "supplierId": "supplier-1", "supplierName": "Proveedor",
+                "expenseCategory": "inventory", "branch": "Principal", "prefix": "",
+                "currency": "COP", "concept": "Factura de compra", "invoiceNumber": "001",
+                "issuedAt": "2026-10-23", "dueAt": if pending { "2026-11-23" } else { "" },
+                "occurredAtMs": 1, "occurredAtLabel": "23/10/26", "productId": "product-1",
+                "productName": "Arroz", "quantity": quantity, "unitCostMinor": 3000,
+                "totalMinor": quantity * 3000, "paymentStatus": if pending { "pending" } else { "paid" },
+                "lines": [{
+                    "id": "purchase-edit-line", "productId": "product-1", "productName": "Arroz",
+                    "unit": "Unidad", "quantity": quantity, "unitCostMinor": 3000,
+                    "discountPercent": 0, "discountMinor": 0, "taxPercent": 0, "taxMinor": 0,
+                    "subtotalMinor": quantity * 3000, "totalMinor": quantity * 3000
+                }]
+            },
+            "supplierPayable": if pending { serde_json::json!({
+                "id": "payable-edit", "supplierId": "supplier-1", "supplierName": "Proveedor",
+                "expenseCategory": "inventory", "purchaseId": "purchase-edit", "invoiceNumber": "001",
+                "originalAmountMinor": quantity * 3000, "paidAmountMinor": 0, "balanceMinor": quantity * 3000,
+                "dueAt": "2026-11-23", "status": "pending"
+            }) } else { serde_json::Value::Null }
+        })).expect("purchase fixture")
+    }
+
+    fn create_purchase_fixture(connection: &mut Connection) {
+        insert_product(connection, "product-1", "ARZ-001");
+        insert_supplier(connection, "supplier-1", "123");
+        let transaction = connection.transaction().unwrap();
+        persist_purchase(&transaction, &purchase_input(5, true), None).unwrap();
+        transaction.commit().unwrap();
+    }
+
+    #[test]
+    fn edits_purchase_stock_by_difference_and_replaces_payable_atomically() {
+        let mut connection = test_connection();
+        create_purchase_fixture(&mut connection);
+        update_purchase_in_connection(&mut connection, &purchase_input(7, true)).unwrap();
+        let stock: i64 = connection
+            .query_row(
+                "SELECT stock FROM products WHERE id = 'product-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let balance: i64 = connection
+            .query_row(
+                "SELECT balance_minor FROM supplier_payables WHERE purchase_id = 'purchase-edit'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stock, 11);
+        assert_eq!(balance, 21000);
+        update_purchase_in_connection(&mut connection, &purchase_input(3, false)).unwrap();
+        let stock: i64 = connection
+            .query_row(
+                "SELECT stock FROM products WHERE id = 'product-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM supplier_payables", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(stock, 7);
+        assert_eq!(count, 0);
+        let count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM purchases", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn rejects_purchase_reduction_below_available_stock_without_changing_documents() {
+        let mut connection = test_connection();
+        create_purchase_fixture(&mut connection);
+        connection
+            .execute("UPDATE products SET stock = 1", [])
+            .unwrap();
+        assert!(update_purchase_in_connection(&mut connection, &purchase_input(3, false)).is_err());
+        let original: (i64, String) = connection
+            .query_row(
+                "SELECT quantity, payment_status FROM purchases",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let balance: i64 = connection
+            .query_row("SELECT balance_minor FROM supplier_payables", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(original, (5, "pending".to_string()));
+        assert_eq!(balance, 15000);
+    }
+
+    #[test]
+    fn rejects_purchase_edit_with_supplier_payments() {
+        let mut connection = test_connection();
+        create_purchase_fixture(&mut connection);
+        connection
+            .execute(
+                "UPDATE supplier_payables SET paid_amount_minor = 1000, balance_minor = 14000",
+                [],
+            )
+            .unwrap();
+        let error =
+            update_purchase_in_connection(&mut connection, &purchase_input(7, true)).unwrap_err();
+        assert!(error.contains("abonos") && error.contains("modificar"));
+        let quantity: i64 = connection
+            .query_row("SELECT quantity FROM purchases", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(quantity, 5);
+    }
+
+    #[test]
+    fn preserves_current_product_cost_when_purchase_cost_did_not_change() {
+        let mut connection = test_connection();
+        create_purchase_fixture(&mut connection);
+        connection
+            .execute("UPDATE products SET cost_minor = 4000", [])
+            .unwrap();
+        update_purchase_in_connection(&mut connection, &purchase_input(7, true)).unwrap();
+        let cost: i64 = connection
+            .query_row("SELECT cost_minor FROM products", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(cost, 4000);
+        let mut edited = purchase_input(7, true);
+        edited.purchase.lines[0].unit_cost_minor = 3500;
+        update_purchase_in_connection(&mut connection, &edited).unwrap();
+        let cost: i64 = connection
+            .query_row("SELECT cost_minor FROM products", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(cost, 3500);
+    }
+
     fn test_connection() -> Connection {
         let connection = Connection::open_in_memory().expect("open in-memory database");
         connection
@@ -5003,6 +5315,7 @@ fn main() {
             list_supplier_payables,
             list_supplier_payments,
             save_purchase,
+            update_purchase,
             delete_purchase,
             delete_supplier_payable,
             save_supplier_payment

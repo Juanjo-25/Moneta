@@ -53,6 +53,7 @@ import {
   saveNativeSupplier,
   saveNativeSupplierPayment,
   updateNativeSale,
+  updateNativePurchase,
   voidNativeCustomerReceipt,
   type NativeConnectionStatus
 } from "./lib/tauri";
@@ -354,6 +355,9 @@ function getSaleQuantityByProduct(sale: SaleRecord): Map<string, number> {
 }
 
 function getPurchaseQuantityByProduct(purchase: PurchaseRecord): Map<string, number> {
+  if (purchase.lines.length === 0) {
+    return new Map([[purchase.productId, purchase.quantity]]);
+  }
   return purchase.lines.reduce((total, line) => {
     total.set(line.productId, (total.get(line.productId) ?? 0) + line.quantity);
     return total;
@@ -1447,6 +1451,61 @@ export function App() {
     }
 
     return true;
+  }
+
+  async function updatePurchaseInSession(purchase: PurchaseRecord): Promise<string | null> {
+    const previous = purchases.find((record) => record.id === purchase.id);
+    if (!previous) {
+      return "La compra que intentas modificar ya no existe.";
+    }
+    const payable = supplierPayables.find((record) => record.purchaseId === purchase.id);
+    if (supplierPayments.some((payment) => payment.purchaseId === purchase.id) || (payable?.paidAmountMinor ?? 0) > 0) {
+      return "La compra tiene abonos a proveedor asociados y no se puede modificar.";
+    }
+    const previousQuantities = getPurchaseQuantityByProduct(previous);
+    const nextQuantities = getPurchaseQuantityByProduct(purchase);
+    if (purchase.lines.some((line) => !products.some((product) => product.id === line.productId))) {
+      return "Uno de los productos de la compra ya no esta disponible.";
+    }
+    if (products.some((product) => product.stock + (nextQuantities.get(product.id) ?? 0) - (previousQuantities.get(product.id) ?? 0) < 0)) {
+      return "No hay inventario suficiente para reducir los productos de esta compra.";
+    }
+    const supplierPayable: SupplierPayableRecord | null = purchase.paymentStatus === "pending" ? {
+      id: payable?.id ?? `payable-${purchase.id}`,
+      purchaseId: purchase.id,
+      supplierId: purchase.supplierId,
+      supplierName: purchase.supplierName,
+      expenseCategory: purchase.expenseCategory,
+      invoiceNumber: purchase.invoiceNumber,
+      originalAmountMinor: purchase.totalMinor,
+      paidAmountMinor: 0,
+      balanceMinor: purchase.totalMinor,
+      dueAt: purchase.dueAt,
+      status: "pending"
+    } : null;
+    try {
+      await updateNativePurchase({ purchase, supplierPayable });
+    } catch (error) {
+      const message = formatNativePersistenceError("No se pudo guardar la edicion de compra local.", error);
+      setNativeConnectionStatus({ kind: "error", message });
+      return message;
+    }
+    setProducts((current) => current.map((product) => {
+      const lastLine = purchase.lines.filter((line) => line.productId === product.id).at(-1);
+      const previousCost = previous.lines.filter((line) => line.productId === product.id).at(-1)?.unitCostMinor
+        ?? (previous.productId === product.id ? previous.unitCostMinor : undefined);
+      return {
+        ...product,
+        stock: product.stock + (nextQuantities.get(product.id) ?? 0) - (previousQuantities.get(product.id) ?? 0),
+        ...(lastLine && lastLine.unitCostMinor !== previousCost ? { costMinor: lastLine.unitCostMinor } : {})
+      };
+    }));
+    setPurchases((current) => current.map((record) => record.id === purchase.id ? purchase : record));
+    setSupplierPayables((current) => {
+      const remaining = current.filter((record) => record.purchaseId !== purchase.id);
+      return supplierPayable ? [supplierPayable, ...remaining] : remaining;
+    });
+    return null;
   }
 
   async function deletePurchaseInSession(purchaseId: string): Promise<string | null> {
@@ -2755,6 +2814,7 @@ export function App() {
             onSetSupplierActive={setSupplierActive}
             onDeleteSupplier={deleteSupplier}
             onRegisterPurchase={registerPurchaseInSession}
+            onUpdatePurchase={updatePurchaseInSession}
             onDeletePurchase={deletePurchaseInSession}
             onRegisterPaidSale={registerPaidSaleInSession}
             onRegisterPendingSale={registerPendingSaleInSession}

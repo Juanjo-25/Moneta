@@ -1,4 +1,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
+import { parseLocalDate } from "../../lib/dates";
+import type { InvoicePdfResult } from "../../invoice-pdf";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -11,6 +14,7 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
 import type {
+  AppSettings,
   ProductRecord,
   PurchaseExpenseCategory,
   PurchasePaymentStatus,
@@ -95,6 +99,8 @@ type PurchasesSectionProps = {
   onCreateProduct: (product: ProductRecord) => Promise<boolean>;
   onCreateSupplier: (input: SupplierFormState) => Promise<SupplierRecord | null>;
   onDeletePurchase: (purchaseId: string) => Promise<string | null>;
+  onUpdatePurchase: (purchase: PurchaseRecord) => Promise<string | null>;
+  settings?: AppSettings | undefined;
   onRegisterPurchase: (input: {
     supplier: SupplierRecord;
     branch: string;
@@ -194,7 +200,9 @@ export function PurchasesSection({
   onCreateProduct,
   onCreateSupplier,
   onDeletePurchase,
+  onUpdatePurchase,
   onRegisterPurchase,
+  settings,
   parseNonNegativeInteger,
   products,
   purchases,
@@ -220,11 +228,17 @@ export function PurchasesSection({
   const [deleteCandidate, setDeleteCandidate] = useState<PurchaseRecord | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<PurchaseDeleteNotice | null>(null);
   const [detailPurchaseId, setDetailPurchaseId] = useState<string | null>(null);
+  const [editingPurchase, setEditingPurchase] = useState<PurchaseRecord | null>(null);
+  const [draftBeforeEdit, setDraftBeforeEdit] = useState<{ form: PurchaseFormState; lines: PurchaseDraftLine[] } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [printPurchase, setPrintPurchase] = useState<PurchaseRecord | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
-  const activeSuppliers = suppliers.filter((supplier) => supplier.active);
-  const activeProducts = products.filter((product) => product.active);
+  const activeSuppliers = suppliers.filter((supplier) => supplier.active || supplier.id === editingPurchase?.supplierId);
+  const activeProducts = products.filter((product) => product.active || (editingPurchase && purchaseLines.some((line) => line.product.id === product.id)));
   const selectedProduct =
     products.find((product) => product.id === form.productId) ?? null;
   const quantity = parseNonNegativeInteger(form.quantity) ?? 0;
@@ -244,7 +258,70 @@ export function PurchasesSection({
   const totalMinor = purchaseLinesTotalMinor + draftLineTotalMinor;
   const nextInvoiceNumber = String(purchases.length + 1).padStart(3, "0");
   const nextProductSku = String(products.length + 1).padStart(3, "0");
-  const documentNumber = formatDocumentNumber(form.prefix, nextInvoiceNumber);
+  const documentNumber = editingPurchase ? form.invoiceNumber : formatDocumentNumber(form.prefix, nextInvoiceNumber);
+
+  useEffect(() => {
+    if (!printPurchase) return;
+    const finishPrinting = () => setPrintPurchase(null);
+    window.addEventListener("afterprint", finishPrinting);
+    const frame = requestAnimationFrame(() => window.print());
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("afterprint", finishPrinting);
+    };
+  }, [printPurchase]);
+
+  function beginPurchaseEdit(purchase: PurchaseRecord) {
+    const sourceLines = purchase.lines.length > 0 ? purchase.lines : [{
+      id: `${purchase.id}-legacy-line`, productId: purchase.productId, productName: purchase.productName,
+      unit: products.find((product) => product.id === purchase.productId)?.unit ?? "Unidad",
+      quantity: purchase.quantity, unitCostMinor: purchase.unitCostMinor,
+      discountPercent: 0, discountMinor: 0, taxPercent: 0, taxMinor: 0,
+      subtotalMinor: purchase.totalMinor, totalMinor: purchase.totalMinor
+    }];
+    if (sourceLines.some((line) => !products.some((product) => product.id === line.productId))) {
+      setDeleteNotice({ kind: "error", message: "Uno de los productos de la compra ya no esta disponible." });
+      return;
+    }
+    if (!editingPurchase) setDraftBeforeEdit({ form, lines: purchaseLines });
+    setEditingPurchase(purchase);
+    setForm({
+      ...emptyPurchaseForm, branch: purchase.branch, prefix: purchase.prefix, concept: purchase.concept,
+      supplierId: purchase.supplierId, invoiceNumber: purchase.invoiceNumber,
+      issuedAt: purchase.issuedAt || new Date(purchase.occurredAtMs).toLocaleDateString("en-CA"),
+      dueAt: supplierPayables.find((payable) => payable.purchaseId === purchase.id)?.dueAt || purchase.dueAt,
+      expenseCategory: purchase.expenseCategory, paymentStatus: purchase.paymentStatus
+    });
+    setPurchaseLines(sourceLines.map((line) => ({ ...line, product: { ...products.find((product) => product.id === line.productId)!, name: line.productName } })));
+    setEditingDraftLine(null);
+    setErrors({});
+    setDeleteNotice(null);
+    document.querySelector(".purchase-form")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }
+
+  function finishPurchaseEdit() {
+    setEditingPurchase(null);
+    setEditingDraftLine(null);
+    setForm(draftBeforeEdit?.form ?? emptyPurchaseForm);
+    setPurchaseLines(draftBeforeEdit?.lines ?? []);
+    setDraftBeforeEdit(null);
+    setErrors({});
+  }
+
+  async function generatePurchasePdf(purchase: PurchaseRecord) {
+    try {
+      const { generatePurchasePdf } = await import("../../purchase-pdf");
+      setInvoicePreview(generatePurchasePdf({
+        purchase, settings,
+        supplier: suppliers.find((supplier) => supplier.id === purchase.supplierId),
+        payable: supplierPayables.find((payable) => payable.purchaseId === purchase.id)
+      }));
+      setInvoiceError(null);
+    } catch {
+      setInvoicePreview(null);
+      setInvoiceError("No se pudo generar el PDF de la compra.");
+    }
+  }
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -378,7 +455,7 @@ export function PurchasesSection({
     const parsedDiscountPercent = parsePercentage(draft.discountPercent);
     const parsedTaxPercent = parsePercentage(draft.taxPercent);
 
-    if (!products.some((product) => product.id === draft.productId && product.active)) {
+    if (!activeProducts.some((product) => product.id === draft.productId)) {
       nextErrors.productId = "Debes seleccionar un producto.";
     }
     if (parsedQuantity === null || parsedQuantity <= 0) {
@@ -573,6 +650,7 @@ export function PurchasesSection({
 
   async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
 
     if (editingDraftLine) {
       setErrors({ submit: "Guarda o cancela la edicion del producto antes de registrar la compra." });
@@ -626,15 +704,18 @@ export function PurchasesSection({
     if (!selectedSupplier) {
       nextErrors.supplierId = "Debes seleccionar un proveedor.";
     }
-    if (form.issuedAt.trim() === "") {
+    if (!parseLocalDate(form.issuedAt)) {
       nextErrors.issuedAt = "La fecha de emision es obligatoria.";
     }
-    if (form.paymentStatus === "pending" && form.dueAt.trim() === "") {
+    if (form.paymentStatus === "pending" && !parseLocalDate(form.dueAt)) {
       nextErrors.dueAt =
         "La fecha de vencimiento es obligatoria para compras pendientes.";
     }
     if (purchaseLines.length === 0 || hasDraftLine) {
       Object.assign(nextErrors, lineValidation.errors);
+    }
+    if (editingPurchase && !documentNumber.trim()) {
+      nextErrors.invoiceNumber = "El numero de factura es obligatorio.";
     }
 
     setErrors(nextErrors);
@@ -647,36 +728,68 @@ export function PurchasesSection({
       return;
     }
 
-    const registered = await onRegisterPurchase({
-      branch: form.branch.trim() || "Principal",
-      concept: form.concept.trim() || "Factura de compra",
-      dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
-      expenseCategory: form.expenseCategory,
-      invoiceNumber: documentNumber,
-      issuedAt: form.issuedAt.trim(),
-      lines: linesToRegister.map((line) => ({
-        discountMinor: line.discountMinor,
-        discountPercent: line.discountPercent,
-        product: line.product,
-        quantity: line.quantity,
-        subtotalMinor: line.subtotalMinor,
-        taxMinor: line.taxMinor,
-        taxPercent: line.taxPercent,
-        unit: line.unit,
-        unitCostMinor: line.unitCostMinor
-      })),
-      paymentStatus: form.paymentStatus,
-      prefix: form.prefix.trim(),
-      supplier: selectedSupplier
-    });
+    setSaving(true);
+    try {
+      if (editingPurchase) {
+        const lines = linesToRegister.map((line) => ({
+          id: line.id, productId: line.product.id, productName: line.product.name, unit: line.unit,
+          quantity: line.quantity, unitCostMinor: line.unitCostMinor, discountPercent: line.discountPercent,
+          discountMinor: line.discountMinor, taxPercent: line.taxPercent, taxMinor: line.taxMinor,
+          subtotalMinor: line.subtotalMinor, totalMinor: line.totalMinor
+        }));
+        const firstLine = lines[0]!;
+        const updateError = await onUpdatePurchase({
+          ...editingPurchase,
+          branch: form.branch.trim() || "Principal", prefix: form.prefix.trim(),
+          concept: form.concept.trim() || "Factura de compra", invoiceNumber: documentNumber.trim(),
+          supplierId: selectedSupplier.id, supplierName: selectedSupplier.name,
+          issuedAt: form.issuedAt, dueAt: form.paymentStatus === "pending" ? form.dueAt : "",
+          paymentStatus: form.paymentStatus, expenseCategory: form.expenseCategory, lines,
+          productId: firstLine.productId, productName: lines.length === 1 ? firstLine.productName : `${lines.length} productos`,
+          quantity: lines.reduce((total, line) => total + line.quantity, 0),
+          unitCostMinor: firstLine.unitCostMinor, totalMinor: lines.reduce((total, line) => total + line.totalMinor, 0)
+        });
+        if (updateError) { setErrors({ submit: updateError }); return; }
+        finishPurchaseEdit();
+        setInvoicePreview(null);
+        setDeleteNotice({ kind: "success", message: "Factura de compra actualizada." });
+        return;
+      }
+      const registered = await onRegisterPurchase({
+        branch: form.branch.trim() || "Principal",
+        concept: form.concept.trim() || "Factura de compra",
+        dueAt: form.paymentStatus === "pending" ? form.dueAt.trim() : "",
+        expenseCategory: form.expenseCategory,
+        invoiceNumber: documentNumber,
+        issuedAt: form.issuedAt.trim(),
+        lines: linesToRegister.map((line) => ({
+          discountMinor: line.discountMinor,
+          discountPercent: line.discountPercent,
+          product: line.product,
+          quantity: line.quantity,
+          subtotalMinor: line.subtotalMinor,
+          taxMinor: line.taxMinor,
+          taxPercent: line.taxPercent,
+          unit: line.unit,
+          unitCostMinor: line.unitCostMinor
+        })),
+        paymentStatus: form.paymentStatus,
+        prefix: form.prefix.trim(),
+        supplier: selectedSupplier
+      });
 
-    if (!registered) {
-      return;
+      if (!registered) {
+        return;
+      }
+
+      setErrors({});
+      setPurchaseLines([]);
+      setForm(emptyPurchaseForm);
+    } catch {
+      setErrors({ submit: "No se pudo guardar la factura de compra." });
+    } finally {
+      setSaving(false);
     }
-
-    setErrors({});
-    setPurchaseLines([]);
-    setForm(emptyPurchaseForm);
   }
 
   async function confirmPurchaseDeletion() {
@@ -693,6 +806,8 @@ export function PurchasesSection({
     }
 
     setDeleteCandidate(null);
+    if (editingPurchase?.id === deletedPurchase.id) finishPurchaseEdit();
+    setInvoicePreview(null);
     setDeleteNotice({
       kind: "success",
       message: `Compra ${deletedPurchase.invoiceNumber} eliminada.`
@@ -702,11 +817,12 @@ export function PurchasesSection({
   return (
     <section className="purchases-layout">
       <form className="purchase-form section-form-shell" onSubmit={submitPurchase}>
+        {editingPurchase && <div className="document-lines-heading"><h2>Editar compra {editingPurchase.invoiceNumber}</h2><span>Al guardar se ajustaran el inventario y la cuenta por pagar.</span></div>}
         <section className="document-header" aria-label="Encabezado de la compra">
           <div className="document-header-grid">
             <TextField label="Sucursal" onChange={(value) => updateField("branch", value)} value={form.branch} />
             <TextField label="Prefijo" onChange={(value) => updateField("prefix", value)} placeholder="Sin prefijo" value={form.prefix} />
-            <TextField error={errors.invoiceNumber} label="Numero" onChange={() => undefined} readOnly value={documentNumber} />
+            <TextField error={errors.invoiceNumber} label="Numero" onChange={(value) => updateField("invoiceNumber", value)} readOnly={!editingPurchase} value={documentNumber} />
             <label className="field" htmlFor="proveedor-compra"><span>Proveedor</span><select aria-invalid={Boolean(errors.supplierId)} id="proveedor-compra" onChange={(event) => updateField("supplierId", event.target.value)} value={form.supplierId}><option value="">Selecciona un proveedor</option>{activeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select>{errors.supplierId ? <small>{errors.supplierId}</small> : null}</label>
             <TextField label="Direccion del proveedor" onChange={() => undefined} placeholder="Se completa al elegir el proveedor" readOnly value={selectedSupplier?.address ?? ""} />
             <TextField error={errors.issuedAt} label="Fecha emision" onChange={(value) => updateField("issuedAt", value)} type="date" value={form.issuedAt} />
@@ -934,7 +1050,8 @@ export function PurchasesSection({
         {errors.submit ? <p className="form-error" role="alert">{errors.submit}</p> : null}
 
         <FormActions>
-          <PrimaryActionButton type="submit">Registrar compra</PrimaryActionButton>
+          {editingPurchase && <SecondaryActionButton disabled={saving} onClick={finishPurchaseEdit}>Cancelar edicion de compra</SecondaryActionButton>}
+          <PrimaryActionButton disabled={saving} type="submit">{saving ? "Guardando..." : editingPurchase ? "Guardar cambios de compra" : "Registrar compra"}</PrimaryActionButton>
         </FormActions>
       </form>
 
@@ -1015,6 +1132,15 @@ export function PurchasesSection({
                         {detailPurchaseId === purchase.id ? "Ocultar detalle" : "Ver detalle"}
                       </SecondaryActionButton>
                       <SecondaryActionButton
+                        disabled={saving}
+                        onClick={() => beginPurchaseEdit(purchase)}
+                        variant="compact"
+                      >Editar compra</SecondaryActionButton>
+                      <SecondaryActionButton
+                        onClick={() => { setPrintPurchase({ ...purchase }); void generatePurchasePdf(purchase); }}
+                        variant="compact"
+                      >Imprimir</SecondaryActionButton>
+                      <SecondaryActionButton
                         className="danger-action"
                         onClick={() => {
                           setDeleteCandidate(purchase);
@@ -1043,6 +1169,16 @@ export function PurchasesSection({
           title="Sin compras registradas"
         />
       )}
+      {invoicePreview && <section className="invoice-preview" aria-label="Factura de compra PDF generada">
+        <div className="invoice-preview-header"><strong>Factura de compra para imprimir</strong><a download={invoicePreview.fileName} href={invoicePreview.dataUri}>Descargar PDF</a></div>
+        <iframe src={invoicePreview.dataUri} title="Vista previa de factura de compra PDF" />
+      </section>}
+      {invoiceError && <p className="form-error" role="alert">{invoiceError}</p>}
+      {printPurchase && createPortal(<div className="purchase-print-sheet">
+        <header><h1>{settings?.company.name || "Moneta"}</h1><p>{[settings?.company.document, settings?.company.address, settings?.company.city, settings?.company.phone].filter(Boolean).join(" | ")}</p><h2>Factura de compra {printPurchase.invoiceNumber}</h2></header>
+        <p>{[suppliers.find((supplier) => supplier.id === printPurchase.supplierId)?.document, suppliers.find((supplier) => supplier.id === printPurchase.supplierId)?.address].filter(Boolean).join(" | ")}</p>
+        <PurchaseDetails purchase={printPurchase} payable={supplierPayables.find((payable) => payable.purchaseId === printPurchase.id)} categoryLabel={formatExpenseCategory(printPurchase.expenseCategory)} formatCurrency={formatCurrency} />
+      </div>, document.body)}
     </section>
   );
 }

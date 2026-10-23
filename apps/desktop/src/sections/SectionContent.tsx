@@ -103,6 +103,7 @@ type SectionContentProps = {
     paymentStatus: PurchasePaymentStatus;
   }) => Promise<boolean>;
   onDeletePurchase: (purchaseId: string) => Promise<string | null>;
+  onUpdatePurchase: (purchase: PurchaseRecord) => Promise<string | null>;
   onRegisterPaidSale: (input: {
     customer: CustomerRecord;
     branch: string;
@@ -252,6 +253,7 @@ export function SectionContent({
   onDeleteSupplier,
   onRegisterPurchase,
   onDeletePurchase,
+  onUpdatePurchase,
   onRegisterPaidSale,
   onRegisterPendingSale,
   onRegisterCreditNote,
@@ -329,6 +331,8 @@ export function SectionContent({
         onCreateSupplier={onCreateSupplier}
         onDeletePurchase={onDeletePurchase}
         onRegisterPurchase={onRegisterPurchase}
+        onUpdatePurchase={onUpdatePurchase}
+        settings={settings}
         parseNonNegativeInteger={parseNonNegativeInteger}
         products={products}
         purchases={purchases}
