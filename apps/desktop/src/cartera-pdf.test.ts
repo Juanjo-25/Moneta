@@ -30,6 +30,7 @@ vi.mock("jspdf", () => ({
     setFont: setFontMock,
     setFontSize: setFontSizeMock,
     setTextColor: setTextColorMock,
+    splitTextToSize: (text: string) => text.match(/.{1,65}/g) ?? [""],
     text: textMock
   }))
 }));
@@ -147,10 +148,11 @@ describe("cartera PDF", () => {
     expect(renderedText).toContain("Por cobrar");
     expect(renderedText).toContain("Factura");
     expect(renderedText).toContain("Emitida");
-    expect(renderedText).toContain("Cliente: Alquiler Amaga");
+    expect(renderedText).toContain("CLIENTE 01");
+    expect(renderedText).toContain("Alquiler Amaga");
     expect(renderedText).toContain("Carlos Ruiz");
-    expect(getRenderedIndex("Cliente: Alquiler Amaga")).toBeLessThan(
-      getRenderedIndex("Cliente: Carlos Ruiz")
+    expect(getRenderedIndex("Alquiler Amaga")).toBeLessThan(
+      getRenderedIndex("Carlos Ruiz")
     );
     expect(getRenderedIndex("FV-2026-003")).toBeLessThan(
       getRenderedIndex("FV-2026-002")
@@ -170,5 +172,58 @@ describe("cartera PDF", () => {
       dataUri: "data:application/pdf;base64,cartera-pdf",
       fileName: "cartera-pendiente.pdf"
     });
+  });
+
+  it("closes each client with its own total before the next client starts", () => {
+    generateCarteraPdf(carteraInput);
+    const values = textMock.mock.calls.map((call) => String(call[0]));
+    const totals = values.flatMap((value, index) => value === "TOTAL DEL CLIENTE" ? [index] : []);
+    expect(totals).toHaveLength(2);
+    expect(values[totals[0]! + 1]).toBe("$ 37.000");
+    expect(values[totals[1]! + 1]).toBe("$ 8.500");
+    expect(totals[0]).toBeLessThan(values.indexOf("CLIENTE 02"));
+    expect(totals[1]).toBeGreaterThan(values.indexOf("FV-2026-001"));
+  });
+
+  it("repeats client identity and columns on continuation pages and keeps all invoices within the print area", () => {
+    let page = 1;
+    const texts: Array<{ text: string; page: number; y: number }> = [];
+    addPageMock.mockImplementation(() => { page += 1; });
+    textMock.mockImplementation((text: string, _x: number, y: number) => { texts.push({ text, page, y }); });
+    const receivables = Array.from({ length: 40 }, (_, index) => ({
+      ...carteraInput.receivables[0]!, id: `receivable-${index}`, invoiceNumber: `FV-${String(index + 1).padStart(3, "0")}`
+    }));
+    generateCarteraPdf({ ...carteraInput, receivables, supplierPayables: [] });
+    expect(page).toBeGreaterThan(1);
+    const invoiceTexts = texts.filter((entry) => /^FV-\d{3}$/.test(entry.text));
+    expect(invoiceTexts).toHaveLength(40);
+    expect(invoiceTexts.every((entry) => entry.y < 276)).toBe(true);
+    for (const pageNumber of new Set(invoiceTexts.map((entry) => entry.page))) {
+      const pageTexts = texts.filter((entry) => entry.page === pageNumber);
+      expect(pageTexts.some((entry) => entry.text === "Alquiler Amaga")).toBe(true);
+      expect(pageTexts.some((entry) => entry.text === "Factura")).toBe(true);
+      if (pageNumber > 1) expect(pageTexts.some((entry) => entry.text === "CLIENTE 01 - CONTINUACION")).toBe(true);
+    }
+    expect(texts.filter((entry) => entry.text === "TOTAL DEL CLIENTE")).toHaveLength(1);
+  });
+
+  it("keeps a short client block on one page and prints long customer names without truncating them", () => {
+    let page = 1;
+    const texts: Array<{ text: string; page: number }> = [];
+    addPageMock.mockImplementation(() => { page += 1; });
+    textMock.mockImplementation((text: string) => { texts.push({ text, page }); });
+    const longName = "Comercializadora de productos nacionales y suministros industriales del municipio de Medellin";
+    const receivables = Array.from({ length: 6 }, (_, index) => ({
+      ...carteraInput.receivables[0]!, customerId: `customer-${index}`, customerName: `Cliente ${index}`, id: `receivable-${index}`, invoiceNumber: `SINGLE-${index}`
+    }));
+    receivables.push({ ...carteraInput.receivables[0]!, customerId: "last", customerName: longName, invoiceNumber: "LONG-NAME" });
+    generateCarteraPdf({ ...carteraInput, receivables, supplierPayables: [] });
+    for (let index = 0; index < 6; index += 1) {
+      const customer = texts.find((entry) => entry.text === `Cliente ${index}`)!;
+      const invoice = texts.find((entry) => entry.text === `SINGLE-${index}`)!;
+      expect(customer.page).toBe(invoice.page);
+    }
+    expect(texts.map((entry) => entry.text).join(" ")).toContain(longName.slice(0, 65));
+    expect(texts.map((entry) => entry.text).join(" ")).toContain(longName.slice(65));
   });
 });

@@ -326,14 +326,21 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
     writeText(doc, formatCurrency(item.totalMinor), 190, textY, { align: "right" });
   });
 
-  doc.setFillColor(accentRed, accentGreen, accentBlue);
-  doc.rect(pageLeft, tableBottom - 7, 112, 7, "F");
+  // Keep payment instructions legible beside the total, without truncating account numbers.
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  writeText(doc, fitText(fieldValue(footerNote), 64), 10, tableBottom - 2, {
-    maxWidth: 114
-  });
+  doc.setFontSize(11);
+  const noteLines = doc.splitTextToSize(fieldValue(footerNote), 110) as string[];
+  const hasNoteContinuation = noteLines.length > 4;
+  const visibleNoteLines = hasNoteContinuation
+    ? [...noteLines.slice(0, 3), "Nota completa en la siguiente pagina."]
+    : noteLines;
+  const noteTop = 256 - (visibleNoteLines.length - 1) * 5;
+  const noteHeight = 7 + (visibleNoteLines.length - 1) * 5;
+  doc.setDrawColor(accentRed, accentGreen, accentBlue);
+  doc.setFillColor(245, 247, 249);
+  doc.rect(pageLeft, noteTop, 118, noteHeight, "FD");
+  doc.setTextColor(17, 24, 39);
+  visibleNoteLines.forEach((line, index) => writeText(doc, line, 12, noteTop + 5 + index * 5));
 
   doc.setTextColor(17, 24, 39);
   doc.setFontSize(10);
@@ -362,6 +369,26 @@ export function generateInvoicePdf(input: InvoicePdfInput): InvoicePdfResult {
   writeText(doc, fieldValue(observations), pageLeft, 292, {
     maxWidth: pageWidth
   });
+
+  if (hasNoteContinuation) {
+    let noteY = 28;
+    const startNotePage = () => {
+      doc.addPage();
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(17, 24, 39);
+      writeText(doc, `Nota de factura ${input.invoiceNumber}`, 14, 18);
+      doc.setFontSize(11);
+      noteY = 28;
+    };
+    startNotePage();
+    const fullNoteLines = doc.splitTextToSize(fieldValue(footerNote), 182) as string[];
+    for (const line of fullNoteLines) {
+      if (noteY > 280) startNotePage();
+      writeText(doc, line, 14, noteY);
+      noteY += 5;
+    }
+  }
 
   return {
     dataUri: doc.output("datauristring"),

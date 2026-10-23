@@ -242,29 +242,75 @@ function renderSectionTitle(
 function renderReceivableCustomerTitle(
   doc: jsPDF,
   group: ReceivableCustomerGroup,
-  y: number
-): void {
-  doc.setDrawColor(226, 232, 240);
-  doc.setFillColor(248, 250, 252);
-  doc.rect(14, y, 182, 8, "FD");
+  customerNumber: number,
+  nameLines: string[],
+  y: number,
+  continued = false
+): number {
+  const height = getCustomerTitleHeight(nameLines);
+  // The border, numbering and spacing keep groups distinct in monochrome too.
+  doc.setDrawColor(100, 116, 139);
+  doc.setFillColor(237, 240, 243);
+  doc.rect(14, y, 182, height, "FD");
+  doc.setFillColor(51, 65, 85);
+  doc.rect(14, y, 2, height, "F");
+  doc.setTextColor(71, 85, 105);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  writeText(doc, `CLIENTE ${String(customerNumber).padStart(2, "0")}${continued ? " - CONTINUACION" : ""}`, 19, y + 5);
+  doc.setTextColor(17, 24, 39);
+  doc.setFontSize(10.5);
+  nameLines.forEach((line, index) => writeText(doc, line, 19, y + 12 + index * 4.5));
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  writeText(doc, formatReceivableCount(group.receivables.length), 19, y + height - 4);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  writeText(doc, "SALDO PENDIENTE", 191, y + 6, { align: "right" });
+  doc.setFontSize(12);
+  writeText(doc, formatCurrency(group.totalBalanceMinor), 191, y + 14, { align: "right" });
+  return height;
+}
+
+function getCustomerTitleHeight(nameLines: string[]): number {
+  return Math.max(24, 19 + nameLines.length * 4.5);
+}
+
+function renderReceivableCustomerTotal(doc: jsPDF, group: ReceivableCustomerGroup, y: number): void {
+  doc.setDrawColor(100, 116, 139);
+  doc.setFillColor(237, 240, 243);
+  doc.rect(14, y, 182, 10, "FD");
   doc.setTextColor(17, 24, 39);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  writeText(doc, `Cliente: ${fitText(group.customerName, 54)}`, 16, y + 5.5);
+  writeText(doc, "TOTAL DEL CLIENTE", 19, y + 6.5);
+  doc.setFontSize(10);
+  writeText(doc, formatCurrency(group.totalBalanceMinor), 191, y + 6.5, { align: "right" });
+}
+
+function renderReceivableContinuation(doc: jsPDF, y: number): void {
+  doc.setDrawColor(100, 116, 139);
+  doc.rect(14, y, 182, 7);
+  doc.setTextColor(71, 85, 105);
+  doc.setFont("helvetica", "italic");
+  doc.setFontSize(7);
+  writeText(doc, "Este cliente continua en la siguiente pagina", 191, y + 4.5, { align: "right" });
+}
+
+function renderPageFooter(doc: jsPDF): void {
+  doc.setTextColor(100, 116, 139);
   doc.setFont("helvetica", "normal");
-  writeText(
-    doc,
-    `${formatReceivableCount(group.receivables.length)} | Saldo ${formatCurrency(group.totalBalanceMinor)}`,
-    194,
-    y + 5.5,
-    { align: "right" }
-  );
+  doc.setFontSize(7);
+  writeText(doc, "Documento generado desde Moneta para control interno de cartera.", 14, 287);
 }
 
 function renderReceivableHeader(doc: jsPDF, y: number): void {
-  doc.setTextColor(17, 24, 39);
+  doc.setDrawColor(100, 116, 139);
+  doc.setFillColor(248, 250, 252);
+  doc.rect(14, y, 182, 8, "FD");
+  doc.setTextColor(51, 65, 85);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   writeText(doc, "Factura", 16, y + 5);
   writeText(doc, "Emitida", 52, y + 5);
   writeText(doc, "Vence", 82, y + 5);
@@ -278,13 +324,21 @@ function renderReceivableRow(
   receivable: ReceivableRecord,
   invoiceNumber: string | undefined,
   issuedAt: string | undefined,
-  y: number
+  y: number,
+  shaded: boolean
 ): void {
+  if (shaded) {
+    doc.setFillColor(248, 250, 252);
+    doc.rect(14, y, 182, 9, "F");
+  }
   doc.setDrawColor(226, 232, 240);
-  doc.line(14, y + 7, 196, y + 7);
+  doc.line(14, y + 9, 196, y + 9);
+  doc.setDrawColor(100, 116, 139);
+  doc.line(14, y, 14, y + 9);
+  doc.line(196, y, 196, y + 9);
   doc.setTextColor(17, 24, 39);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(8);
   writeText(
     doc,
     fitText(receivable.invoiceNumber ?? invoiceNumber ?? receivable.saleId, 24),
@@ -371,6 +425,7 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
   let cursorY = renderPageHeader(doc, company, generatedAtLabel, pageNumber);
 
   function addPage(): void {
+    renderPageFooter(doc);
     doc.addPage();
     pageNumber += 1;
     cursorY = renderPageHeader(doc, company, generatedAtLabel, pageNumber);
@@ -399,20 +454,36 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
     writeText(doc, "Sin cuentas por cobrar abiertas.", 16, cursorY + 5);
     cursorY += 12;
   } else {
-    receivableGroups.forEach((group) => {
-      ensureSpace(28);
-      renderReceivableCustomerTitle(doc, group, cursorY);
-      cursorY += 10;
-      renderReceivableHeader(doc, cursorY);
-      cursorY += 8;
+    receivableGroups.forEach((group, groupIndex) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      const nameLines = doc.splitTextToSize(fieldValue(group.customerName), 110) as string[];
+      const titleHeight = getCustomerTitleHeight(nameLines);
+      const fullGroupHeight = titleHeight + 8 + group.receivables.length * 9 + 10;
+      // Keep a complete client together whenever it fits on a fresh page.
+      const requiredHeight = fullGroupHeight <= 204 ? fullGroupHeight : titleHeight + 8 + 9 + 10;
+      if (cursorY + requiredHeight > 276) {
+        addPage();
+        renderSectionTitle(doc, "Por cobrar (continuacion)", cursorY, accent);
+        cursorY += 10;
+      }
 
-      group.receivables.forEach((receivable) => {
-        if (cursorY + 10 > 276) {
+      function renderGroupHeader(continued = false): void {
+        cursorY += renderReceivableCustomerTitle(doc, group, groupIndex + 1, nameLines, cursorY, continued);
+        renderReceivableHeader(doc, cursorY);
+        cursorY += 8;
+      }
+
+      renderGroupHeader();
+
+      group.receivables.forEach((receivable, rowIndex) => {
+        const closingHeight = rowIndex === group.receivables.length - 1 ? 10 : 7;
+        if (cursorY + 9 + closingHeight > 276) {
+          renderReceivableContinuation(doc, cursorY);
           addPage();
-          renderReceivableCustomerTitle(doc, group, cursorY);
+          renderSectionTitle(doc, "Por cobrar (continuacion)", cursorY, accent);
           cursorY += 10;
-          renderReceivableHeader(doc, cursorY);
-          cursorY += 8;
+          renderGroupHeader(true);
         }
 
         renderReceivableRow(
@@ -420,12 +491,14 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
           receivable,
           salesById.get(receivable.saleId)?.invoiceNumber,
           salesById.get(receivable.saleId)?.issuedAt,
-          cursorY
+          cursorY,
+          rowIndex % 2 === 1
         );
-        cursorY += 8;
+        cursorY += 9;
       });
 
-      cursorY += 4;
+      renderReceivableCustomerTotal(doc, group, cursorY);
+      cursorY += 18;
     });
   }
 
@@ -444,7 +517,13 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
     cursorY += 12;
   } else {
     openPayables.forEach((payable) => {
-      ensureSpace(10);
+      if (cursorY + 10 > 276) {
+        addPage();
+        renderSectionTitle(doc, "Por pagar (continuacion)", cursorY, accent);
+        cursorY += 10;
+        renderPayableHeader(doc, cursorY);
+        cursorY += 8;
+      }
       renderPayableRow(
         doc,
         payable,
@@ -455,16 +534,7 @@ export function generateCarteraPdf(input: CarteraPdfInput): CarteraPdfResult {
     });
   }
 
-  doc.setTextColor(100, 116, 139);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  writeText(
-    doc,
-    "Documento generado desde Moneta para control interno de cartera.",
-    14,
-    284,
-    { maxWidth: 182 }
-  );
+  renderPageFooter(doc);
 
   return {
     dataUri: doc.output("datauristring"),

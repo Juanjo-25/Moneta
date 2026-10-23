@@ -21,7 +21,7 @@ it("creates an actual PDF with purchase amounts, discounts, taxes and a safe fil
   const result = generatePurchasePdf({ purchase });
   const content = pdfText(result.dataUri);
   expect(content.startsWith("%PDF-")).toBe(true);
-  for (const value of ["FACTURA DE COMPRA PR-075", "Proveedor Norte", "Arroz", "$ 900", "$ 1.539", "$ 9.639", "Descuentos", "Impuestos"]) {
+  for (const value of ["FACTURA DE COMPRA", "PR-075", "Proveedor Norte", "Arroz", "$ 900", "$ 1.539", "$ 9.639", "Descuentos", "Impuestos"]) {
     expect(content).toContain(value);
   }
   expect(result.fileName).toBe("compra-PR-075.pdf");
@@ -35,6 +35,21 @@ it("paginates long purchases and includes every product and final totals", () =>
   expect(content).toContain("Producto 1");
   expect(content).toContain("Producto 45");
   expect(content).toContain("$ 433.755");
+  expect(content.match(/\(PR-075\)/g)!.length).toBe(content.match(/\/Type \/Page\b/g)!.length);
+});
+
+it("keeps long invoice numbers complete and includes supplier identity and payment balance", () => {
+  const invoiceNumber = "FC-2026-000000000000000000000000123456789";
+  const content = pdfText(generatePurchasePdf({
+    purchase: { ...purchase, invoiceNumber },
+    supplier: { id: "supplier-1", name: "Proveedor Norte", active: true, document: "900123456-7", address: "Calle 10", city: "Medellin", department: "Antioquia", email: "proveedor@ejemplo.com", phone: "3001234567" },
+    payable: { id: "payable-1", purchaseId: purchase.id, supplierId: "supplier-1", supplierName: "Proveedor Norte", invoiceNumber, expenseCategory: "inventory", dueAt: "2026-11-23", originalAmountMinor: 9639, paidAmountMinor: 2000, balanceMinor: 7639, status: "partial" }
+  }).dataUri);
+  const text = Array.from(content.matchAll(/\(([^)]*)\) Tj/g), (match) => match[1]).join("");
+  expect(text).toContain(invoiceNumber);
+  expect(content).toContain("900123456-7");
+  expect(content).toContain("$ 2.000");
+  expect(content).toContain("$ 7.639");
 });
 
 it("prints legacy purchases without inventing a tax or discount breakdown", () => {

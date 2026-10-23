@@ -16,11 +16,15 @@ const setTextColorMock = vi.fn();
 const rectMock = vi.fn();
 const lineMock = vi.fn();
 const addImageMock = vi.fn();
+const addPageMock = vi.fn();
+const splitTextToSizeMock = vi.fn((text: string) => text.split("\n"));
 const outputMock = vi.fn(() => "data:application/pdf;base64,invoice-pdf");
 
 vi.mock("jspdf", () => ({
   jsPDF: vi.fn().mockImplementation(() => ({
     addImage: addImageMock,
+    addPage: addPageMock,
+    splitTextToSize: splitTextToSizeMock,
     line: lineMock,
     output: outputMock,
     rect: rectMock,
@@ -165,9 +169,7 @@ describe("invoice PDF", () => {
     expect(renderedText).toContain("CUENTA DE COBRO");
     expect(renderedText).toContain("Nota legal propia");
     expect(renderedText).toContain("Observacion propia");
-    expect(textMock).toHaveBeenCalledWith("Nota legal propia", 10, 237, {
-      maxWidth: 114
-    });
+    expect(textMock).toHaveBeenCalledWith("Nota legal propia", 12, 261, undefined);
     expect(textMock).toHaveBeenCalledWith("Observacion propia", 8, 292, {
       maxWidth: 194
     });
@@ -180,5 +182,24 @@ describe("invoice PDF", () => {
       24,
       24
     );
+  });
+
+  it("shows complete bank instructions in larger text beside the total", () => {
+    const note = "Banco de ejemplo - Cuenta de ahorros\nTitular: Comercial La 80\nNumero de cuenta: 00000012345678901234567890";
+    generateInvoicePdf({ ...invoiceInput, footerNote: note });
+    expect(splitTextToSizeMock).toHaveBeenCalledWith(note, 110);
+    expect(setFontSizeMock).toHaveBeenCalledWith(11);
+    expect(textMock).toHaveBeenCalledWith("Banco de ejemplo - Cuenta de ahorros", 12, 251, undefined);
+    expect(textMock).toHaveBeenCalledWith("Numero de cuenta: 00000012345678901234567890", 12, 261, undefined);
+    expect(textMock).toHaveBeenCalledWith("Total", 164, 261, { align: "right" });
+    expect(addPageMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves long legal notes on a continuation page without covering signatures", () => {
+    const note = Array.from({ length: 8 }, (_, index) => `Instruccion de pago ${index + 1}`).join("\n");
+    generateInvoicePdf({ ...invoiceInput, footerNote: note });
+    expect(addPageMock).toHaveBeenCalledOnce();
+    expect(textMock).toHaveBeenCalledWith("Nota completa en la siguiente pagina.", 12, 261, undefined);
+    expect(textMock).toHaveBeenCalledWith("Instruccion de pago 8", 14, 63, undefined);
   });
 });

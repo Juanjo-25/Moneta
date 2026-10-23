@@ -3216,43 +3216,87 @@ button,
 
   .purchase-print-sheet {
     display: block;
-    padding: 12mm;
-    font: 10pt Arial, sans-serif;
-  }
-
-  .purchase-print-sheet .document-detail {
-    display: block;
-    border: 0;
     padding: 0;
-    background: white;
+    font: 10pt Arial, sans-serif;
+    color: #111827;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
-  .purchase-print-sheet .document-detail > * {
-    margin-bottom: 5mm;
+  .purchase-print-header {
+    display: grid;
+    grid-template-columns: 25mm minmax(0, 1fr) 67mm;
+    gap: 4mm;
+    align-items: start;
+    break-inside: avoid;
   }
 
-  .purchase-print-sheet .data-table {
-    overflow: visible;
+  .purchase-print-logo {
+    width: 25mm;
+    height: 25mm;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--purchase-print-accent);
+    color: var(--purchase-print-accent);
   }
 
-  .purchase-print-sheet .document-detail-table,
-  .purchase-print-sheet .data-table-scroll {
-    overflow: visible;
+  .purchase-print-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
-  .purchase-print-sheet table {
+  .purchase-print-company { text-align: center; overflow-wrap: anywhere; }
+  .purchase-print-company h1 { margin: 0 0 2mm; font-size: 13pt; }
+  .purchase-print-company p { margin: 1mm 0; font-size: 8pt; }
+  .purchase-print-number { border: 1px solid var(--purchase-print-accent); padding: 3mm; text-align: center; overflow-wrap: anywhere; }
+  .purchase-print-number h2 { margin: 0 0 2mm; font-size: 9pt; }
+  .purchase-print-number strong { display: block; font-size: 26pt; line-height: 1.15; }
+  .purchase-print-supplier { display: grid; grid-template-columns: minmax(0, 1fr) 52mm; gap: 2mm; margin-top: 6mm; }
+  .purchase-print-supplier dl { margin: 0; }
+  .purchase-print-supplier dl > div { display: grid; grid-template-columns: 30mm minmax(0, 1fr); min-height: 8mm; border: 1px solid var(--purchase-print-accent); }
+  .purchase-print-supplier dt { display: grid; place-items: center; margin: 0; padding: 2mm; font-size: 7pt; font-weight: bold; background: var(--purchase-print-accent); color: white; }
+  .purchase-print-supplier dd { margin: 0; padding: 2mm; font-size: 8.5pt; overflow-wrap: anywhere; }
+  .purchase-print-supplier .purchase-print-dates > div { display: block; text-align: center; }
+  .purchase-print-meta { margin: 3mm 0; font-size: 9pt; }
+  .purchase-print-meta p { margin: 1mm 0; }
+
+  .purchase-print-sheet .purchase-print-items {
     width: 100%;
     min-width: 0;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 8pt;
   }
 
-  .purchase-print-sheet th,
-  .purchase-print-sheet td {
-    padding: 2mm;
+  .purchase-print-items thead { background: var(--purchase-print-accent); color: white; }
+  .purchase-print-sheet .purchase-print-items th,
+  .purchase-print-sheet .purchase-print-items td {
+    padding: 2mm 1mm;
     white-space: normal;
-    border-bottom: 1px solid #ccc;
+    border: 1px solid var(--purchase-print-accent);
+    text-align: right;
+    vertical-align: top;
+    overflow-wrap: anywhere;
   }
+
+  .purchase-print-items th:first-child,
+  .purchase-print-items td:first-child { text-align: left; }
+  .purchase-print-items small { display: block; margin-top: 1mm; }
+  .purchase-print-items tbody tr:not(.purchase-print-spacer) { height: 14mm; }
+  .purchase-print-sheet .purchase-print-spacer td { padding: 0; }
+  .purchase-print-bottom { break-inside: avoid; }
+  .purchase-print-summary { display: grid; grid-template-columns: minmax(0, 1fr) 78mm; gap: 7mm; margin-top: 5mm; break-inside: avoid; }
+  .purchase-print-payment { font-size: 9pt; }
+  .purchase-print-payment h3 { margin: 0; font-size: 9pt; }
+  .purchase-print-payment p { margin: 2mm 0; }
+  .purchase-print-totals { margin: 0; }
+  .purchase-print-totals > div { display: flex; justify-content: space-between; gap: 3mm; padding: 2mm; font-size: 9pt; }
+  .purchase-print-totals dt,
+  .purchase-print-totals dd { margin: 0; }
+  .purchase-print-total { background: var(--purchase-print-accent); color: white; font-weight: bold; }
+  .purchase-print-signatures { display: flex; justify-content: space-around; gap: 10mm; margin-top: 17mm; font-size: 8pt; break-inside: avoid; }
+  .purchase-print-signatures span { width: 60mm; border-top: 1px solid #484848; padding-top: 2mm; text-align: center; }
 
   .purchase-print-sheet thead {
     display: table-header-group;

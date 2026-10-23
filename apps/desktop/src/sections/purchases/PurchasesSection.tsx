@@ -10,6 +10,7 @@ import { InlineActionGroup } from "../../components/InlineActionGroup";
 import { InlineFormSection } from "../../components/InlineFormSection";
 import { PrimaryActionButton } from "../../components/PrimaryActionButton";
 import { PurchaseDetails } from "../../components/PurchaseDetails";
+import { PurchasePrintDocument } from "../../components/PurchasePrintDocument";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SummaryCard } from "../../components/SummaryCard";
 import { TextField } from "../../components/TextField";
@@ -1174,11 +1175,7 @@ export function PurchasesSection({
         <iframe src={invoicePreview.dataUri} title="Vista previa de factura de compra PDF" />
       </section>}
       {invoiceError && <p className="form-error" role="alert">{invoiceError}</p>}
-      {printPurchase && createPortal(<div className="purchase-print-sheet">
-        <header><h1>{settings?.company.name || "Moneta"}</h1><p>{[settings?.company.document, settings?.company.address, settings?.company.city, settings?.company.phone].filter(Boolean).join(" | ")}</p><h2>Factura de compra {printPurchase.invoiceNumber}</h2></header>
-        <p>{[suppliers.find((supplier) => supplier.id === printPurchase.supplierId)?.document, suppliers.find((supplier) => supplier.id === printPurchase.supplierId)?.address].filter(Boolean).join(" | ")}</p>
-        <PurchaseDetails purchase={printPurchase} payable={supplierPayables.find((payable) => payable.purchaseId === printPurchase.id)} categoryLabel={formatExpenseCategory(printPurchase.expenseCategory)} formatCurrency={formatCurrency} />
-      </div>, document.body)}
+      {printPurchase && createPortal(<PurchasePrintDocument purchase={printPurchase} settings={settings} supplier={suppliers.find((supplier) => supplier.id === printPurchase.supplierId)} payable={supplierPayables.find((payable) => payable.purchaseId === printPurchase.id)} formatCurrency={formatCurrency} />, document.body)}
     </section>
   );
 }
