@@ -36,6 +36,9 @@ import {
   loadNativePurchases,
   loadNativeReceivables,
   loadNativeSales,
+  loadNativeQuotations,
+  saveNativeQuotation,
+  deleteNativeQuotation,
   loadNativeSettings,
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
@@ -57,7 +60,9 @@ import {
   voidNativeCustomerReceipt,
   type NativeConnectionStatus
 } from "./lib/tauri";
+import { validateQuotation } from "./lib/quotations";
 import { SectionContent } from "./sections/SectionContent";
+import { createEmptyQuotationDraft } from "./sections/sales/QuotationsSection";
 import { DashboardContent } from "./sections/dashboard/DashboardContent";
 import {
   emptySalesDraft,
@@ -79,6 +84,7 @@ import type {
   PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
+  QuotationRecord,
   ReceivableRecord,
   SaleRecord,
   SectionConfig,
@@ -444,6 +450,9 @@ export function App() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [salesDraft, setSalesDraft] = useState<SalesDraftState>(emptySalesDraft);
   const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [quotations, setQuotations] = useState<QuotationRecord[]>([]);
+  const [quotationDraft, setQuotationDraft] = useState(createEmptyQuotationDraft);
+  const [salesView, setSalesView] = useState<"sales" | "quotations">("sales");
   const [creditNotes, setCreditNotes] = useState<CreditNoteRecord[]>([]);
   const [receivables, setReceivables] = useState<ReceivableRecord[]>([]);
   const [customerReceipts, setCustomerReceipts] = useState<CustomerReceiptRecord[]>([]);
@@ -495,6 +504,7 @@ export function App() {
           storedInventoryAdjustments,
           storedCustomers,
           storedSales,
+          storedQuotations,
           storedReceivables,
           storedCustomerReceipts,
           storedCreditNotes,
@@ -508,6 +518,7 @@ export function App() {
           loadNativeInventoryAdjustments(),
           loadNativeCustomers(),
           loadNativeSales(),
+          loadNativeQuotations(),
           loadNativeReceivables(),
           loadNativeCustomerReceipts(),
           loadNativeCreditNotes(),
@@ -531,6 +542,9 @@ export function App() {
         }
         if (isMounted && storedSales) {
           setSales(storedSales);
+        }
+        if (isMounted && storedQuotations) {
+          setQuotations(storedQuotations);
         }
         if (isMounted && storedReceivables) {
           setReceivables(storedReceivables);
@@ -568,6 +582,34 @@ export function App() {
     };
   }, []);
 
+  async function saveQuotationInSession(quotation: QuotationRecord): Promise<string | null> {
+    const validation = validateQuotation(quotation);
+    if (validation) return validation;
+    if (quotations.some((item) => item.id !== quotation.id && item.quotationNumber === quotation.quotationNumber)) {
+      return "Este número de cotización ya existe. Crea una nueva cotización.";
+    }
+    try {
+      await saveNativeQuotation(quotation);
+    } catch {
+      return "No se pudo guardar la cotización en la base de datos local.";
+    }
+    setQuotations((current) =>
+      [quotation, ...current.filter((item) => item.id !== quotation.id)]
+        .sort((left, right) => right.createdAtMs - left.createdAtMs)
+    );
+    return null;
+  }
+
+  async function deleteQuotationInSession(quotationId: string): Promise<string | null> {
+    try {
+      await deleteNativeQuotation(quotationId);
+    } catch {
+      return "No se pudo eliminar la cotización de la base de datos local.";
+    }
+    setQuotations((current) => current.filter((item) => item.id !== quotationId));
+    return null;
+  }
+
   function updateSettings(nextSettings: AppSettings) {
     setSettings(nextSettings);
     void saveNativeSettings(nextSettings);
@@ -583,6 +625,9 @@ export function App() {
     setCustomers([]);
     setSalesDraft(emptySalesDraft);
     setSales([]);
+    setQuotations([]);
+    setQuotationDraft(createEmptyQuotationDraft());
+    setSalesView("sales");
     setCreditNotes([]);
     setReceivables([]);
     setCustomerReceipts([]);
@@ -703,7 +748,8 @@ export function App() {
   }
 
   function handlePrimaryAction() {
-    if (activeSection.id === "dashboard") {
+    if (activeSection.id === "dashboard" || activeSection.id === "sales") {
+      setSalesView("sales");
       openSection("sales");
       return;
     }
@@ -2848,6 +2894,13 @@ export function App() {
             customerReceipts={customerReceipts}
             sales={sales}
             salesDraft={salesDraft}
+            quotations={quotations}
+            quotationDraft={quotationDraft}
+            onQuotationDraftChange={setQuotationDraft}
+            onSaveQuotation={saveQuotationInSession}
+            onDeleteQuotation={deleteQuotationInSession}
+            salesView={salesView}
+            onSalesViewChange={setSalesView}
             section={activeSection}
             onSalesDraftChange={setSalesDraft}
             onCreateBackup={createBackup}

@@ -19,6 +19,9 @@ import {
   loadNativePurchases,
   loadNativeReceivables,
   loadNativeSales,
+  loadNativeQuotations,
+  saveNativeQuotation,
+  deleteNativeQuotation,
   loadNativeSettings,
   loadNativeSupplierPayables,
   loadNativeSupplierPayments,
@@ -39,6 +42,31 @@ import {
   updateNativeSale,
   voidNativeCustomerReceipt
 } from "./tauri";
+import { quotationFixture } from "../test/quotation-fixture";
+
+describe("native quotations", () => {
+  afterEach(() => setTauriInvoke());
+
+  it("loads, saves and deletes quotations with their own native commands", async () => {
+    const invoke = vi.fn().mockResolvedValue([quotationFixture]);
+    setTauriInvoke(invoke);
+    await expect(loadNativeQuotations()).resolves.toEqual([quotationFixture]);
+    await expect(saveNativeQuotation(quotationFixture)).resolves.toBe(true);
+    await expect(deleteNativeQuotation(quotationFixture.id)).resolves.toBe(true);
+    expect(invoke.mock.calls).toEqual([
+      ["list_quotations"], ["save_quotation", { quotation: quotationFixture }], ["delete_quotation", { quotationId: quotationFixture.id }]
+    ]);
+  });
+
+  it("uses session state in web mode and propagates database failures", async () => {
+    setTauriInvoke();
+    await expect(loadNativeQuotations()).resolves.toBeNull();
+    await expect(saveNativeQuotation(quotationFixture)).resolves.toBe(false);
+    await expect(deleteNativeQuotation(quotationFixture.id)).resolves.toBe(false);
+    setTauriInvoke(vi.fn().mockRejectedValue(new Error("SQLite unavailable")));
+    await expect(saveNativeQuotation(quotationFixture)).rejects.toThrow("SQLite unavailable");
+  });
+});
 
 function setTauriInvoke(
   invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>

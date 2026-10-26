@@ -42,6 +42,14 @@ Build the native desktop app:
 pnpm build:native
 ```
 
+## Quotations
+
+Open **Ventas → Cotizaciones** to create, edit, search, and print quotations.
+Quotations have their own numbering, validity dates, discounts, and taxes. They
+do not change inventory, sales, or receivables. Saved quotations persist in the
+native SQLite database and are included in database backups. In the web shell,
+records are available only for the current session.
+
 ## Verification
 
 ```bash

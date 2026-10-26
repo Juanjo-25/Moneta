@@ -93,6 +93,34 @@ export type SaleLineRecord = {
   totalMinor: number;
 };
 
+export type QuotationLineRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  unitPriceMinor: number;
+  discountPercent: number;
+  discountMinor: number;
+  taxPercent: number;
+  taxMinor: number;
+  subtotalMinor: number;
+  totalMinor: number;
+};
+
+export type QuotationRecord = {
+  id: string;
+  quotationNumber: string;
+  customer: CustomerRecord;
+  issuedAt: string;
+  validUntil: string;
+  seller: string;
+  observations: string;
+  lines: QuotationLineRecord[];
+  totalMinor: number;
+  createdAtMs: number;
+};
+
 export type SaleRecord = {
   id: string;
   customer: CustomerRecord;

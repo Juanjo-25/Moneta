@@ -1,3 +1,5 @@
+mod quotations;
+
 use rusqlite::{params, Connection, DatabaseName, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -828,6 +830,7 @@ fn reset_database_in_connection(
         .transaction()
         .map_err(|error| format!("No se pudo iniciar el reinicio de datos: {error}"))?;
     let tables = [
+        "quotations",
         "customer_receipts",
         "credit_note_lines",
         "credit_notes",
@@ -4272,6 +4275,8 @@ fn apply_migrations(connection: &Connection) -> Result<(), String> {
             format!("No se pudo registrar la migracion de recibos de caja: {error}")
         })?;
 
+    quotations::migrate(connection)?;
+
     Ok(())
 }
 
@@ -5296,6 +5301,9 @@ fn main() {
             save_customer,
             delete_customers,
             list_sales,
+            quotations::list_quotations,
+            quotations::save_quotation,
+            quotations::delete_quotation,
             list_receivables,
             list_customer_receipts,
             save_sale,

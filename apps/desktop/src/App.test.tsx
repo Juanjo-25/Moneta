@@ -8,6 +8,8 @@ import { generateInvoicePdf } from "./invoice-pdf";
 import { generateInventoryPdf } from "./inventory-pdf";
 import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
 import { generatePurchasePdf } from "./purchase-pdf";
+import { generateQuotationPdf } from "./quotation-pdf";
+import { quotationFixture } from "./test/quotation-fixture";
 import type { CustomerReceiptRecord } from "./types";
 
 vi.mock("./cartera-pdf", () => ({
@@ -31,6 +33,7 @@ vi.mock("./supplier-payment-pdf", () => ({
 }));
 
 vi.mock("./purchase-pdf", () => ({ generatePurchasePdf: vi.fn() }));
+vi.mock("./quotation-pdf", () => ({ generateQuotationPdf: vi.fn() }));
 
 const generateCarteraPdfMock = vi.mocked(generateCarteraPdf);
 const generateCashReceiptPdfMock = vi.mocked(generateCashReceiptPdf);
@@ -1573,6 +1576,67 @@ describe("App navigation", () => {
     expect(within(lines).getByText(/\$\s*7\.000/)).toBeTruthy();
   });
 
+  it("saves quotations inside sales and prints them without changing stock, sales or receivables", async () => {
+    const user = userEvent.setup();
+    vi.mocked(generateQuotationPdf).mockReturnValue({ dataUri: "data:application/pdf;base64,cXVvdGU=", fileName: "cotizacion-COT-0001.pdf" });
+    render(<App />);
+    await createProductFixture(user);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("tab", { name: "Cotizaciones" }));
+    await user.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await user.type(screen.getByLabelText("Razón social"), "Cliente Cotizacion");
+    await user.type(screen.getByLabelText("NIT o C.C."), "991122");
+    await user.click(screen.getByRole("button", { name: "Guardar cliente" }));
+    await user.type(screen.getByRole("combobox", { name: "Producto buscable" }), "arroz{Enter}");
+    await user.type(screen.getByLabelText("Cantidad"), "20");
+    await user.click(screen.getByRole("button", { name: "Agregar producto" }));
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(within(screen.getByRole("table", { name: "Productos de la cotización" })).getByText("20")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Guardar cotización" }));
+    expect(screen.getByRole("table", { name: "Cotizaciones guardadas" }).textContent).toContain("COT-0001");
+    await user.click(screen.getByRole("button", { name: "Generar PDF COT-0001" }));
+    const download = await screen.findByRole("link", { name: "Descargar PDF" });
+    expect(download.getAttribute("download")).toBe("cotizacion-COT-0001.pdf");
+    expect(generateQuotationPdf).toHaveBeenCalledWith(expect.objectContaining({ quotation: expect.objectContaining({ totalMinor: 90000, lines: [expect.objectContaining({ quantity: 20 })] }) }));
+    await user.click(screen.getByRole("button", { name: "Productos" }));
+    const inventoryRow = screen.getByRole("cell", { name: "Arroz libra" }).closest("tr")!;
+    expect(within(inventoryRow).getByText("4")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Inicio" }));
+    expect(screen.getByText("Ventas del mes").nextElementSibling?.textContent).toMatch(/\$\s*0/);
+    expect(screen.getByText("Cartera pendiente").nextElementSibling?.textContent).toMatch(/\$\s*0/);
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    expect(screen.getByRole("table", { name: "Cotizaciones guardadas" }).textContent).toContain("COT-0001");
+    await user.click(screen.getByRole("button", { name: "Nueva venta" }));
+    expect(screen.getByRole("tab", { name: "Ventas" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Sin ventas registradas")).toBeTruthy();
+  });
+
+  it("reloads saved native quotations and keeps them when a native update fails", async () => {
+    const user = userEvent.setup();
+    const invoke = vi.fn().mockImplementation((command: string) => {
+      if (command === "health_check") return Promise.resolve("ok");
+      if (command === "database_status") return Promise.resolve({ path: "/tmp/test.sqlite3", migrationCount: 1 });
+      if (command === "list_quotations") return Promise.resolve([quotationFixture]);
+      if (command === "save_quotation") return Promise.reject(new Error("SQLite unavailable"));
+      if (command === "get_app_settings") return Promise.resolve(null);
+      return Promise.resolve([]);
+    });
+    setTauriInvoke(invoke);
+    render(<App />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("list_quotations"));
+    await user.click(screen.getByRole("button", { name: "Ventas" }));
+    await user.click(screen.getByRole("tab", { name: "Cotizaciones" }));
+    await user.click(await screen.findByRole("button", { name: "Editar COT-0001" }));
+    await user.type(screen.getByLabelText("Observaciones y condiciones"), " Condicion nueva");
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    expect(screen.getByRole("alert").textContent).toContain("base de datos local");
+    expect((screen.getByLabelText("Observaciones y condiciones") as HTMLTextAreaElement).value).toContain("Condicion nueva");
+    await user.click(screen.getByRole("button", { name: "Cancelar edición" }));
+    await user.click(screen.getByRole("button", { name: "Editar COT-0001" }));
+    expect((screen.getByLabelText("Observaciones y condiciones") as HTMLTextAreaElement).value).toBe(quotationFixture.observations);
+  });
+
   it("shows sales charts on the dashboard from registered sales", async () => {
     const user = userEvent.setup();
 
@@ -1596,7 +1660,7 @@ describe("App navigation", () => {
 
     expect(screen.getByRole("heading", { name: "Ventas diarias" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ventas por mes" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Productos mas vendidos" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Productos más vendidos" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Top clientes" })).toBeTruthy();
     expect(screen.getByText("Ventas del mes")).toBeTruthy();
     const dailySalesChart = screen.getByLabelText("Grafico ventas diarias");
@@ -1606,12 +1670,13 @@ describe("App navigation", () => {
     expect(within(dailySalesChart).getByText("Periodo 2")).toBeTruthy();
     expect(within(dailySalesChart).getByText("Dia 1")).toBeTruthy();
     expect(within(dailySalesChart).getByText("Dia 31")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Precios")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Ventas")).toBeTruthy();
     expect(within(dailySalesChart).getByText("Dias")).toBeTruthy();
-    expect(within(dailySalesChart).getByText(/\$\s*0/)).toBeTruthy();
+    expect(within(within(dailySalesChart).getByRole("img", { name: "Ventas diarias" })).getByText(/\$\s*0/)).toBeTruthy();
     const productPieChart = screen.getByLabelText("Grafico productos mas vendidos");
     expect(within(productPieChart).getByRole("img", { name: "Torta productos mas vendidos" })).toBeTruthy();
     await user.click(within(productPieChart).getByRole("button", { name: "Seleccionar Arroz libra" }));
+    expect(within(productPieChart).getByRole("button", { name: "Seleccionar Arroz libra" }).getAttribute("aria-pressed")).toBe("true");
     expect(within(productPieChart).getByText("Producto seleccionado")).toBeTruthy();
     expect(within(productPieChart).getByText("2 unidades")).toBeTruthy();
     expect(within(productPieChart).getAllByText("Arroz libra").length).toBeGreaterThan(0);

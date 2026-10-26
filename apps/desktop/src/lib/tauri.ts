@@ -5,6 +5,7 @@ import type {
   CreditNoteRecord,
   InventoryAdjustmentRecord,
   ProductRecord,
+  QuotationRecord,
   PurchaseRecord,
   ReceivableRecord,
   SaleRecord,
@@ -184,6 +185,25 @@ export async function loadNativeProducts(): Promise<ProductRecord[] | null> {
   }
 
   return invoke<ProductRecord[]>("list_products");
+}
+
+export async function loadNativeQuotations(): Promise<QuotationRecord[] | null> {
+  const invoke = window.__TAURI__?.core?.invoke;
+  return invoke ? invoke<QuotationRecord[]>("list_quotations") : null;
+}
+
+export async function saveNativeQuotation(quotation: QuotationRecord): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) return false;
+  await invoke<void>("save_quotation", { quotation });
+  return true;
+}
+
+export async function deleteNativeQuotation(quotationId: string): Promise<boolean> {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) return false;
+  await invoke<void>("delete_quotation", { quotationId });
+  return true;
 }
 
 export async function saveNativeProduct(product: ProductRecord): Promise<boolean> {

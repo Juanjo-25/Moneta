@@ -110,6 +110,7 @@ export function DashboardContent({
             <div className="dashboard-hero-copy">
               <span>Tendencia principal</span>
               <h2>Ventas diarias</h2>
+              <p>Compara el comportamiento de tus ventas entre dos meses.</p>
             </div>
           </PanelHeader>
           <div className="dashboard-hero-body">
@@ -166,16 +167,22 @@ export function DashboardContent({
         className="dashboard-chart-grid dashboard-secondary-analysis"
         aria-label="Analisis secundario"
       >
-        <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary">
+        <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary dashboard-monthly-panel">
           <PanelHeader>
-            <h2>Ventas por mes</h2>
+            <div className="dashboard-panel-copy">
+              <h2>Ventas por mes</h2>
+              <p>Evolución de las ventas durante el año actual.</p>
+            </div>
           </PanelHeader>
-          <DashboardBarChart rows={monthlySalesRows} />
+          <DashboardBarChart formatCurrency={formatCurrency} rows={monthlySalesRows} />
         </div>
 
         <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary">
           <PanelHeader>
-            <h2>Productos mas vendidos</h2>
+            <div className="dashboard-panel-copy">
+              <h2>Productos más vendidos</h2>
+              <p>Los cinco productos con mayor valor vendido · Histórico</p>
+            </div>
           </PanelHeader>
           <DashboardProductPieChart
             formatCurrency={formatCurrency}
@@ -185,7 +192,10 @@ export function DashboardContent({
 
         <div className="panel dashboard-chart-panel dashboard-chart-panel-secondary">
           <PanelHeader>
-            <h2>Top clientes</h2>
+            <div className="dashboard-panel-copy">
+              <h2>Top clientes</h2>
+              <p>Los cinco clientes con mayor valor comprado · Histórico</p>
+            </div>
           </PanelHeader>
           <DashboardRankingList
             emptyBody="Los clientes con ventas se mostraran aqui."
@@ -555,14 +565,15 @@ function DashboardAreaChart({
   return (
     <div className="dashboard-line-chart" aria-label="Grafico ventas diarias">
       <div className="dashboard-series-legend">
-        <span className="dashboard-series-label dashboard-series-label-primary">
-          Periodo 1
-          <small>{periodOneLabel}</small>
-        </span>
-        <span className="dashboard-series-label dashboard-series-label-secondary">
-          Periodo 2
-          <small>{periodTwoLabel}</small>
-        </span>
+        {series.map((trendSeries, index) => (
+          <div className={`dashboard-series-label dashboard-series-label-${trendSeries.color}`} key={trendSeries.label}>
+            <div>
+              <span>{trendSeries.label}</span>
+              <small>{index === 0 ? periodOneLabel : periodTwoLabel}</small>
+            </div>
+            <strong>{formatCurrency(trendSeries.rows.reduce((total, row) => total + row.valueMinor, 0))}</strong>
+          </div>
+        ))}
       </div>
       <svg role="img" viewBox={`0 0 ${width} ${height}`}>
         <title>Ventas diarias</title>
@@ -626,7 +637,7 @@ function DashboardAreaChart({
           textAnchor="middle"
           transform={`translate(16 ${padding.top + chartHeight / 2}) rotate(-90)`}
         >
-          Precios
+          Ventas
         </text>
         <text
           className="dashboard-axis-label"
@@ -668,8 +679,17 @@ function DashboardAreaChart({
   );
 }
 
-function DashboardBarChart({ rows }: { rows: DashboardTrendRow[] }) {
+function DashboardBarChart({ rows, formatCurrency }: {
+  rows: DashboardTrendRow[];
+  formatCurrency: (minor: number) => string;
+}) {
   const maxValue = Math.max(...rows.map((row) => row.valueMinor), 0);
+  const compactCurrency = new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    notation: "compact",
+    maximumFractionDigits: 1
+  });
 
   if (maxValue === 0) {
     return (
@@ -684,11 +704,12 @@ function DashboardBarChart({ rows }: { rows: DashboardTrendRow[] }) {
   return (
     <div className="dashboard-bar-chart" aria-label="Grafico ventas por mes">
       {rows.map((row) => (
-        <div className="dashboard-month-bar" key={row.label}>
+        <div className="dashboard-month-bar" key={row.label} title={`${row.label}: ${formatCurrency(row.valueMinor)}`}>
+          <span className="dashboard-month-value">{compactCurrency.format(row.valueMinor / 100)}</span>
           <div className="dashboard-month-track">
             <span
               style={{
-                height: `${Math.max((row.valueMinor / maxValue) * 100, 3)}%`
+                height: `${row.valueMinor > 0 ? Math.max((row.valueMinor / maxValue) * 100, 3) : 0}%`
               }}
             />
           </div>
@@ -720,16 +741,17 @@ function DashboardRankingList({
 
   return (
     <div className="dashboard-ranking-list">
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <article className="dashboard-ranking-row" key={row.id}>
-          <div>
-            <strong>{row.label}</strong>
+          <span className="dashboard-ranking-position" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+          <div className="dashboard-ranking-copy">
+            <strong title={row.label}>{row.label}</strong>
             <span>{row.meta}</span>
           </div>
+          <strong>{formatCurrency(row.valueMinor)}</strong>
           <div className="dashboard-ranking-track">
             <span style={{ width: `${(row.valueMinor / maxValue) * 100}%` }} />
           </div>
-          <strong>{formatCurrency(row.valueMinor)}</strong>
         </article>
       ))}
     </div>
@@ -834,7 +856,7 @@ function DashboardProductPieChart({
 
       <div className="dashboard-pie-detail">
         <span>Producto seleccionado</span>
-        <strong>{selectedRow.label}</strong>
+        <strong title={selectedRow.label}>{selectedRow.label}</strong>
         <small>{selectedRow.meta}</small>
         <b>{formatCurrency(selectedRow.valueMinor)}</b>
       </div>
@@ -847,6 +869,7 @@ function DashboardProductPieChart({
           return (
             <button
               aria-label={`Seleccionar ${row.label}`}
+              aria-pressed={row.id === activeProductId}
               className={row.id === activeProductId ? "active" : ""}
               key={row.id}
               onClick={() => setSelectedProductId(row.id)}
@@ -860,7 +883,7 @@ function DashboardProductPieChart({
                     dashboardPieColors[index % dashboardPieColors.length]
                 }}
               />
-              <span>{row.label}</span>
+              <span title={row.label}>{row.label}</span>
               <strong>{percentage}%</strong>
             </button>
           );

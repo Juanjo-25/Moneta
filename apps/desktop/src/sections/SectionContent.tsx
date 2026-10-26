@@ -9,10 +9,9 @@ import { CustomersSection } from "./customers/CustomersSection";
 import { ProductsSection } from "./products/ProductsSection";
 import { PurchasesSection } from "./purchases/PurchasesSection";
 import { ReportsSection } from "./reports/ReportsSection";
-import {
-  SalesSection,
-  type SalesDraftState
-} from "./sales/SalesSection";
+import type { SalesDraftState } from "./sales/SalesSection";
+import type { QuotationDraftState } from "./sales/QuotationsSection";
+import { SalesWorkspace } from "./sales/SalesWorkspace";
 import { SettingsSection } from "./settings/SettingsSection";
 import { SuppliersSection } from "./suppliers/SuppliersSection";
 import type {
@@ -30,6 +29,7 @@ import type {
   PurchaseExpenseCategory,
   PurchasePaymentStatus,
   PurchaseRecord,
+  QuotationRecord,
   ReceivableRecord,
   SaleRecord,
   SectionConfig,
@@ -223,6 +223,13 @@ type SectionContentProps = {
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
   salesDraft: SalesDraftState;
+  quotations: QuotationRecord[];
+  quotationDraft: QuotationDraftState;
+  onQuotationDraftChange: Dispatch<SetStateAction<QuotationDraftState>>;
+  onSaveQuotation: (quotation: QuotationRecord) => Promise<string | null>;
+  onDeleteQuotation: (quotationId: string) => Promise<string | null>;
+  salesView: "sales" | "quotations";
+  onSalesViewChange: (view: "sales" | "quotations") => void;
   section: SectionConfig;
   supplierPayables: SupplierPayableRecord[];
   supplierPayments: SupplierPaymentRecord[];
@@ -288,6 +295,13 @@ export function SectionContent({
   receivables,
   sales,
   salesDraft,
+  quotations,
+  quotationDraft,
+  onQuotationDraftChange,
+  onSaveQuotation,
+  onDeleteQuotation,
+  salesView,
+  onSalesViewChange,
   section,
   supplierPayables,
   supplierPayments,
@@ -343,7 +357,14 @@ export function SectionContent({
 
   if (section.id === "sales") {
     return (
-      <SalesSection
+      <SalesWorkspace
+        quotations={quotations}
+        quotationDraft={quotationDraft}
+        onQuotationDraftChange={onQuotationDraftChange}
+        onSaveQuotation={onSaveQuotation}
+        onDeleteQuotation={onDeleteQuotation}
+        salesView={salesView}
+        onSalesViewChange={onSalesViewChange}
         customers={customers}
         formatCurrency={formatCurrency}
         formatIntegerInput={formatIntegerInput}
