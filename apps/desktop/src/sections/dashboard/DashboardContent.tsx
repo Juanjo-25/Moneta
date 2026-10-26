@@ -3,6 +3,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { PanelHeader } from "../../components/PanelHeader";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { parseLocalDate } from "../../lib/dates";
+import { DailySalesPanel } from "./DailySalesPanel";
 import { SalesHistory } from "./SalesHistory";
 import type { CreditNoteRecord, ProductRecord, ReceivableRecord, SaleRecord } from "../../types";
 
@@ -16,17 +17,6 @@ type DashboardRankingRow = {
   label: string;
   meta: string;
   valueMinor: number;
-};
-
-type DashboardPeriodOption = {
-  label: string;
-  value: string;
-};
-
-type DashboardTrendSeries = {
-  color: "primary" | "secondary";
-  label: string;
-  rows: DashboardTrendRow[];
 };
 
 type DashboardContentProps = {
@@ -50,33 +40,6 @@ export function DashboardContent({
   sales,
   receivables
 }: DashboardContentProps) {
-  const dailyPeriodOptions = buildDashboardPeriodOptions(sales, creditNotes);
-  const [periodOne, setPeriodOne] = useState(dailyPeriodOptions[0]!.value);
-  const [periodTwo, setPeriodTwo] = useState(
-    dailyPeriodOptions[1]?.value ?? dailyPeriodOptions[0]!.value
-  );
-  const periodOneLabel = formatDashboardPeriodLabel(periodOne);
-  const periodTwoLabel = formatDashboardPeriodLabel(periodTwo);
-  const dailySalesSeries: DashboardTrendSeries[] = [
-    {
-      color: "primary",
-      label: "Periodo 1",
-      rows: buildDashboardDailySalesRows(
-        sales,
-        creditNotes,
-        parseDashboardPeriodValue(periodOne)
-      )
-    },
-    {
-      color: "secondary",
-      label: "Periodo 2",
-      rows: buildDashboardDailySalesRows(
-        sales,
-        creditNotes,
-        parseDashboardPeriodValue(periodTwo)
-      )
-    }
-  ];
   const monthlySalesRows = buildDashboardMonthlySalesRows(sales, creditNotes);
   const productRows = buildDashboardProductRows(sales, creditNotes);
   const customerRows = buildDashboardCustomerRows(sales, creditNotes);
@@ -99,68 +62,13 @@ export function DashboardContent({
         className="dashboard-primary-analysis"
         aria-label="Analisis principal"
       >
-        <div className="panel dashboard-chart-panel dashboard-hero-panel">
-          <PanelHeader
-            action={
-              <SecondaryActionButton onClick={onOpenReports} variant="compact">
-                Ver todo
-              </SecondaryActionButton>
-            }
-          >
-            <div className="dashboard-hero-copy">
-              <span>Tendencia principal</span>
-              <h2>Ventas diarias</h2>
-              <p>Compara el comportamiento de tus ventas entre dos meses.</p>
-            </div>
-          </PanelHeader>
-          <div className="dashboard-hero-body">
-            <section
-              className="dashboard-hero-controls"
-              aria-label="Controles del analisis principal"
-            >
-              <div className="dashboard-period-controls">
-                <label className="field" htmlFor="dashboard-period-one">
-                  <span>Periodo 1</span>
-                  <select
-                    aria-label="Periodo 1 ventas diarias"
-                    id="dashboard-period-one"
-                    onChange={(event) => setPeriodOne(event.target.value)}
-                    value={periodOne}
-                  >
-                    {dailyPeriodOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field" htmlFor="dashboard-period-two">
-                  <span>Periodo 2</span>
-                  <select
-                    aria-label="Periodo 2 ventas diarias"
-                    id="dashboard-period-two"
-                    onChange={(event) => setPeriodTwo(event.target.value)}
-                    value={periodTwo}
-                  >
-                    {dailyPeriodOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </section>
-            <div className="dashboard-hero-chart">
-              <DashboardAreaChart
-                formatCurrency={formatCurrency}
-                periodOneLabel={periodOneLabel}
-                periodTwoLabel={periodTwoLabel}
-                series={dailySalesSeries}
-              />
-            </div>
-          </div>
-        </div>
+        <DailySalesPanel
+          creditNotes={creditNotes}
+          sales={sales}
+          receivables={receivables}
+          formatCurrency={formatCurrency}
+          onOpenReports={onOpenReports}
+        />
       </section>
 
       <section
@@ -242,121 +150,12 @@ export function DashboardContent({
   );
 }
 
-function isSameLocalMonth(left: Date, right: Date): boolean {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth()
-  );
-}
-
 function getSaleDashboardDate(sale: SaleRecord): Date {
   return parseLocalDate(sale.issuedAt) ?? new Date(sale.occurredAtMs);
 }
 
 function getCreditNoteDashboardDate(creditNote: CreditNoteRecord): Date {
   return parseLocalDate(creditNote.issuedAt) ?? new Date(creditNote.occurredAtMs);
-}
-
-function buildDashboardDailySalesRows(
-  sales: SaleRecord[],
-  creditNotes: CreditNoteRecord[],
-  referenceDate = new Date()
-): DashboardTrendRow[] {
-  const totalsByDay = new Map<number, number>();
-
-  sales.forEach((sale) => {
-    const occurredAt = getSaleDashboardDate(sale);
-
-    if (!isSameLocalMonth(occurredAt, referenceDate)) {
-      return;
-    }
-
-    totalsByDay.set(
-      occurredAt.getDate(),
-      (totalsByDay.get(occurredAt.getDate()) ?? 0) + sale.totalMinor
-    );
-  });
-
-  creditNotes.forEach((creditNote) => {
-    const occurredAt = getCreditNoteDashboardDate(creditNote);
-
-    if (!isSameLocalMonth(occurredAt, referenceDate)) {
-      return;
-    }
-
-    totalsByDay.set(
-      occurredAt.getDate(),
-      Math.max((totalsByDay.get(occurredAt.getDate()) ?? 0) - creditNote.totalMinor, 0)
-    );
-  });
-
-  return Array.from({ length: 31 }, (_, index) => {
-    const day = index + 1;
-
-    return {
-      label: String(day),
-      valueMinor: totalsByDay.get(day) ?? 0
-    };
-  });
-}
-
-function formatDashboardPeriodValue(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-
-  return `${year}-${month}`;
-}
-
-function formatDashboardPeriodLabel(value: string): string {
-  const [year, month] = value.split("-").map(Number);
-
-  if (!year || !month) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("es-CO", {
-    month: "long",
-    year: "numeric"
-  }).format(new Date(year, month - 1, 1));
-}
-
-function parseDashboardPeriodValue(value: string): Date {
-  const [year, month] = value.split("-").map(Number);
-
-  if (!year || !month) {
-    return new Date();
-  }
-
-  return new Date(year, month - 1, 1);
-}
-
-function shiftMonth(date: Date, offset: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + offset, 1);
-}
-
-function buildDashboardPeriodOptions(
-  sales: SaleRecord[],
-  creditNotes: CreditNoteRecord[],
-  referenceDate = new Date()
-): DashboardPeriodOption[] {
-  const periodValues = new Set<string>([
-    formatDashboardPeriodValue(referenceDate),
-    formatDashboardPeriodValue(shiftMonth(referenceDate, -1))
-  ]);
-
-  sales.forEach((sale) => {
-    periodValues.add(formatDashboardPeriodValue(getSaleDashboardDate(sale)));
-  });
-  creditNotes.forEach((creditNote) => {
-    periodValues.add(formatDashboardPeriodValue(getCreditNoteDashboardDate(creditNote)));
-  });
-
-  return [...periodValues]
-    .sort((left, right) => right.localeCompare(left))
-    .map((value) => ({
-      label: formatDashboardPeriodLabel(value),
-      value
-    }));
 }
 
 function buildDashboardMonthlySalesRows(
@@ -490,193 +289,6 @@ function buildDashboardCustomerRows(
     }))
     .sort((left, right) => right.valueMinor - left.valueMinor)
     .slice(0, 5);
-}
-
-function DashboardAreaChart({
-  formatCurrency,
-  periodOneLabel,
-  periodTwoLabel,
-  series
-}: {
-  formatCurrency: (minor: number) => string;
-  periodOneLabel: string;
-  periodTwoLabel: string;
-  series: DashboardTrendSeries[];
-}) {
-  const maxValue = Math.max(
-    ...series.flatMap((trendSeries) =>
-      trendSeries.rows.map((row) => row.valueMinor)
-    ),
-    0
-  );
-  const width = 760;
-  const height = 260;
-  const padding = {
-    bottom: 42,
-    left: 84,
-    right: 24,
-    top: 24
-  };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  const yAxisTicks = [maxValue, Math.round(maxValue / 2), 0];
-  const xAxisTicks = [
-    { label: "Dia 1", index: 0 },
-    { label: "Dia 16", index: 15 },
-    { label: "Dia 31", index: 30 }
-  ];
-  const chartSeries = series.map((trendSeries) => {
-    const points = trendSeries.rows.map((row, index) => {
-      const x =
-        trendSeries.rows.length === 1
-          ? padding.left + chartWidth / 2
-          : padding.left + (index / (trendSeries.rows.length - 1)) * chartWidth;
-      const y =
-        maxValue === 0
-          ? padding.top + chartHeight
-          : padding.top + chartHeight - (row.valueMinor / maxValue) * chartHeight;
-
-      return { ...row, x, y };
-    });
-    const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
-    const areaPoints =
-      points.length > 0
-        ? `${padding.left},${height - padding.bottom} ${linePoints} ${width - padding.right},${height - padding.bottom}`
-        : "";
-
-    return {
-      ...trendSeries,
-      areaPoints,
-      linePoints,
-      points
-    };
-  });
-
-  if (maxValue === 0) {
-    return (
-      <EmptyState
-        body="Las ventas diarias apareceran cuando registres movimientos."
-        className="dashboard-empty-state"
-        title="Sin ventas registradas"
-      />
-    );
-  }
-
-  return (
-    <div className="dashboard-line-chart" aria-label="Grafico ventas diarias">
-      <div className="dashboard-series-legend">
-        {series.map((trendSeries, index) => (
-          <div className={`dashboard-series-label dashboard-series-label-${trendSeries.color}`} key={trendSeries.label}>
-            <div>
-              <span>{trendSeries.label}</span>
-              <small>{index === 0 ? periodOneLabel : periodTwoLabel}</small>
-            </div>
-            <strong>{formatCurrency(trendSeries.rows.reduce((total, row) => total + row.valueMinor, 0))}</strong>
-          </div>
-        ))}
-      </div>
-      <svg role="img" viewBox={`0 0 ${width} ${height}`}>
-        <title>Ventas diarias</title>
-        <line
-          className="dashboard-chart-axis"
-          x1={padding.left}
-          x2={width - padding.right}
-          y1={height - padding.bottom}
-          y2={height - padding.bottom}
-        />
-        <line
-          className="dashboard-chart-axis"
-          x1={padding.left}
-          x2={padding.left}
-          y1={padding.top}
-          y2={height - padding.bottom}
-        />
-        {yAxisTicks.map((tick) => {
-          const y =
-            maxValue === 0
-              ? height - padding.bottom
-              : padding.top + chartHeight - (tick / maxValue) * chartHeight;
-
-          return (
-            <g key={`y-${tick}`}>
-              <line
-                className="dashboard-chart-gridline"
-                x1={padding.left}
-                x2={width - padding.right}
-                y1={y}
-                y2={y}
-              />
-              <text
-                className="dashboard-axis-tick"
-                textAnchor="end"
-                x={padding.left - 10}
-                y={y + 4}
-              >
-                {formatCurrency(tick)}
-              </text>
-            </g>
-          );
-        })}
-        {xAxisTicks.map((tick) => {
-          const x = padding.left + (tick.index / 30) * chartWidth;
-
-          return (
-            <text
-              className="dashboard-axis-tick"
-              key={`x-${tick.label}`}
-              textAnchor="middle"
-              x={x}
-              y={height - 14}
-            >
-              {tick.label}
-            </text>
-          );
-        })}
-        <text
-          className="dashboard-axis-label"
-          textAnchor="middle"
-          transform={`translate(16 ${padding.top + chartHeight / 2}) rotate(-90)`}
-        >
-          Ventas
-        </text>
-        <text
-          className="dashboard-axis-label"
-          textAnchor="middle"
-          x={padding.left + chartWidth / 2}
-          y={height - 2}
-        >
-          Dias
-        </text>
-        {chartSeries.map((trendSeries) => (
-          <g key={`area-${trendSeries.label}`}>
-            <polygon
-              className={`dashboard-area-fill dashboard-area-fill-${trendSeries.color}`}
-              points={trendSeries.areaPoints}
-            />
-          </g>
-        ))}
-        {chartSeries.map((trendSeries) => (
-          <g key={`line-${trendSeries.label}`}>
-            <polyline
-              className={`dashboard-line-stroke dashboard-line-stroke-${trendSeries.color}`}
-              points={trendSeries.linePoints}
-            />
-            {trendSeries.points
-              .filter((point) => point.valueMinor > 0)
-              .map((point) => (
-                <circle
-                  className={`dashboard-line-point dashboard-line-point-${trendSeries.color}`}
-                  cx={point.x}
-                  cy={point.y}
-                  key={`${trendSeries.label}-${point.label}`}
-                  r="4"
-                />
-              ))}
-          </g>
-        ))}
-      </svg>
-    </div>
-  );
 }
 
 function DashboardBarChart({ rows, formatCurrency }: {

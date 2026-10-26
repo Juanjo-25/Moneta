@@ -203,7 +203,7 @@ describe("App navigation", () => {
     expect(screen.getByRole("heading", { name: "Ventas" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
-    await user.click(screen.getByRole("button", { name: "Ver todo" }));
+    await user.click(screen.getByRole("button", { name: "Ver reportes" }));
     expect(screen.getByRole("heading", { name: "Reportes" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
@@ -1666,12 +1666,12 @@ describe("App navigation", () => {
     const dailySalesChart = screen.getByLabelText("Grafico ventas diarias");
     expect(screen.getByLabelText("Periodo 1 ventas diarias")).toBeTruthy();
     expect(screen.getByLabelText("Periodo 2 ventas diarias")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Periodo 1")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Periodo 2")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Dia 1")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Dia 31")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Ventas")).toBeTruthy();
-    expect(within(dailySalesChart).getByText("Dias")).toBeTruthy();
+    expect(screen.getByText("Periodo 1")).toBeTruthy();
+    expect(screen.getByText("Periodo 2")).toBeTruthy();
+    expect(screen.getByLabelText("Periodo 3 ventas diarias")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Día 1")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Día 31")).toBeTruthy();
+    expect(within(dailySalesChart).getByText("Días del mes")).toBeTruthy();
     expect(within(within(dailySalesChart).getByRole("img", { name: "Ventas diarias" })).getByText(/\$\s*0/)).toBeTruthy();
     const productPieChart = screen.getByLabelText("Grafico productos mas vendidos");
     expect(within(productPieChart).getByRole("img", { name: "Torta productos mas vendidos" })).toBeTruthy();
@@ -1712,7 +1712,7 @@ describe("App navigation", () => {
 
     expect(screen.getByText("Ventas de hoy").nextElementSibling?.textContent).toMatch(/\$\s*0/);
     expect(screen.getByText("Ventas del mes").nextElementSibling?.textContent).toMatch(/\$\s*0/);
-    expect((screen.getByLabelText("Periodo 2 ventas diarias") as HTMLSelectElement).value).toBe(
+    expect((screen.getByLabelText("Periodo 2 ventas diarias") as HTMLInputElement).value).toBe(
       "2026-08"
     );
     expect(screen.getAllByText(/\$\s*9\.000/).length).toBeGreaterThan(0);
