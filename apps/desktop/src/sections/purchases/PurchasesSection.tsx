@@ -1,7 +1,9 @@
-import { Fragment, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { parseLocalDate } from "../../lib/dates";
 import type { InvoicePdfResult } from "../../invoice-pdf";
+import { DocumentSearchToolbar } from "../../components/DocumentSearchToolbar";
+import { createSearchMatcher } from "../../lib/search";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -235,6 +237,28 @@ export function PurchasesSection({
   const [printPurchase, setPrintPurchase] = useState<PurchaseRecord | null>(null);
   const [invoicePreview, setInvoicePreview] = useState<InvoicePdfResult | null>(null);
   const [invoiceError, setInvoiceError] = useState<string | null>(null);
+
+  const [purchaseSearch, setPurchaseSearch] = useState("");
+  const filteredPurchases = useMemo(() => {
+    const matches = createSearchMatcher(purchaseSearch);
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const supplierById = new Map(suppliers.map((supplier) => [supplier.id, supplier]));
+    return purchases.filter((purchase) => matches([
+      purchase.invoiceNumber,
+      `${purchase.prefix}${purchase.invoiceNumber}`,
+      `${purchase.prefix}-${purchase.invoiceNumber}`,
+      purchase.supplierName,
+      supplierById.get(purchase.supplierId)?.document,
+      purchase.issuedAt,
+      purchase.occurredAtLabel,
+      purchase.branch,
+      formatExpenseCategory(purchase.expenseCategory),
+      purchase.paymentStatus === "paid" ? "Pagada" : "Pendiente",
+      purchase.productName,
+      productById.get(purchase.productId)?.sku,
+      ...purchase.lines.flatMap((line) => [line.productName, productById.get(line.productId)?.sku])
+    ]));
+  }, [purchaseSearch, purchases, products, suppliers]);
 
   const selectedSupplier =
     suppliers.find((supplier) => supplier.id === form.supplierId) ?? null;
@@ -1093,7 +1117,14 @@ export function PurchasesSection({
         </section>
       ) : null}
 
-      {purchases.length > 0 ? (
+      <DocumentSearchToolbar
+        kind="purchases"
+        value={purchaseSearch}
+        resultCount={filteredPurchases.length}
+        totalCount={purchases.length}
+        onChange={(value) => { setPurchaseSearch(value); setDetailPurchaseId(null); }}
+      />
+      {filteredPurchases.length > 0 ? (
         <DataTable ariaLabel="Compras registradas">
           <DataTableHeader
             labels={[
@@ -1109,7 +1140,7 @@ export function PurchasesSection({
             ]}
           />
           <tbody>
-            {purchases.map((purchase) => (
+            {filteredPurchases.map((purchase) => (
               <Fragment key={purchase.id}>
                 <tr>
                   <td>{purchase.occurredAtLabel}</td>
@@ -1165,9 +1196,11 @@ export function PurchasesSection({
         </DataTable>
       ) : (
         <EmptyState
-          body="Las compras confirmadas aumentaran el inventario."
+          body={purchases.length === 0
+            ? "Las compras confirmadas aumentaran el inventario."
+            : "Prueba con otra factura, proveedor o producto, o limpia la búsqueda."}
           className="section-empty"
-          title="Sin compras registradas"
+          title={purchases.length === 0 ? "Sin compras registradas" : "No se encontraron compras"}
         />
       )}
       {invoicePreview && <section className="invoice-preview" aria-label="Factura de compra PDF generada">

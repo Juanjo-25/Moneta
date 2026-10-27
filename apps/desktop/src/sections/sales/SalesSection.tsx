@@ -1,11 +1,14 @@
 import {
   Fragment,
   useEffect,
+  useMemo,
   useState,
   type Dispatch,
   type FormEvent,
   type SetStateAction
 } from "react";
+import { DocumentSearchToolbar } from "../../components/DocumentSearchToolbar";
+import { createSearchMatcher } from "../../lib/search";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
 import { EmptyState } from "../../components/EmptyState";
@@ -262,6 +265,27 @@ export function SalesSection({
   const [editError, setEditError] = useState<string | null>(null);
   const [openSaleActionsId, setOpenSaleActionsId] = useState<string | null>(null);
   const [detailSaleId, setDetailSaleId] = useState<string | null>(null);
+
+  const [saleSearch, setSaleSearch] = useState("");
+  const filteredSales = useMemo(() => {
+    const matches = createSearchMatcher(saleSearch);
+    const productById = new Map(products.map((product) => [product.id, product]));
+    return sales.filter((sale) => matches([
+      sale.invoiceNumber,
+      `${sale.prefix}${sale.invoiceNumber}`,
+      `${sale.prefix}-${sale.invoiceNumber}`,
+      sale.customerName,
+      sale.customer.document,
+      sale.seller,
+      sale.issuedAt,
+      sale.occurredAtLabel,
+      sale.branch,
+      sale.paymentStatus === "paid" ? "Pagada" : "Pendiente",
+      sale.productName,
+      productById.get(sale.productId)?.sku,
+      ...sale.lines.flatMap((line) => [line.productName, productById.get(line.productId)?.sku])
+    ]));
+  }, [saleSearch, sales, products]);
 
   const activeCustomers = customers.filter((customer) => customer.active);
   const selectedCustomer =
@@ -1421,7 +1445,18 @@ export function SalesSection({
         </section>
       ) : null}
 
-      {sales.length > 0 ? (
+      <DocumentSearchToolbar
+        kind="sales"
+        value={saleSearch}
+        resultCount={filteredSales.length}
+        totalCount={sales.length}
+        onChange={(value) => {
+          setSaleSearch(value);
+          setDetailSaleId(null);
+          setOpenSaleActionsId(null);
+        }}
+      />
+      {filteredSales.length > 0 ? (
         <>
           <DataTable ariaLabel="Ventas registradas">
             <DataTableHeader
@@ -1438,7 +1473,7 @@ export function SalesSection({
               ]}
             />
             <tbody>
-              {sales.map((sale) => (
+              {filteredSales.map((sale) => (
                 <Fragment key={sale.id}>
                   <tr>
                     <td>{sale.issuedAt}</td>
@@ -1531,29 +1566,31 @@ export function SalesSection({
               ))}
             </tbody>
           </DataTable>
-          {invoicePreview ? (
-            <section className="invoice-preview" aria-label="Factura PDF generada">
-              <div className="invoice-preview-header">
-                <strong>Factura generada</strong>
-                <a download={invoicePreview.fileName} href={invoicePreview.dataUri}>
-                  Descargar PDF
-                </a>
-              </div>
-              <iframe
-                src={invoicePreview.dataUri}
-                title="Vista previa de factura PDF"
-              />
-            </section>
-          ) : null}
-          {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
         </>
       ) : (
         <EmptyState
-          body="Registra ventas para actualizar inventario y cartera."
+          body={sales.length === 0
+            ? "Registra ventas para actualizar inventario y cartera."
+            : "Prueba con otra factura, cliente, vendedor o producto, o limpia la búsqueda."}
           className="section-empty"
-          title="Sin ventas registradas"
+          title={sales.length === 0 ? "Sin ventas registradas" : "No se encontraron ventas"}
         />
       )}
+      {invoicePreview ? (
+        <section className="invoice-preview" aria-label="Factura PDF generada">
+          <div className="invoice-preview-header">
+            <strong>Factura generada</strong>
+            <a download={invoicePreview.fileName} href={invoicePreview.dataUri}>
+              Descargar PDF
+            </a>
+          </div>
+          <iframe
+            src={invoicePreview.dataUri}
+            title="Vista previa de factura PDF"
+          />
+        </section>
+      ) : null}
+      {invoiceError ? <p className="form-error">{invoiceError}</p> : null}
     </section>
   );
 }

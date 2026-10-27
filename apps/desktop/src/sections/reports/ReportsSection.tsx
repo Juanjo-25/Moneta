@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { CompactSummaryGrid } from "../../components/CompactSummaryGrid";
 import { DataTable } from "../../components/DataTable";
 import { DataTableHeader } from "../../components/DataTableHeader";
@@ -8,7 +8,15 @@ import { ReportPrimaryInsightPanel } from "../../components/ReportPrimaryInsight
 import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SubmenuSwitch } from "../../components/SubmenuSwitch";
-import { parseLocalDate } from "../../lib/dates";
+import { parseLocalDate, startOfLocalDay } from "../../lib/dates";
+import { ReportPeriodToolbar } from "./ReportPeriodToolbar";
+import {
+  isInReportMonth,
+  reportDocumentTime,
+  reportMonthLabel,
+  reportPeriod,
+  type ReportGrouping
+} from "./report-period";
 import {
   buildExcelWorkbookDownload,
   buildExcelWorkbookXml,
@@ -209,14 +217,6 @@ function formatDays(value: number): string {
   return `${value.toFixed(1)} dias`;
 }
 
-function formatDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
 function formatDateLabel(date: Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     day: "2-digit",
@@ -267,8 +267,8 @@ function buildMarginSummary(
       sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
     0
   );
-  const netRevenueMinor = Math.max(revenueMinor - creditedRevenueMinor, 0);
-  const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
+  const netRevenueMinor = revenueMinor - creditedRevenueMinor;
+  const netCostMinor = costMinor - creditedCostMinor;
   const marginMinor = netRevenueMinor - netCostMinor;
 
   return {
@@ -323,9 +323,9 @@ function buildProductMarginRows(
         revenueMinor: 0
       };
 
-      currentRow.quantity = Math.max(currentRow.quantity - line.quantity, 0);
-      currentRow.revenueMinor = Math.max(currentRow.revenueMinor - line.totalMinor, 0);
-      currentRow.costMinor = Math.max(currentRow.costMinor - line.costMinor, 0);
+      currentRow.quantity -= line.quantity;
+      currentRow.revenueMinor -= line.totalMinor;
+      currentRow.costMinor -= line.costMinor;
       currentRow.marginMinor = currentRow.revenueMinor - currentRow.costMinor;
       currentRow.marginPercent =
         currentRow.revenueMinor > 0
@@ -337,7 +337,7 @@ function buildProductMarginRows(
   });
 
   return [...productMap.values()]
-    .filter((row) => row.revenueMinor > 0 || row.quantity > 0)
+    .filter((row) => row.revenueMinor !== 0 || row.quantity !== 0)
     .sort((left, right) => right.marginMinor - left.marginMinor);
 }
 
@@ -387,8 +387,8 @@ function buildCustomerMarginRows(
       revenueMinor: 0
     };
 
-    currentRow.revenueMinor = Math.max(currentRow.revenueMinor - creditNote.totalMinor, 0);
-    currentRow.costMinor = Math.max(currentRow.costMinor - creditedCostMinor, 0);
+    currentRow.revenueMinor -= creditNote.totalMinor;
+    currentRow.costMinor -= creditedCostMinor;
     currentRow.marginMinor = currentRow.revenueMinor - currentRow.costMinor;
     currentRow.marginPercent =
       currentRow.revenueMinor > 0
@@ -399,20 +399,27 @@ function buildCustomerMarginRows(
   });
 
   return [...customerMap.values()]
-    .filter((row) => row.revenueMinor > 0 || row.purchaseCount > 0)
+    .filter((row) => row.revenueMinor !== 0 || row.purchaseCount > 0)
     .sort((left, right) => right.marginMinor - left.marginMinor);
 }
 
 function buildSaleMarginRows(
   sales: SaleRecord[],
-  creditNotes: CreditNoteRecord[]
+  creditNotes: CreditNoteRecord[],
+  allSales: SaleRecord[]
 ): SaleMarginRow[] {
-  return sales
+  const periodSaleIds = new Set(sales.map((sale) => sale.id));
+  const creditedSaleIds = new Set(creditNotes.map((note) => note.saleId));
+  const relatedSales = allSales.filter((sale) =>
+    periodSaleIds.has(sale.id) || creditedSaleIds.has(sale.id)
+  );
+  return relatedSales
     .map((sale) => {
       const saleCreditNotes = creditNotes.filter(
         (creditNote) => creditNote.saleId === sale.id
       );
-      const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
+      const included = periodSaleIds.has(sale.id);
+      const costMinor = included ? sale.lines.reduce((sum, line) => sum + line.costMinor, 0) : 0;
       const creditedRevenueMinor = saleCreditNotes.reduce(
         (sum, creditNote) => sum + creditNote.totalMinor,
         0
@@ -422,8 +429,8 @@ function buildSaleMarginRows(
           sum + creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
         0
       );
-      const netRevenueMinor = Math.max(sale.totalMinor - creditedRevenueMinor, 0);
-      const netCostMinor = Math.max(costMinor - creditedCostMinor, 0);
+      const netRevenueMinor = (included ? sale.totalMinor : 0) - creditedRevenueMinor;
+      const netCostMinor = costMinor - creditedCostMinor;
       const netMarginMinor = netRevenueMinor - netCostMinor;
 
       return {
@@ -432,7 +439,9 @@ function buildSaleMarginRows(
         marginMinor: netMarginMinor,
         marginPercent:
           netRevenueMinor > 0 ? (netMarginMinor / netRevenueMinor) * 100 : 0,
-        occurredAtLabel: sale.occurredAtLabel,
+        occurredAtLabel: included
+          ? sale.occurredAtLabel
+          : `${formatDateLabel(new Date(saleCreditNotes[0]!.occurredAtMs))} · Nota crédito`,
         paymentStatus: sale.paymentStatus,
         revenueMinor: netRevenueMinor,
         saleId: sale.id
@@ -443,9 +452,10 @@ function buildSaleMarginRows(
 
 function buildSellerMarginRows(
   sales: SaleRecord[],
-  creditNotes: CreditNoteRecord[]
+  creditNotes: CreditNoteRecord[],
+  allSales: SaleRecord[]
 ): SellerMarginRow[] {
-  const salesById = new Map(sales.map((sale) => [sale.id, sale]));
+  const salesById = new Map(allSales.map((sale) => [sale.id, sale]));
   const sellerMap = new Map<string, SellerMarginRow>();
 
   sales.forEach((sale) => {
@@ -471,21 +481,17 @@ function buildSellerMarginRows(
   creditNotes.forEach((creditNote) => {
     const sale = salesById.get(creditNote.saleId);
     const sellerName = sale?.seller.trim() || "Sin asignar";
-    const currentRow = sellerMap.get(sellerName);
-
-    if (!currentRow) {
-      return;
-    }
-
-    currentRow.revenueMinor = Math.max(
-      currentRow.revenueMinor - creditNote.totalMinor,
-      0
-    );
-    currentRow.costMinor = Math.max(
-      currentRow.costMinor -
-        creditNote.lines.reduce((lineSum, line) => lineSum + line.costMinor, 0),
-      0
-    );
+    const currentRow = sellerMap.get(sellerName) ?? {
+      costMinor: 0,
+      marginMinor: 0,
+      marginPercent: 0,
+      revenueMinor: 0,
+      saleCount: 0,
+      sellerName
+    };
+    currentRow.revenueMinor -= creditNote.totalMinor;
+    currentRow.costMinor -= creditNote.lines.reduce((sum, line) => sum + line.costMinor, 0);
+    sellerMap.set(sellerName, currentRow);
   });
 
   return [...sellerMap.values()]
@@ -507,7 +513,7 @@ function buildDsoClientRows(input: {
   sales: SaleRecord[];
   todayMs?: number;
 }): DsoClientRow[] {
-  const todayMs = input.todayMs ?? Date.now();
+  const todayMs = startOfLocalDay(new Date(input.todayMs ?? Date.now())).getTime();
   const saleById = new Map(input.sales.map((sale) => [sale.id, sale]));
   const customerMap = new Map<
     string,
@@ -764,14 +770,15 @@ function buildCashflowSummary(entries: CashflowEntry[]): CashflowSummary {
   );
 }
 
-function buildCashflowPeriodRows(entries: CashflowEntry[]): CashflowPeriodRow[] {
+function buildCashflowPeriodRows(entries: CashflowEntry[], grouping: ReportGrouping): CashflowPeriodRow[] {
   const periodMap = new Map<string, CashflowPeriodRow>();
 
   entries.forEach((entry) => {
-    const key = `${entry.dateSortMs}-${entry.dateLabel}`;
+    const period = reportPeriod(entry.dateSortMs, grouping);
+    const key = period.key;
     const currentRow = periodMap.get(key) ?? {
-      dateLabel: entry.dateLabel,
-      dateSortMs: entry.dateSortMs,
+      dateLabel: period.label,
+      dateSortMs: period.timestamp,
       projectedInflowMinor: 0,
       projectedNetMinor: 0,
       projectedOutflowMinor: 0,
@@ -798,24 +805,21 @@ function buildCashflowPeriodRows(entries: CashflowEntry[]): CashflowPeriodRow[] 
 
 function buildUtilityPeriodRows(
   sales: SaleRecord[],
-  creditNotes: CreditNoteRecord[]
+  creditNotes: CreditNoteRecord[],
+  grouping: ReportGrouping
 ): UtilityPeriodRow[] {
   const periodMap = new Map<string, UtilityPeriodRow>();
 
   sales.forEach((sale) => {
-    const occurredAt = new Date(sale.occurredAtMs);
-    const dateKey = formatDateKey(occurredAt);
-    const dateSortMs = new Date(
-      occurredAt.getFullYear(),
-      occurredAt.getMonth(),
-      occurredAt.getDate()
-    ).getTime();
+    const period = reportPeriod(sale.occurredAtMs, grouping);
+    const dateKey = period.key;
+    const dateSortMs = period.timestamp;
     const costMinor = sale.lines.reduce((sum, line) => sum + line.costMinor, 0);
     const marginMinor = sale.lines.reduce((sum, line) => sum + line.marginMinor, 0);
     const currentRow = periodMap.get(dateKey) ?? {
       costMinor: 0,
       dateKey,
-      dateLabel: formatDateLabel(occurredAt),
+      dateLabel: period.label,
       dateSortMs,
       marginMinor: 0,
       marginPercent: 0,
@@ -836,18 +840,14 @@ function buildUtilityPeriodRows(
   });
 
   creditNotes.forEach((creditNote) => {
-    const occurredAt = new Date(creditNote.occurredAtMs);
-    const dateKey = formatDateKey(occurredAt);
-    const dateSortMs = new Date(
-      occurredAt.getFullYear(),
-      occurredAt.getMonth(),
-      occurredAt.getDate()
-    ).getTime();
+    const period = reportPeriod(creditNote.occurredAtMs, grouping);
+    const dateKey = period.key;
+    const dateSortMs = period.timestamp;
     const costMinor = creditNote.lines.reduce((sum, line) => sum + line.costMinor, 0);
     const currentRow = periodMap.get(dateKey) ?? {
       costMinor: 0,
       dateKey,
-      dateLabel: formatDateLabel(occurredAt),
+      dateLabel: period.label,
       dateSortMs,
       marginMinor: 0,
       marginPercent: 0,
@@ -855,8 +855,8 @@ function buildUtilityPeriodRows(
       salesCount: 0
     };
 
-    currentRow.revenueMinor = Math.max(currentRow.revenueMinor - creditNote.totalMinor, 0);
-    currentRow.costMinor = Math.max(currentRow.costMinor - costMinor, 0);
+    currentRow.revenueMinor -= creditNote.totalMinor;
+    currentRow.costMinor -= costMinor;
     currentRow.marginMinor = currentRow.revenueMinor - currentRow.costMinor;
     currentRow.marginPercent =
       currentRow.revenueMinor > 0
@@ -1014,12 +1014,12 @@ type ReportsSectionProps = {
 };
 
 export function ReportsSection({
-  creditNotes,
+  creditNotes: allCreditNotes,
   customerReceipts,
   formatCurrency,
-  purchases,
+  purchases: allPurchases,
   receivables,
-  sales,
+  sales: allSales,
   supplierPayables,
   supplierPayments
 }: ReportsSectionProps) {
@@ -1032,31 +1032,44 @@ export function ReportsSection({
   const [exportStatus, setExportStatus] = useState<ReportExportStatus>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
+  const exportVersion = useRef(0);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [grouping, setGrouping] = useState<ReportGrouping>("day");
+  const datedSales = allSales.map((sale) => ({
+    ...sale,
+    occurredAtMs: reportDocumentTime(sale),
+    occurredAtLabel: formatDateLabel(new Date(reportDocumentTime(sale)))
+  }));
+  const datedCreditNotes = allCreditNotes.map((note) => ({ ...note, occurredAtMs: reportDocumentTime(note) }));
+  const purchases = allPurchases.map((purchase) => ({ ...purchase, occurredAtMs: reportDocumentTime(purchase) }));
+  const sales = datedSales.filter((sale) => isInReportMonth(sale.occurredAtMs, selectedMonth));
+  const creditNotes = datedCreditNotes.filter((note) => isInReportMonth(note.occurredAtMs, selectedMonth));
+
   const summary = buildMarginSummary(sales, creditNotes);
   const productRows = buildProductMarginRows(sales, creditNotes);
   const customerRows = buildCustomerMarginRows(sales, creditNotes);
-  const sellerRows = buildSellerMarginRows(sales, creditNotes);
-  const saleRows = buildSaleMarginRows(sales, creditNotes);
-  const productMaxMargin = productRows[0]?.marginMinor ?? 0;
-  const customerMaxMargin = customerRows[0]?.marginMinor ?? 0;
-  const sellerMaxRevenue = sellerRows[0]?.revenueMinor ?? 0;
-  const saleMaxMargin = saleRows[0]?.marginMinor ?? 0;
+  const sellerRows = buildSellerMarginRows(sales, creditNotes, datedSales);
+  const saleRows = buildSaleMarginRows(sales, creditNotes, datedSales);
+  const productMaxMargin = Math.max(1, ...productRows.map((row) => Math.abs(row.marginMinor)));
+  const customerMaxMargin = Math.max(1, ...customerRows.map((row) => Math.abs(row.marginMinor)));
+  const sellerMaxRevenue = Math.max(1, ...sellerRows.map((row) => Math.abs(row.revenueMinor)));
+  const saleMaxMargin = Math.max(1, ...saleRows.map((row) => Math.abs(row.marginMinor)));
   const selectedSale = selectedSaleId
-    ? sales.find((sale) => sale.id === selectedSaleId) ?? null
+    ? datedSales.find((sale) => sale.id === selectedSaleId) ?? null
     : null;
   const dsoSummary = buildDsoSummary({ receivables, sales });
   const dsoClientRows = buildDsoClientRows({ receivables, sales });
   const cashflowEntries = buildCashflowEntries({
-    creditNotes,
+    creditNotes: datedCreditNotes,
     customerReceipts,
     purchases,
     receivables,
-    sales,
+    sales: datedSales,
     supplierPayables,
     supplierPayments
-  });
+  }).filter((entry) => isInReportMonth(entry.dateSortMs, selectedMonth));
   const cashflowSummary = buildCashflowSummary(cashflowEntries);
-  const cashflowPeriodRows = buildCashflowPeriodRows(cashflowEntries);
+  const cashflowPeriodRows = buildCashflowPeriodRows(cashflowEntries, grouping);
   const cashflowMaxNet = Math.max(
     1,
     ...cashflowPeriodRows.flatMap((row) => [
@@ -1068,11 +1081,11 @@ export function ReportsSection({
     purchases,
     supplierPayables,
     supplierPayments
-  });
+  }).filter((entry) => isInReportMonth(entry.dateSortMs, selectedMonth));
   const expenseSummary = buildExpenseSummary(expenseEntries);
   const expenseOriginRows = buildExpenseOriginRows(expenseEntries);
   const expenseMaxAmount = Math.max(1, ...expenseOriginRows.map((row) => row.amountMinor));
-  const utilityPeriodRows = buildUtilityPeriodRows(sales, creditNotes);
+  const utilityPeriodRows = buildUtilityPeriodRows(sales, creditNotes, grouping);
   const utilitySummary = buildUtilitySummary(utilityPeriodRows);
   const utilityMaxMargin = Math.max(1, ...utilityPeriodRows.map((row) => Math.abs(row.marginMinor)));
   const netMarginMinor = summary.marginMinor;
@@ -1097,20 +1110,42 @@ export function ReportsSection({
     { id: "sales", label: "Ventas" }
   ];
 
-  function selectReportTab(tab: ReportTab) {
-    setActiveReportTab(tab);
-    setDetailView(null);
+  const periodDescription = activeReportTab === "dso"
+    ? "Saldo pendiente actual de las facturas emitidas en el período. No es un cierre histórico de cartera."
+    : activeReportTab === "cashflow" || activeReportTab === "expenses"
+      ? "Movimientos por fecha de cobro o pago; proyecciones por fecha de vencimiento."
+      : "Ventas y notas crédito por fecha de emisión, con sus costos y márgenes.";
+
+  function resetExport() {
+    exportVersion.current += 1;
     setExportStatus(null);
     setPreparedDownload(null);
+  }
+
+  function resetReportContext() {
+    setDetailView(null);
     setSelectedSaleId(null);
+    resetExport();
+  }
+
+  function selectMonth(month: string) {
+    setSelectedMonth(month);
+    resetReportContext();
+  }
+
+  function selectGrouping(value: ReportGrouping) {
+    setGrouping(value);
+    resetExport();
+  }
+
+  function selectReportTab(tab: ReportTab) {
+    setActiveReportTab(tab);
+    resetReportContext();
   }
 
   function selectProfitabilityTab(tab: ProfitabilityTab) {
     setActiveProfitabilityTab(tab);
-    setDetailView(null);
-    setExportStatus(null);
-    setPreparedDownload(null);
-    setSelectedSaleId(null);
+    resetReportContext();
   }
 
   function buildReportExport(): ReportExportConfig {
@@ -1379,7 +1414,23 @@ export function ReportsSection({
   }
 
   async function exportActiveReport() {
-    const reportExport = buildReportExport();
+    const version = ++exportVersion.current;
+    const activeExport = buildReportExport();
+    const reportExport: ReportExportConfig = {
+      fileName: selectedMonth
+        ? activeExport.fileName.replace(".xls", `-${selectedMonth}.xls`)
+        : activeExport.fileName,
+      worksheets: [
+        buildSummaryWorksheet("Período del reporte", [
+          { label: "Período", value: reportMonthLabel(selectedMonth) },
+          { label: "Criterio", value: periodDescription },
+          ...(activeReportTab === "cashflow" || activeReportTab === "variance"
+            ? [{ label: "Agrupación", value: grouping === "day" ? "Día" : "Mes" }]
+            : [])
+        ]),
+        ...activeExport.worksheets
+      ]
+    };
     const workbookXml = buildExcelWorkbookXml(reportExport);
     const fallbackDownload = buildExcelWorkbookDownload(reportExport);
 
@@ -1388,6 +1439,8 @@ export function ReportsSection({
         contents: workbookXml,
         fileName: fallbackDownload.fileName
       });
+
+      if (version !== exportVersion.current) return;
 
       if (nativeExport) {
         setPreparedDownload(null);
@@ -1404,6 +1457,7 @@ export function ReportsSection({
         message: "Archivo listo para descargar."
       });
     } catch {
+      if (version !== exportVersion.current) return;
       setPreparedDownload(fallbackDownload);
       setExportStatus({
         kind: "error",
@@ -1428,7 +1482,7 @@ export function ReportsSection({
           </a>
         ) : null}
         {exportStatus ? (
-          <span className={`reports-export-status reports-export-status-${exportStatus.kind}`}>
+          <span role="status" className={`reports-export-status reports-export-status-${exportStatus.kind}`}>
             {exportStatus.message}
           </span>
         ) : null}
@@ -1453,7 +1507,6 @@ export function ReportsSection({
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
-        {renderExportAction()}
         {withSummary ? <ReportSummaryShell>{renderProfitabilitySummary()}</ReportSummaryShell> : null}
         {content}
       </section>
@@ -1471,6 +1524,16 @@ export function ReportsSection({
   function renderReportTabs() {
     return (
       <section className="reports-nav-group" aria-label="Navegacion de reportes">
+        <ReportPeriodToolbar
+          month={selectedMonth}
+          grouping={grouping}
+          description={periodDescription}
+          onMonthChange={selectMonth}
+          onGroupingChange={selectGrouping}
+          showGrouping={activeReportTab === "cashflow" || activeReportTab === "variance"}
+        >
+          {renderExportAction()}
+        </ReportPeriodToolbar>
         <SubmenuSwitch
           ariaLabel="Tipos de reportes"
           items={reportTabs.map((tab) => ({ label: tab.label, value: tab.id }))}
@@ -1508,7 +1571,6 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen DSO" items={summaryItems} />
         </ReportSummaryShell>
@@ -1572,7 +1634,6 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen flujo de caja" items={summaryItems} />
         </ReportSummaryShell>
@@ -1671,7 +1732,6 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen egresos" items={summaryItems} />
         </ReportSummaryShell>
@@ -1770,7 +1830,6 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderExportAction()}
         <ReportSummaryShell>
           <CompactSummaryGrid ariaLabel="Resumen utilidades" items={summaryItems} />
         </ReportSummaryShell>
@@ -1785,7 +1844,7 @@ export function ReportsSection({
           <>
             <ReportPrimaryInsightPanel
               title="Utilidades"
-              description="Utilidad total por dia con ventas, costo y margen consolidado."
+              description={`Utilidad total por ${grouping === "day" ? "día" : "mes"}, con ventas, costo y margen consolidado.`}
             >
                 <div className="report-chart report-chart-detail" aria-label="Grafico utilidades por periodo">
                 {utilityPeriodRows.map((row) => (
@@ -1793,7 +1852,7 @@ export function ReportsSection({
                     <span>{row.dateLabel}</span>
                     <div className="report-bar-track">
                       <div
-                        className="report-bar-fill"
+                        className={`report-bar-fill ${row.marginMinor < 0 ? "report-bar-fill-negative" : ""}`}
                         style={{ width: `${(Math.abs(row.marginMinor) / utilityMaxMargin) * 100}%` }}
                       />
                     </div>
@@ -1841,7 +1900,6 @@ export function ReportsSection({
     return (
       <section className="reports-layout">
         {renderReportTabs()}
-        {renderExportAction()}
         <EmptyState
           body="Este reporte aparecera aqui cuando terminemos su implementacion."
           className="report-placeholder-panel"
@@ -1852,16 +1910,15 @@ export function ReportsSection({
     );
   }
 
-  if (sales.length === 0) {
+  if (sales.length === 0 && creditNotes.length === 0) {
     return (
       <section className="reports-layout">
         {renderReportTabs()}
         {renderProfitabilityTabs()}
-        {renderExportAction()}
         <EmptyState
-          body="Registra ventas para habilitar los reportes de rentabilidad."
+          body={selectedMonth ? "Prueba con otro mes o consulta todo el historial." : "Registra ventas para habilitar los reportes de rentabilidad."}
           className="section-empty"
-          title="Sin ventas para analizar"
+          title={selectedMonth ? "Sin movimientos en este mes" : "Sin ventas para analizar"}
         />
       </section>
     );
@@ -1881,9 +1938,9 @@ export function ReportsSection({
                 <span>{row.productName}</span>
                 <div className="report-bar-track">
                   <div
-                    className="report-bar-fill"
+                    className={`report-bar-fill ${row.marginMinor < 0 ? "report-bar-fill-negative" : ""}`}
                     style={{
-                      width: `${productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0}%`
+                      width: `${productMaxMargin > 0 ? (Math.abs(row.marginMinor) / productMaxMargin) * 100 : 0}%`
                     }}
                   />
                 </div>
@@ -1930,9 +1987,9 @@ export function ReportsSection({
                 <span>{row.customerName}</span>
                 <div className="report-bar-track">
                   <div
-                    className="report-bar-fill"
+                    className={`report-bar-fill ${row.marginMinor < 0 ? "report-bar-fill-negative" : ""}`}
                     style={{
-                      width: `${customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0}%`
+                      width: `${customerMaxMargin > 0 ? (Math.abs(row.marginMinor) / customerMaxMargin) * 100 : 0}%`
                     }}
                   />
                 </div>
@@ -1979,9 +2036,9 @@ export function ReportsSection({
                 <span>{row.sellerName}</span>
                 <div className="report-bar-track">
                   <div
-                    className="report-bar-fill"
+                    className={`report-bar-fill ${row.revenueMinor < 0 ? "report-bar-fill-negative" : ""}`}
                     style={{
-                      width: `${sellerMaxRevenue > 0 ? (row.revenueMinor / sellerMaxRevenue) * 100 : 0}%`
+                      width: `${sellerMaxRevenue > 0 ? (Math.abs(row.revenueMinor) / sellerMaxRevenue) * 100 : 0}%`
                     }}
                   />
                 </div>
@@ -2083,7 +2140,7 @@ export function ReportsSection({
       <>
         <ReportPrimaryInsightPanel
           title="Margen por venta"
-          description={`${selectedSale.customerName} · ${selectedSale.id} · ${selectedSale.occurredAtLabel}`}
+          description={`${selectedSale.customerName} · ${selectedSale.id} · ${selectedSale.occurredAtLabel}. Valores de la factura original; los ajustes del período se reflejan en el resumen.`}
           onBack={() => {
             setDetailView("sales");
             setSelectedSaleId(null);
@@ -2142,7 +2199,8 @@ export function ReportsSection({
       id: row.customerId,
       label: row.customerName,
       value: formatCurrency(row.marginMinor),
-      widthPercent: customerMaxMargin > 0 ? (row.marginMinor / customerMaxMargin) * 100 : 0
+      negative: row.marginMinor < 0,
+      widthPercent: customerMaxMargin > 0 ? (Math.abs(row.marginMinor) / customerMaxMargin) * 100 : 0
     }));
 
     return renderProfitabilityLayout(
@@ -2162,7 +2220,8 @@ export function ReportsSection({
       id: row.productId,
       label: row.productName,
       value: formatCurrency(row.marginMinor),
-      widthPercent: productMaxMargin > 0 ? (row.marginMinor / productMaxMargin) * 100 : 0
+      negative: row.marginMinor < 0,
+      widthPercent: productMaxMargin > 0 ? (Math.abs(row.marginMinor) / productMaxMargin) * 100 : 0
     }));
 
     return renderProfitabilityLayout(
@@ -2182,8 +2241,9 @@ export function ReportsSection({
       id: row.sellerName,
       label: row.sellerName,
       value: formatCurrency(row.revenueMinor),
+      negative: row.revenueMinor < 0,
       widthPercent:
-        sellerMaxRevenue > 0 ? (row.revenueMinor / sellerMaxRevenue) * 100 : 0
+        sellerMaxRevenue > 0 ? (Math.abs(row.revenueMinor) / sellerMaxRevenue) * 100 : 0
     }));
 
     return renderProfitabilityLayout(
@@ -2203,7 +2263,8 @@ export function ReportsSection({
       id: row.saleId,
       label: row.customerName,
       value: formatCurrency(row.marginMinor),
-      widthPercent: saleMaxMargin > 0 ? (row.marginMinor / saleMaxMargin) * 100 : 0
+      negative: row.marginMinor < 0,
+      widthPercent: saleMaxMargin > 0 ? (Math.abs(row.marginMinor) / saleMaxMargin) * 100 : 0
     }));
 
     return renderProfitabilityLayout(

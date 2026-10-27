@@ -1,11 +1,12 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
+import type { PurchaseRecord } from "../../types";
 import { PurchasesSection } from "./PurchasesSection";
 
 afterEach(cleanup);
 
-function setup() {
+function setup(purchases: PurchaseRecord[] = []) {
   const onRegisterPurchase = vi.fn().mockResolvedValue(true);
   render(
     <PurchasesSection
@@ -19,10 +20,10 @@ function setup() {
       onUpdatePurchase={vi.fn().mockResolvedValue(null)}
       products={[
         { id: "rice", sku: "1", name: "Arroz", unit: "Libra", costMinor: 3000, salePriceMinor: 4500, stock: 4, minimumStock: 1, active: true },
-        { id: "sugar", sku: "2", name: "Azucar", unit: "Kg", costMinor: 2000, salePriceMinor: 3000, stock: 5, minimumStock: 1, active: true }
+        { id: "sugar", sku: "AZU-002", name: "Azucar", unit: "Kg", costMinor: 2000, salePriceMinor: 3000, stock: 5, minimumStock: 1, active: true }
       ]}
-      purchases={[]}
-      suppliers={[{ id: "supplier", name: "Proveedor", active: true, address: "", city: "", department: "", document: "", email: "", phone: "" }]}
+      purchases={purchases}
+      suppliers={[{ id: "supplier", name: "Proveedor", active: true, address: "", city: "", department: "", document: "NIT-900", email: "", phone: "" }]}
       supplierPayables={[]}
     />
   );
@@ -111,4 +112,57 @@ it("deletes the row being edited and prevents registering an empty purchase", as
   await user.click(screen.getByRole("button", { name: "Registrar compra" }));
   expect(onRegisterPurchase).not.toHaveBeenCalled();
   expect(screen.getByText("Debes seleccionar un producto.")).toBeTruthy();
+});
+
+const searchPurchases: PurchaseRecord[] = [
+  { id: "purchase-1", supplierId: "supplier", supplierName: "Distribuidora Gómez", invoiceNumber: "FC-001",
+    issuedAt: "2026-10-01", dueAt: "", occurredAtMs: new Date(2026, 9, 1).getTime(), occurredAtLabel: "01/10/2026",
+    expenseCategory: "inventory", branch: "Principal", prefix: "FC", currency: "COP", concept: "Compra",
+    productId: "rice", productName: "2 productos", quantity: 2, unitCostMinor: 3000, totalMinor: 6000,
+    paymentStatus: "paid", lines: [{ id: "line-1", productId: "sugar", productName: "Azúcar morena", unit: "Kg",
+      quantity: 1, unitCostMinor: 3000, discountPercent: 0, discountMinor: 0, taxPercent: 0, taxMinor: 0,
+      subtotalMinor: 3000, totalMinor: 3000 }] },
+  { id: "purchase-2", supplierId: "removed-supplier", supplierName: "Café del Sur", invoiceNumber: "FC-002",
+    issuedAt: "2026-10-02", dueAt: "2026-11-02", occurredAtMs: new Date(2026, 9, 2).getTime(), occurredAtLabel: "02/10/2026",
+    expenseCategory: "inventory", branch: "Principal", prefix: "FC", currency: "COP", concept: "Compra",
+    productId: "removed-product", productName: "Café tostado", quantity: 1, unitCostMinor: 2000, totalMinor: 2000,
+    paymentStatus: "pending", lines: [] }
+];
+
+it("searches invoice numbers, suppliers, documents, product codes and every purchased line", () => {
+  setup(searchPurchases);
+  const search = screen.getByRole("searchbox", { name: "Buscar compras" });
+  for (const query of ["  AZUCAR   gomez ", "NIT-900", "FC-001", "morena", "AZU-002"]) {
+    fireEvent.change(search, { target: { value: query } });
+    const table = within(screen.getByRole("table", { name: "Compras registradas" }));
+    expect(table.getByText("FC-001")).toBeTruthy();
+    expect(table.queryByText("FC-002")).toBeNull();
+  }
+  fireEvent.change(search, { target: { value: "tostado SUR" } });
+  const table = within(screen.getByRole("table", { name: "Compras registradas" }));
+  expect(table.getByText("FC-002")).toBeTruthy();
+  expect(table.queryByText("FC-001")).toBeNull();
+  expect(screen.getByRole("status").textContent).toBe("1 de 2 compras");
+});
+
+it("clears no matches without changing the purchase draft and opens the filtered invoice detail", async () => {
+  const { user } = setup(searchPurchases);
+  await user.type(screen.getByLabelText("Cantidad compra"), "7");
+  const number = (screen.getByLabelText("Numero") as HTMLInputElement).value;
+  const search = screen.getByRole("searchbox", { name: "Buscar compras" });
+  fireEvent.change(search, { target: { value: "inexistente" } });
+  expect(screen.getByText("No se encontraron compras")).toBeTruthy();
+  expect(screen.queryByRole("table", { name: "Compras registradas" })).toBeNull();
+  expect((screen.getByLabelText("Cantidad compra") as HTMLInputElement).value).toBe("7");
+  expect((screen.getByLabelText("Numero") as HTMLInputElement).value).toBe(number);
+  await user.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+  expect(document.activeElement).toBe(search);
+  expect(screen.getByRole("status").textContent).toBe("2 de 2 compras");
+  fireEvent.change(search, { target: { value: "FC-001" } });
+  await user.click(screen.getByRole("button", { name: "Ver detalle de compra FC-001" }));
+  expect(screen.getByRole("table", { name: "Productos de compra FC-001" })).toBeTruthy();
+  await user.type(search, "{Escape}");
+  expect((search as HTMLInputElement).value).toBe("");
+  expect(screen.getByRole("status").textContent).toBe("2 de 2 compras");
+  expect(screen.queryByRole("table", { name: "Productos de compra FC-001" })).toBeNull();
 });

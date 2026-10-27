@@ -5,6 +5,7 @@ import { SecondaryActionButton } from "./SecondaryActionButton";
 type ReportChartPreviewRow = {
   id: string;
   label: string;
+  negative?: boolean;
   value: string;
   widthPercent: number;
 };
@@ -50,7 +51,7 @@ export function ReportChartPreviewPanel({
             <div className="report-bar-row" key={row.id}>
               <span>{row.label}</span>
               <div className="report-bar-track">
-                <div className="report-bar-fill" style={{ width: `${row.widthPercent}%` }} />
+                <div className={`report-bar-fill ${row.negative ? "report-bar-fill-negative" : ""}`} style={{ width: `${row.widthPercent}%` }} />
               </div>
               <strong>{row.value}</strong>
             </div>

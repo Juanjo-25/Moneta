@@ -2960,6 +2960,8 @@ describe("App navigation", () => {
       await user.type(screen.getByLabelText("Cantidad"), "2");
       await user.click(screen.getByLabelText("Pendiente"));
       await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-07-30");
+      await user.clear(screen.getByLabelText("Fecha de elaboracion"));
+      await user.type(screen.getByLabelText("Fecha de elaboracion"), "2026-07-02");
       await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
       nowSpy.mockReturnValue(new Date("2026-07-12T10:00:00.000Z").getTime());
@@ -2975,6 +2977,8 @@ describe("App navigation", () => {
       await user.type(screen.getByLabelText("Cantidad"), "1");
       await user.click(screen.getByLabelText("Pendiente"));
       await user.type(screen.getByLabelText("Fecha vencimiento venta"), "2026-08-05");
+      await user.clear(screen.getByLabelText("Fecha de elaboracion"));
+      await user.type(screen.getByLabelText("Fecha de elaboracion"), "2026-07-12");
       await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
       nowSpy.mockReturnValue(new Date("2026-07-22T10:00:00.000Z").getTime());
@@ -3191,6 +3195,8 @@ describe("App navigation", () => {
         screen.getByRole("option", { name: "Arroz libra" })
       );
       await user.type(screen.getByLabelText("Cantidad"), "2");
+      await user.clear(screen.getByLabelText("Fecha de elaboracion"));
+      await user.type(screen.getByLabelText("Fecha de elaboracion"), "2026-07-01");
       await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
       nowSpy.mockReturnValue(new Date("2026-07-02T10:00:00.000Z").getTime());
@@ -3203,6 +3209,8 @@ describe("App navigation", () => {
         screen.getByRole("option", { name: "Arroz libra" })
       );
       await user.type(screen.getByLabelText("Cantidad"), "1");
+      await user.clear(screen.getByLabelText("Fecha de elaboracion"));
+      await user.type(screen.getByLabelText("Fecha de elaboracion"), "2026-07-02");
       await user.click(screen.getByRole("button", { name: "Registrar venta" }));
 
       await user.click(screen.getByRole("button", { name: "Reportes" }));
