@@ -1116,6 +1116,7 @@ describe("App navigation", () => {
     await waitFor(() =>
       expect(generateInventoryPdfMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          order: "available-first",
           products: [
             expect.objectContaining({
               name: "Arroz libra",
@@ -1136,6 +1137,18 @@ describe("App navigation", () => {
     expect(screen.getByRole("link", { name: "Descargar PDF" }).getAttribute("href")).toBe(
       "data:application/pdf;base64,inventory-pdf"
     );
+
+    await user.selectOptions(screen.getByLabelText("Orden de impresión"), "name");
+
+    expect(screen.queryByTitle("Vista previa de inventario PDF")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Imprimir inventario" }));
+
+    await waitFor(() =>
+      expect(generateInventoryPdfMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ order: "name" })
+      )
+    );
+    expect(screen.getByTitle("Vista previa de inventario PDF")).toBeTruthy();
   });
 
   it("imports products from an Excel CSV export", async () => {

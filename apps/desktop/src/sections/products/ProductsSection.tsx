@@ -16,7 +16,7 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import { TextField } from "../../components/TextField";
 import { parseProductImportCsv } from "../../lib/product-import";
-import type { InventoryPdfResult } from "../../inventory-pdf";
+import type { InventoryPdfResult, InventoryPrintOrder } from "../../inventory-pdf";
 import type {
   AppSettings,
   InventoryAdjustmentRecord,
@@ -198,6 +198,8 @@ export function ProductsSection({
     useState<InventoryPdfResult | null>(null);
   const [inventoryPdfError, setInventoryPdfError] = useState("");
   const [generatingInventoryPdf, setGeneratingInventoryPdf] = useState(false);
+  const [inventoryPrintOrder, setInventoryPrintOrder] =
+    useState<InventoryPrintOrder>("available-first");
   const editFormRef = useRef<HTMLFormElement | null>(null);
   const previousDeleteAllProductsRequestId = useRef(deleteAllProductsRequestId);
   const previousZeroAllInventoryRequestId = useRef(zeroAllInventoryRequestId);
@@ -696,7 +698,7 @@ export function ProductsSection({
 
     try {
       const { generateInventoryPdf } = await import("../../inventory-pdf");
-      const pdf = generateInventoryPdf({ products, settings });
+      const pdf = generateInventoryPdf({ products, settings, order: inventoryPrintOrder });
 
       setInventoryPreview(pdf);
     } catch {
@@ -757,12 +759,29 @@ export function ProductsSection({
           <h2>Inventario para imprimir</h2>
           <span>{products.length} productos registrados</span>
         </div>
-        <SecondaryActionButton
-          disabled={products.length === 0 || generatingInventoryPdf}
-          onClick={() => void generateInventoryPrintablePdf()}
-        >
-          {generatingInventoryPdf ? "Generando..." : "Imprimir inventario"}
-        </SecondaryActionButton>
+        <div className="inventory-print-actions">
+          <label className="field" htmlFor="inventory-print-order">
+            <span>Orden de impresión</span>
+            <select
+              disabled={generatingInventoryPdf}
+              id="inventory-print-order"
+              onChange={(event) => {
+                setInventoryPrintOrder(event.target.value as InventoryPrintOrder);
+                setInventoryPreview(null);
+              }}
+              value={inventoryPrintOrder}
+            >
+              <option value="available-first">Disponibles primero (A a Z)</option>
+              <option value="name">Todos de A a Z</option>
+            </select>
+          </label>
+          <SecondaryActionButton
+            disabled={products.length === 0 || generatingInventoryPdf}
+            onClick={() => void generateInventoryPrintablePdf()}
+          >
+            {generatingInventoryPdf ? "Generando..." : "Imprimir inventario"}
+          </SecondaryActionButton>
+        </div>
       </section>
 
       {inventoryPdfError ? (

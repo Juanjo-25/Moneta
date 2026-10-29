@@ -1,8 +1,11 @@
 import { jsPDF } from "jspdf";
 import type { AppSettings, ProductRecord } from "./types";
 
+export type InventoryPrintOrder = "name" | "available-first";
+
 export type InventoryPdfInput = {
   generatedAtLabel?: string | undefined;
+  order?: InventoryPrintOrder | undefined;
   products: ProductRecord[];
   settings?: AppSettings | undefined;
 };
@@ -210,9 +213,18 @@ export function generateInventoryPdf(
   const company = getCompanySettings(input.settings);
   const accent = parseHexColor(company.accentColor);
   const generatedAtLabel = getGeneratedAtLabel(input.generatedAtLabel);
-  const sortedProducts = [...input.products].sort((left, right) =>
-    left.name.localeCompare(right.name, "es")
-  );
+  const sortedProducts = [...input.products].sort((left, right) => {
+    if (input.order === "available-first") {
+      const leftAvailable = left.active && left.stock > 0;
+      const rightAvailable = right.active && right.stock > 0;
+
+      if (leftAvailable !== rightAvailable) {
+        return leftAvailable ? -1 : 1;
+      }
+    }
+
+    return left.name.localeCompare(right.name, "es");
+  });
   const activeProducts = sortedProducts.filter((product) => product.active);
   const lowStockCount = sortedProducts.filter(
     (product) => product.active && product.stock <= product.minimumStock

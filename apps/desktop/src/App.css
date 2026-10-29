@@ -1454,6 +1454,19 @@ button,
   font-weight: 700;
 }
 
+.inventory-print-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inventory-print-actions .field {
+  flex: 1 1 250px;
+}
+
 .product-delete-confirmation h2 {
   margin: 0;
   color: var(--text-primary);

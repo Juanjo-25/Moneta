@@ -92,4 +92,43 @@ describe("inventory PDF", () => {
       fileName: "inventario-productos.pdf"
     });
   });
+
+  const unsortedProducts = [
+    { ...inventoryInput.products[0]!, id: "zero", name: "Ábaco", stock: 0 },
+    { ...inventoryInput.products[0]!, id: "available-z", name: "Zanahoria" },
+    { ...inventoryInput.products[0]!, id: "inactive", name: "Banano", active: false },
+    { ...inventoryInput.products[0]!, id: "low", name: "Árbol", stock: 1, minimumStock: 5 },
+    { ...inventoryInput.products[0]!, id: "available-a", name: "Aceite" },
+    { ...inventoryInput.products[0]!, id: "zero-z", name: "Zapallo", stock: 0 }
+  ];
+
+  it("prints active products with stock first and keeps both groups alphabetical", () => {
+    const originalOrder = unsortedProducts.map((product) => product.id);
+
+    generateInventoryPdf({ products: unsortedProducts, order: "available-first" });
+
+    const productNames = textMock.mock.calls
+      .filter((call) => call[1] === 43 && call[3]?.maxWidth === 68)
+      .map((call) => call[0]);
+
+    expect(productNames).toEqual([
+      "Aceite", "Árbol", "Zanahoria", "Ábaco", "Banano", "Zapallo"
+    ]);
+    expect(unsortedProducts.map((product) => product.id)).toEqual(originalOrder);
+  });
+
+  it.each([undefined, "name"] as const)(
+    "prints all products alphabetically when order is %s",
+    (order) => {
+      generateInventoryPdf({ products: unsortedProducts, order });
+
+      const productNames = textMock.mock.calls
+        .filter((call) => call[1] === 43 && call[3]?.maxWidth === 68)
+        .map((call) => call[0]);
+
+      expect(productNames).toEqual([
+        "Ábaco", "Aceite", "Árbol", "Banano", "Zanahoria", "Zapallo"
+      ]);
+    }
+  );
 });
