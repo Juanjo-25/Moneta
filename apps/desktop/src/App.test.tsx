@@ -10,6 +10,7 @@ import { generateSupplierPaymentPdf } from "./supplier-payment-pdf";
 import { generatePurchasePdf } from "./purchase-pdf";
 import { generateQuotationPdf } from "./quotation-pdf";
 import { quotationFixture } from "./test/quotation-fixture";
+import { bytesFromDataHref, readXlsxSheets } from "./test/xlsx";
 import type { CustomerReceiptRecord } from "./types";
 
 vi.mock("./cartera-pdf", () => ({
@@ -341,13 +342,18 @@ describe("App navigation", () => {
     });
     const href = exportLink.getAttribute("href") ?? "";
 
-    expect(exportLink.getAttribute("download")).toBe("moneta-rentabilidad.xls");
+    expect(exportLink.getAttribute("download")).toBe("moneta-rentabilidad.xlsx");
     expect(screen.getByText("Archivo listo para descargar.")).toBeTruthy();
-    expect(href).toMatch(/^data:application\/vnd\.ms-excel;charset=utf-8,/);
-    expect(decodeURIComponent(href)).toContain('ss:Name="Productos"');
-    expect(decodeURIComponent(href)).toContain("Arroz libra");
-    expect(decodeURIComponent(href)).toContain('<Data ss:Type="Number">4500</Data>');
-    expect(decodeURIComponent(href)).toContain('<Data ss:Type="Number">1300</Data>');
+    expect(href).toMatch(
+      /^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,/
+    );
+    const sheets = readXlsxSheets(bytesFromDataHref(href));
+    const productsSheet = sheets.find((sheet) => sheet.name === "Productos");
+    expect(productsSheet).toBeTruthy();
+    const exportedCells = sheets.flatMap((sheet) => sheet.rows.flat());
+    expect(exportedCells).toContain("Arroz libra");
+    expect(exportedCells).toContain("4500");
+    expect(exportedCells).toContain("1300");
   });
 
   it("saves configuration changes through SQLite when Tauri is available", async () => {

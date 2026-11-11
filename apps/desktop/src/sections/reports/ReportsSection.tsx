@@ -19,8 +19,8 @@ import {
   type ReportGrouping
 } from "./report-period";
 import {
+  buildExcelWorkbookBytes,
   buildExcelWorkbookDownload,
-  buildExcelWorkbookXml,
   type ExcelCellValue,
   type ExcelWorkbookDownload,
   type ExcelWorksheet
@@ -1158,7 +1158,7 @@ export function ReportsSection({
   function buildReportExport(): ReportExportConfig {
     if (activeReportTab === "dso") {
       return {
-        fileName: "moneta-dso.xls",
+        fileName: "moneta-dso.xlsx",
         worksheets: [
           buildSummaryWorksheet("Resumen DSO", [
             { label: "DSO global dias", value: roundDecimal(dsoSummary.dsoDays) },
@@ -1191,7 +1191,7 @@ export function ReportsSection({
 
     if (activeReportTab === "cashflow") {
       return {
-        fileName: "moneta-flujo-de-caja.xls",
+        fileName: "moneta-flujo-de-caja.xlsx",
         worksheets: [
           buildSummaryWorksheet("Resumen flujo caja", [
             { label: "Entradas reales COP", value: cashflowSummary.realInflowMinor },
@@ -1246,7 +1246,7 @@ export function ReportsSection({
 
     if (activeReportTab === "expenses") {
       return {
-        fileName: "moneta-egresos.xls",
+        fileName: "moneta-egresos.xlsx",
         worksheets: [
           buildSummaryWorksheet("Resumen egresos", [
             { label: "Egresos reales COP", value: expenseSummary.realExpenseMinor },
@@ -1286,7 +1286,7 @@ export function ReportsSection({
 
     if (activeReportTab === "variance") {
       return {
-        fileName: "moneta-utilidades.xls",
+        fileName: "moneta-utilidades.xlsx",
         worksheets: [
           buildSummaryWorksheet("Resumen utilidades", [
             { label: "Utilidad total COP", value: utilitySummary.totalMarginMinor },
@@ -1415,7 +1415,7 @@ export function ReportsSection({
     }
 
     return {
-      fileName: "moneta-rentabilidad.xls",
+      fileName: "moneta-rentabilidad.xlsx",
       worksheets
     };
   }
@@ -1425,7 +1425,7 @@ export function ReportsSection({
     const activeExport = buildReportExport();
     const reportExport: ReportExportConfig = {
       fileName: selectedMonth
-        ? activeExport.fileName.replace(".xls", `-${selectedMonth}.xls`)
+        ? activeExport.fileName.replace(".xlsx", `-${selectedMonth}.xlsx`)
         : activeExport.fileName,
       worksheets: [
         buildSummaryWorksheet("Período del reporte", [
@@ -1438,12 +1438,12 @@ export function ReportsSection({
         ...activeExport.worksheets
       ]
     };
-    const workbookXml = buildExcelWorkbookXml(reportExport);
+    const workbookBytes = buildExcelWorkbookBytes(reportExport);
     const fallbackDownload = buildExcelWorkbookDownload(reportExport);
 
     try {
       const nativeExport = await saveNativeExcelExport({
-        contents: workbookXml,
+        bytes: workbookBytes,
         fileName: fallbackDownload.fileName
       });
 

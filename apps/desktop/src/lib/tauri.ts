@@ -165,7 +165,7 @@ export async function resetNativeDatabase(): Promise<ResetDatabaseStatus | null>
 }
 
 export async function saveNativeExcelExport(input: {
-  contents: string;
+  bytes: Uint8Array;
   fileName: string;
 }): Promise<ExportFileStatus | null> {
   const invoke = window.__TAURI__?.core?.invoke;
@@ -174,7 +174,9 @@ export async function saveNativeExcelExport(input: {
     return null;
   }
 
-  return invoke<ExportFileStatus>("save_excel_export", { input });
+  return invoke<ExportFileStatus>("save_excel_export", {
+    input: { bytes: Array.from(input.bytes), fileName: input.fileName }
+  });
 }
 
 export async function loadNativeProducts(): Promise<ProductRecord[] | null> {

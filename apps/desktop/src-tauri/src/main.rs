@@ -40,7 +40,10 @@ struct ResetDatabaseStatus {
 #[serde(rename_all = "camelCase")]
 struct ExportFileInput {
     file_name: String,
-    contents: String,
+    #[serde(default)]
+    contents: Option<String>,
+    #[serde(default)]
+    bytes: Option<Vec<u8>>,
 }
 
 #[derive(Serialize)]
@@ -653,7 +656,12 @@ fn save_excel_export(
 
     fs::create_dir_all(&export_dir)
         .map_err(|error| format!("No se pudo crear la carpeta de exportaciones: {error}"))?;
-    fs::write(&export_path, input.contents)
+    let contents = match (input.bytes, input.contents) {
+        (Some(bytes), _) => bytes,
+        (None, Some(text)) => text.into_bytes(),
+        (None, None) => return Err("La exportacion no tiene contenido.".to_string()),
+    };
+    fs::write(&export_path, contents)
         .map_err(|error| format!("No se pudo guardar la exportacion: {error}"))?;
 
     let size_bytes = fs::metadata(&export_path)
@@ -675,7 +683,7 @@ fn sanitize_export_file_name(file_name: &str) -> String {
     let path_file_name = PathBuf::from(file_name)
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "moneta-exportacion.xls".to_string());
+        .unwrap_or_else(|| "moneta-exportacion.xlsx".to_string());
     let sanitized = path_file_name
         .chars()
         .map(|character| {
@@ -698,11 +706,26 @@ fn sanitize_export_file_name(file_name: &str) -> String {
         trimmed
     };
 
-    if safe_name.to_lowercase().ends_with(".xls") {
+    let lower_name = safe_name.to_lowercase();
+
+    if lower_name.ends_with(".xlsx") || lower_name.ends_with(".xls") {
         safe_name
     } else {
-        format!("{safe_name}.xls")
+        format!("{safe_name}.xlsx")
     }
+}
+
+fn split_export_extension(file_name: &str) -> (&str, &str) {
+    let lower_name = file_name.to_lowercase();
+
+    for extension in [".xlsx", ".xls"] {
+        if lower_name.ends_with(extension) {
+            let split_at = file_name.len() - extension.len();
+            return (&file_name[..split_at], &file_name[split_at..]);
+        }
+    }
+
+    (file_name, "")
 }
 
 fn unique_export_path(export_dir: &PathBuf, file_name: &str) -> PathBuf {
@@ -712,13 +735,10 @@ fn unique_export_path(export_dir: &PathBuf, file_name: &str) -> PathBuf {
         return candidate;
     }
 
-    let stem = file_name
-        .strip_suffix(".xls")
-        .or_else(|| file_name.strip_suffix(".XLS"))
-        .unwrap_or(file_name);
+    let (stem, extension) = split_export_extension(file_name);
 
     for index in 2..1000 {
-        let candidate_name = format!("{stem}-{index}.xls");
+        let candidate_name = format!("{stem}-{index}{extension}");
         let candidate = export_dir.join(candidate_name);
 
         if !candidate.exists() {
@@ -727,7 +747,7 @@ fn unique_export_path(export_dir: &PathBuf, file_name: &str) -> PathBuf {
     }
 
     export_dir.join(format!(
-        "{stem}-{}.xls",
+        "{stem}-{}{extension}",
         current_epoch_seconds().unwrap_or(0)
     ))
 }
@@ -5255,8 +5275,12 @@ mod tests {
             sanitize_export_file_name("../moneta:flujo?.xls"),
             "moneta-flujo-.xls"
         );
-        assert_eq!(sanitize_export_file_name(" reporte "), "reporte.xls");
-        assert_eq!(sanitize_export_file_name("..."), "moneta-exportacion.xls");
+        assert_eq!(sanitize_export_file_name(" reporte "), "reporte.xlsx");
+        assert_eq!(sanitize_export_file_name("..."), "moneta-exportacion.xlsx");
+        assert_eq!(
+            sanitize_export_file_name("moneta-sugerencias.xlsx"),
+            "moneta-sugerencias.xlsx"
+        );
     }
 
     #[test]
@@ -5275,6 +5299,14 @@ mod tests {
         assert_eq!(
             export_path.file_name().and_then(|name| name.to_str()),
             Some("moneta-rentabilidad-2.xls")
+        );
+
+        fs::write(export_dir.join("moneta-dso.xlsx"), "uno").expect("seed xlsx export");
+        let xlsx_path = unique_export_path(&export_dir, "moneta-dso.xlsx");
+
+        assert_eq!(
+            xlsx_path.file_name().and_then(|name| name.to_str()),
+            Some("moneta-dso-2.xlsx")
         );
 
         fs::remove_dir_all(export_dir).expect("remove export dir");

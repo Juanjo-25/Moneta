@@ -7,6 +7,7 @@ import { dailyCredit, dailySale } from "../../test/daily-sales-fixture";
 import type { PurchaseRecord, ReceivableRecord, SupplierPayableRecord } from "../../types";
 import { ReportsSection } from "./ReportsSection";
 import { isInReportMonth, reportDocumentTime, shiftReportMonth } from "./report-period";
+import { bytesFromDataHref, readXlsxSheets } from "../../test/xlsx";
 
 function sale(id: string, date: string, total: number, cost: number) {
   return {
@@ -67,7 +68,8 @@ function summaryValue(region: string, label: string) {
   return within(screen.getByLabelText(region)).getByText(label).closest(".summary-card")?.textContent;
 }
 function exportXml() {
-  return decodeURIComponent(screen.getByRole("link", { name: "Descargar archivo Excel" }).getAttribute("href")!.split(",")[1]!);
+  const href = screen.getByRole("link", { name: "Descargar archivo Excel" }).getAttribute("href")!;
+  return readXlsxSheets(bytesFromDataHref(href)).map((sheet) => sheet.xml).join("\n");
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -97,7 +99,7 @@ describe("monthly reports", () => {
     expect(within(table).queryByText("september")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Exportar a Excel" }));
     const link = screen.getByRole("link", { name: "Descargar archivo Excel" });
-    expect(link.getAttribute("download")).toBe("moneta-rentabilidad-2026-10.xls");
+    expect(link.getAttribute("download")).toBe("moneta-rentabilidad-2026-10.xlsx");
     expect(exportXml()).toContain("octubre de 2026");
     expect(exportXml()).not.toContain("FV-september");
     expect(exportXml()).not.toContain('>september<');

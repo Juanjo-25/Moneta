@@ -14,13 +14,19 @@ import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { StatusBadge } from "../../components/StatusBadge";
 import {
+  buildExcelWorkbookBytes,
   buildExcelWorkbookDownload,
-  buildExcelWorkbookXml,
   type ExcelWorkbookDownload
 } from "../../lib/excel-export";
 import { createSearchMatcher } from "../../lib/search";
 import { saveNativeExcelExport } from "../../lib/tauri";
 import type { CreditNoteRecord, ProductRecord, PurchaseRecord, SaleRecord } from "../../types";
+import {
+  formatDayMonth,
+  getUpcomingFortnights,
+  planFortnightOrders,
+  type Fortnight
+} from "./inventory-fortnights";
 import { reportDocumentTime } from "./report-period";
 
 const SETTINGS_STORAGE_KEY = "moneta.inventory-suggestions.settings";
@@ -28,7 +34,12 @@ const WINDOW_OPTIONS = [60, 90, 180] as const;
 
 type StatusFilter = "all" | SuggestionStatus;
 
-type SuggestionRow = InventorySuggestion & { supplierName: string };
+type SuggestionRow = InventorySuggestion & {
+  supplierName: string;
+  unitCostMinor: number;
+  /** Unidades a pedir para cada una de las dos próximas quincenas; null si no hay ventas. */
+  fortnightOrders: [number, number] | null;
+};
 
 const STATUS_LABELS: Record<SuggestionStatus, string> = {
   review: "Revisar pronto",
@@ -212,6 +223,15 @@ export function InventorySuggestionsReport({
   const exportVersion = useRef(0);
 
   const supplierByProduct = useMemo(() => buildSupplierByProduct(purchases), [purchases]);
+  const referenceMs = useMemo(() => nowMs ?? Date.now(), [nowMs]);
+  const costByProduct = useMemo(
+    () => new Map(products.map((product) => [product.id, product.costMinor])),
+    [products]
+  );
+  const fortnights = useMemo(
+    () => getUpcomingFortnights(new Date(referenceMs), settings.leadTimeDays),
+    [referenceMs, settings.leadTimeDays]
+  );
 
   const rows: SuggestionRow[] = useMemo(() => {
     const demand = sales.flatMap((sale) => {
@@ -239,17 +259,31 @@ export function InventorySuggestionsReport({
       products,
       sales: demand,
       returns,
-      nowMs: nowMs ?? Date.now(),
+      nowMs: referenceMs,
       settings
     })
-      .map((row) => ({ ...row, supplierName: supplierByProduct.get(row.productId) ?? "Sin proveedor" }))
+      .map((row) => ({
+        ...row,
+        supplierName: supplierByProduct.get(row.productId) ?? "Sin proveedor",
+        unitCostMinor: costByProduct.get(row.productId) ?? 0,
+        fortnightOrders: planFortnightOrders(
+          {
+            averageDailyDemand: row.averageDailyDemand,
+            hasDemand: row.status !== "no-sales",
+            safetyStock: row.safetyStock,
+            stock: row.stock
+          },
+          fortnights,
+          new Date(referenceMs)
+        )
+      }))
       .sort(
         (left, right) =>
           STATUS_ORDER[left.status] - STATUS_ORDER[right.status] ||
           (left.coverageDays ?? Infinity) - (right.coverageDays ?? Infinity) ||
           right.revenueMinor - left.revenueMinor
       );
-  }, [creditNotes, nowMs, products, sales, settings, supplierByProduct]);
+  }, [costByProduct, creditNotes, fortnights, products, referenceMs, sales, settings, supplierByProduct]);
 
   const suppliers = [...new Set(rows.map((row) => row.supplierName))].sort((a, b) =>
     a.localeCompare(b, "es")
@@ -286,17 +320,35 @@ export function InventorySuggestionsReport({
     });
   }
 
-  const reviewRows = rows.filter((row) => row.status === "review");
-  const excessRows = rows.filter((row) => row.status === "excess" || row.status === "no-sales");
+  const reviewRows = scopedRows.filter((row) => row.status === "review");
+  const excessRows = scopedRows.filter((row) => row.status === "excess" || row.status === "no-sales");
+  const buildFortnightTotals = (sourceRows: SuggestionRow[]) =>
+    fortnights.map((fortnight, index) => {
+      const ordered = sourceRows.filter((row) => (row.fortnightOrders?.[index] ?? 0) > 0);
+      return {
+        fortnight,
+        productCount: ordered.length,
+        totalMinor: ordered.reduce(
+          (sum, row) => sum + (row.fortnightOrders?.[index] ?? 0) * row.unitCostMinor,
+          0
+        )
+      };
+    });
+  const fortnightTotals = buildFortnightTotals(scopedRows);
+  const productCountLabel = (count: number) => `${count} ${count === 1 ? "producto" : "productos"}`;
   const summaryItems = [
     { label: "Revisar pronto", value: String(reviewRows.length) },
-    {
-      label: "Compra sugerida estimada",
-      value: formatCurrency(reviewRows.reduce((sum, row) => sum + row.suggestedOrderCostMinor, 0))
-    },
-    { label: "Con exceso o sin ventas", value: String(excessRows.length) },
-    { label: "Productos analizados", value: String(rows.length) }
+    ...fortnightTotals.map(({ fortnight, totalMinor }) => ({
+      label: `Pedido ${fortnight.label}`,
+      value: formatCurrency(totalMinor)
+    })),
+    { label: "Con exceso o sin ventas", value: String(excessRows.length) }
   ];
+  const todayStart = new Date(new Date(referenceMs).setHours(0, 0, 0, 0));
+  const describeDeadline = (fortnight: Fortnight) =>
+    fortnight.orderBy < todayStart
+      ? `${fortnight.label}: ya pasó la fecha ideal (${formatDayMonth(fortnight.orderBy)}), pídelo cuanto antes`
+      : `${fortnight.label}: pedir a más tardar el ${formatDayMonth(fortnight.orderBy)}`;
 
   function resetExport() {
     exportVersion.current += 1;
@@ -337,13 +389,12 @@ export function InventorySuggestionsReport({
   async function exportToExcel() {
     exportVersion.current += 1;
     const version = exportVersion.current;
-    const costByProduct = new Map(products.map((product) => [product.id, product.costMinor]));
     const generatedAt = new Intl.DateTimeFormat("es-CO", {
       dateStyle: "long",
       timeStyle: "short"
     }).format(new Date(nowMs ?? Date.now()));
     const workbook = {
-      fileName: "moneta-sugerencias-inventario.xls",
+      fileName: "moneta-sugerencias-inventario.xlsx",
       worksheets: [
         {
           name: "Parametros",
@@ -360,6 +411,12 @@ export function InventorySuggestionsReport({
             ["Busqueda", searchQuery.trim() || "Sin busqueda"],
             ["Productos exportados", `${visibleRows.length} de ${rows.length}`],
             [],
+            ["Pedidos quincenales", ""],
+            ...buildFortnightTotals(visibleRows).flatMap(({ fortnight, productCount, totalMinor }) => [
+              [`Pedido ${fortnight.label}`, `${productCountLabel(productCount)} · ${formatCurrency(totalMinor)}`],
+              [`Pedir a mas tardar (${fortnight.label})`, formatDayMonth(fortnight.orderBy)]
+            ]),
+            [],
             ["Como leer las clases", ""],
             ["Clase ABC", "Importancia por ventas: A son los productos que mas venden en dinero, C los que menos."],
             ["Clase XYZ", "Regularidad de la demanda: X se vende de forma estable, Y varia, Z es irregular o esporadica."],
@@ -369,6 +426,7 @@ export function InventorySuggestionsReport({
         },
         {
           name: "Sugerencias",
+          autoFilter: true,
           rows: [
             [
               "SKU",
@@ -381,9 +439,11 @@ export function InventorySuggestionsReport({
               "Cobertura dias",
               "Minimo sugerido",
               "Maximo sugerido",
-              "Comprar sugerido",
               "Costo unitario COP",
-              "Costo estimado COP",
+              `Pedido ${fortnights[0].label}`,
+              `Costo pedido ${fortnights[0].label} COP`,
+              `Pedido ${fortnights[1].label}`,
+              `Costo pedido ${fortnights[1].label} COP`,
               "Unidades en exceso",
               "Minimo actual",
               "Tendencia",
@@ -406,9 +466,11 @@ export function InventorySuggestionsReport({
                 row.coverageDays === null ? "" : Math.floor(row.coverageDays),
                 hasRange ? row.suggestedMin : "",
                 hasRange ? row.suggestedMax : "",
-                hasRange ? row.suggestedOrderQuantity : "",
-                costByProduct.get(row.productId) ?? "",
-                hasRange ? row.suggestedOrderCostMinor : "",
+                row.unitCostMinor,
+                row.fortnightOrders ? row.fortnightOrders[0] : "",
+                row.fortnightOrders ? row.fortnightOrders[0] * row.unitCostMinor : "",
+                row.fortnightOrders ? row.fortnightOrders[1] : "",
+                row.fortnightOrders ? row.fortnightOrders[1] * row.unitCostMinor : "",
                 hasRange ? row.excessUnits : "",
                 row.currentMinimumStock,
                 TREND_LABELS[row.trend],
@@ -426,7 +488,7 @@ export function InventorySuggestionsReport({
 
     try {
       const native = await saveNativeExcelExport({
-        contents: buildExcelWorkbookXml(workbook),
+        bytes: buildExcelWorkbookBytes(workbook),
         fileName: fallback.fileName
       });
       if (version !== exportVersion.current) return;
@@ -544,6 +606,13 @@ export function InventorySuggestionsReport({
 
       <ReportSummaryShell>
         <CompactSummaryGrid ariaLabel="Resumen sugerencias de inventario" items={summaryItems} />
+        <p className="inventory-fortnight-note">
+          Pedidos quincenales (del 1 al 15 y del 16 a fin de mes) con entrega de{" "}
+          {settings.leadTimeDays} días · {fortnightTotals
+            .map(({ fortnight, productCount }) => `${describeDeadline(fortnight)} (${productCountLabel(productCount)})`)
+            .join(" · ")}
+          {supplierFilter ? ` · Solo ${supplierFilter}` : ""}
+        </p>
       </ReportSummaryShell>
 
       {rows.length === 0 ? (
@@ -599,12 +668,20 @@ export function InventorySuggestionsReport({
 
           <DataTable ariaLabel="Sugerencias de inventario" className="inventory-suggestions-table">
             <DataTableHeader
-              labels={["Producto", "Prioridad", "Stock y rango sugerido", "Cobertura", "Comprar", ""]}
+              labels={[
+                "Producto",
+                "Prioridad",
+                "Stock y rango sugerido",
+                "Cobertura",
+                `Pedido ${fortnights[0].label}`,
+                `Pedido ${fortnights[1].label}`,
+                ""
+              ]}
             />
             <tbody>
               {visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="inventory-suggestions-empty">
+                  <td colSpan={7} className="inventory-suggestions-empty">
                     Ningún producto coincide con la búsqueda o los filtros.{" "}
                     {searchQuery ? (
                       <button
@@ -646,17 +723,22 @@ export function InventorySuggestionsReport({
                         <StockRangeBar row={row} />
                       </td>
                       <td>{formatCoverage(row.coverageDays)}</td>
-                      <td>
-                        {row.suggestedOrderQuantity > 0 ? (
-                          <>
-                            <strong>{row.suggestedOrderQuantity}</strong>
-                            <br />
-                            <small>{formatCurrency(row.suggestedOrderCostMinor)}</small>
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
+                      {[0, 1].map((index) => {
+                        const quantity = row.fortnightOrders?.[index] ?? 0;
+                        return (
+                          <td key={index} className="inventory-fortnight-cell">
+                            {quantity > 0 ? (
+                              <>
+                                <strong>{quantity}</strong>
+                                <br />
+                                <small>{formatCurrency(quantity * row.unitCostMinor)}</small>
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        );
+                      })}
                       <td className="inventory-suggestion-toggle-cell">
                         <button
                           aria-controls={detailId}
@@ -675,7 +757,7 @@ export function InventorySuggestionsReport({
                     </tr>
                     {expanded ? (
                       <tr className="inventory-suggestion-detail" id={detailId}>
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <div className="inventory-suggestion-detail-body">
                             <p>{describeSuggestion(row, settings)}</p>
                             <dl className="inventory-suggestion-facts">

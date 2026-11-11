@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dailySale } from "../../test/daily-sales-fixture";
+import { bytesFromDataHref, readXlsxSheets } from "../../test/xlsx";
 import type { ProductRecord, SaleRecord } from "../../types";
 import { InventorySuggestionsReport } from "./InventorySuggestionsReport";
 
@@ -92,29 +93,49 @@ describe("inventory suggestions report", () => {
     await user.click(screen.getByRole("button", { name: "Sin ventas 1" }));
     await user.click(screen.getByRole("button", { name: "Exportar a Excel" }));
     const link = await screen.findByRole("link", { name: "Descargar archivo Excel" });
-    const xml = decodeURIComponent(link.getAttribute("href")!.split(",").slice(1).join(","));
-    const cellsOf = (rowText: string) => {
-      const row = xml.split("<Row>").find((candidate) => candidate.includes(rowText))!;
-      return [...row.matchAll(/<Data ss:Type="(\w+)">([^<]*)<\/Data>/g)].map(([, , value]) => value);
-    };
+    expect(link.getAttribute("download")).toBe("moneta-sugerencias-inventario.xlsx");
+    const [parameters, suggestions] = readXlsxSheets(bytesFromDataHref(link.getAttribute("href")!));
+    const parameterRow = (label: string) => parameters!.rows.find((row) => row[0] === label);
 
-    expect(cellsOf("Prioridad")).toEqual(["Prioridad", "Sin ventas"]);
-    expect(cellsOf("Productos exportados")).toEqual(["Productos exportados", "1 de 2"]);
-    expect(xml).toContain("Clase ABC");
-    expect(xml).not.toContain("Arroz");
+    expect(parameterRow("Prioridad")).toEqual(["Prioridad", "Sin ventas"]);
+    expect(parameterRow("Productos exportados")).toEqual(["Productos exportados", "1 de 2"]);
+    expect(parameterRow("Pedido 16–30 nov")?.[1]).toMatch(/^0 productos · \$\s*0$/);
+    expect(parameterRow("Clase ABC")).toBeTruthy();
+    expect(suggestions!.rows.flat()).not.toContain("Arroz");
+    expect(suggestions!.xml).toContain("<autoFilter");
 
-    const header = cellsOf("Explicacion");
-    const beans = cellsOf("Frijol");
-    const column = (name: string) => beans[header.indexOf(name)];
+    const [header, beans] = suggestions!.rows;
+    const column = (name: string) => beans![header!.indexOf(name)];
     expect(column("Unidad")).toBe("Kg");
     expect(column("Stock actual")).toBe("9");
     expect(column("Costo unitario COP")).toBe("1000");
     expect(column("Minimo sugerido")).toBe("");
     expect(column("Maximo sugerido")).toBe("");
-    expect(column("Comprar sugerido")).toBe("");
+    expect(column("Pedido 16–30 nov")).toBe("");
+    expect(column("Pedido 1–15 dic")).toBe("");
 
     await user.type(screen.getByLabelText("Buscar producto"), "frijol");
     expect(screen.queryByRole("link", { name: "Descargar archivo Excel" })).toBeNull();
+  });
+
+  it("plans one order for each of the next two fortnights", () => {
+    renderReport();
+
+    const table = screen.getByRole("table", { name: "Sugerencias de inventario" });
+    const headers = within(table).getAllByRole("columnheader").map((cell) => cell.textContent);
+    expect(headers).toContain("Pedido 16–30 nov");
+    expect(headers).toContain("Pedido 1–15 dic");
+
+    // Arroz vende 4 kg al día y tiene 5: se agota antes del 16, así que cada quincena pide 15 días de venta.
+    const riceCells = within(within(table).getByText("Arroz").closest("tr")!).getAllByRole("cell");
+    const fortnightColumn = headers.indexOf("Pedido 16–30 nov");
+    expect(riceCells[fortnightColumn]!.textContent).toBe("60$60000");
+    expect(riceCells[fortnightColumn + 1]!.textContent).toBe("60$60000");
+
+    const summary = screen.getByLabelText("Resumen sugerencias de inventario");
+    expect(within(summary).getByText("Pedido 16–30 nov")).toBeTruthy();
+    expect(screen.getByText(/16–30 nov: ya pasó la fecha ideal \(9 nov\)/)).toBeTruthy();
+    expect(screen.getByText(/1–15 dic: pedir a más tardar el 24 nov/)).toBeTruthy();
   });
 
   it("counts products per priority and filters them with the search box", async () => {

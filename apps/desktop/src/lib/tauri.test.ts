@@ -157,8 +157,8 @@ describe("native settings persistence", () => {
     await expect(resetNativeDatabase()).resolves.toBeNull();
     await expect(
       saveNativeExcelExport({
-        contents: "<Workbook />",
-        fileName: "moneta-rentabilidad.xls"
+        bytes: new Uint8Array([80, 75]),
+        fileName: "moneta-rentabilidad.xlsx"
       })
     ).resolves.toBeNull();
     await expect(
@@ -289,19 +289,22 @@ describe("native settings persistence", () => {
 
   it("saves an Excel export through Tauri", async () => {
     const exportStatus = {
-      fileName: "moneta-rentabilidad.xls",
-      path: "/Users/demo/Downloads/Moneta Exportaciones/moneta-rentabilidad.xls",
+      fileName: "moneta-rentabilidad.xlsx",
+      path: "/Users/demo/Downloads/Moneta Exportaciones/moneta-rentabilidad.xlsx",
       sizeBytes: 1024
-    };
-    const input = {
-      contents: "<Workbook />",
-      fileName: "moneta-rentabilidad.xls"
     };
     const invoke = vi.fn().mockResolvedValue(exportStatus);
     setTauriInvoke(invoke);
 
-    await expect(saveNativeExcelExport(input)).resolves.toEqual(exportStatus);
-    expect(invoke).toHaveBeenCalledWith("save_excel_export", { input });
+    await expect(
+      saveNativeExcelExport({
+        bytes: new Uint8Array([80, 75, 3, 4]),
+        fileName: "moneta-rentabilidad.xlsx"
+      })
+    ).resolves.toEqual(exportStatus);
+    expect(invoke).toHaveBeenCalledWith("save_excel_export", {
+      input: { bytes: [80, 75, 3, 4], fileName: "moneta-rentabilidad.xlsx" }
+    });
   });
 });
 
