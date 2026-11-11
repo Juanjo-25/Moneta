@@ -4393,11 +4393,212 @@ button,
   font-size: 14px;
 }
 
-.inventory-suggestions-reason {
-  min-width: 260px;
-  max-width: 420px;
+.inventory-suggestions-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 20px;
+  margin-bottom: 14px;
+}
+
+.inventory-suggestions-toolbar .reports-quick-periods button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inventory-suggestions-count {
+  min-width: 20px;
+  border-radius: 999px;
+  background: var(--surface-muted);
   color: var(--text-secondary);
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.reports-quick-periods button[aria-pressed="true"] .inventory-suggestions-count {
+  background: #ffffff;
+  color: var(--accent);
+}
+
+.inventory-suggestions-search {
+  flex: 1 1 260px;
+  max-width: 360px;
+}
+
+.inventory-suggestions-results {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory-suggestions-empty {
+  padding: 24px 16px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.inventory-suggestions-link {
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.inventory-suggestions-table td {
+  vertical-align: middle;
+}
+
+.stock-range {
+  display: grid;
+  gap: 6px;
+  min-width: 170px;
+  max-width: 240px;
+}
+
+.stock-range small {
+  color: var(--text-tertiary);
   font-size: 12px;
-  line-height: 1.5;
+}
+
+.stock-range-values {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-range-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+}
+
+.stock-range-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: #cdebe5;
+}
+
+.stock-range-fill {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  border-radius: 3px;
+  background: #0f766e;
+}
+
+.stock-range-below .stock-range-fill {
+  background: #d97706;
+}
+
+.stock-range-above .stock-range-fill {
+  background: #475569;
+}
+
+.stock-range-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  background: var(--text-primary);
+  transform: translateX(-1px);
+}
+
+.inventory-suggestion-toggle-cell {
+  text-align: right;
+}
+
+.inventory-suggestion-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.inventory-suggestion-toggle:hover {
+  background: var(--surface-muted);
+}
+
+.inventory-suggestion-toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.inventory-suggestion-row.expanded td {
+  border-bottom-color: transparent;
+}
+
+.inventory-suggestion-detail td {
+  background: var(--surface-soft);
+}
+
+.data-table tbody tr.inventory-suggestion-detail:hover td {
+  background: var(--surface-soft);
+}
+
+.inventory-suggestion-detail-body {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  max-width: 920px;
+  padding: 4px 0;
   white-space: normal;
+}
+
+.inventory-suggestion-detail-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.inventory-suggestion-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 0;
+}
+
+.inventory-suggestion-facts div {
+  display: grid;
+  gap: 2px;
+}
+
+.inventory-suggestion-facts dt {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inventory-suggestion-facts dd {
+  display: grid;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.inventory-suggestion-facts dd small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
 }

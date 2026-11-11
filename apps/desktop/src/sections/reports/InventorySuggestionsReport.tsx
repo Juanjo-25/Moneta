@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   buildInventorySuggestions,
   DEFAULT_INVENTORY_SUGGESTION_SETTINGS,
@@ -18,6 +18,7 @@ import {
   buildExcelWorkbookXml,
   type ExcelWorkbookDownload
 } from "../../lib/excel-export";
+import { createSearchMatcher } from "../../lib/search";
 import { saveNativeExcelExport } from "../../lib/tauri";
 import type { CreditNoteRecord, ProductRecord, PurchaseRecord, SaleRecord } from "../../types";
 import { reportDocumentTime } from "./report-period";
@@ -42,6 +43,8 @@ const STATUS_ORDER: Record<SuggestionStatus, number> = {
   ok: 2,
   "no-sales": 3
 };
+
+const STATUS_FILTERS = ["all", "review", "excess", "ok", "no-sales"] as const;
 
 const CONFIDENCE_LABELS = { high: "Alta", medium: "Media", low: "Baja" } as const;
 const TREND_LABELS = { up: "Subiendo", down: "Bajando", stable: "Estable" } as const;
@@ -120,6 +123,61 @@ function buildSupplierByProduct(purchases: PurchaseRecord[]): Map<string, string
   return new Map([...latest.entries()].map(([productId, value]) => [productId, value.name]));
 }
 
+type StockPosition = "below" | "within" | "above";
+
+function getStockPosition(row: InventorySuggestion): StockPosition {
+  if (row.stock < row.suggestedMin) return "below";
+  if (row.stock > row.suggestedMax) return "above";
+  return "within";
+}
+
+const STOCK_POSITION_LABELS: Record<StockPosition, string> = {
+  below: "por debajo del mínimo sugerido",
+  within: "dentro del rango sugerido",
+  above: "por encima del máximo sugerido"
+};
+
+function StockRangeBar({ row }: { row: InventorySuggestion }) {
+  if (row.status === "no-sales") {
+    return (
+      <div className="stock-range">
+        <strong>{row.stock}</strong>
+        <small>Sin rango: no hay ventas</small>
+      </div>
+    );
+  }
+
+  const scale = Math.max(row.suggestedMax * 1.25, row.stock, 1);
+  const toPercent = (value: number) => `${Math.min((value / scale) * 100, 100)}%`;
+  const position = getStockPosition(row);
+
+  return (
+    <div className="stock-range">
+      <div className="stock-range-values">
+        <strong>{row.stock}</strong>
+        <small>
+          rango <span>{`${row.suggestedMin} – ${row.suggestedMax}`}</span>
+        </small>
+      </div>
+      <div
+        aria-label={`Stock ${row.stock}, ${STOCK_POSITION_LABELS[position]} (${row.suggestedMin} a ${row.suggestedMax})`}
+        className={`stock-range-track stock-range-${position}`}
+        role="img"
+      >
+        <span
+          className="stock-range-band"
+          style={{
+            left: toPercent(row.suggestedMin),
+            width: `calc(${toPercent(row.suggestedMax)} - ${toPercent(row.suggestedMin)})`
+          }}
+        />
+        <span className="stock-range-fill" style={{ width: toPercent(row.stock) }} />
+        <span className="stock-range-marker" style={{ left: toPercent(row.stock) }} />
+      </div>
+    </div>
+  );
+}
+
 type InventorySuggestionsReportProps = {
   creditNotes: CreditNoteRecord[];
   formatCurrency: (minor: number) => string;
@@ -144,6 +202,10 @@ export function InventorySuggestionsReport({
   const [settings, setSettings] = useState<InventorySuggestionSettings>(readStoredSettings);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [supplierFilter, setSupplierFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const searchInputId = useId();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [preparedDownload, setPreparedDownload] = useState<ExcelWorkbookDownload | null>(null);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -192,11 +254,37 @@ export function InventorySuggestionsReport({
   const suppliers = [...new Set(rows.map((row) => row.supplierName))].sort((a, b) =>
     a.localeCompare(b, "es")
   );
-  const visibleRows = rows.filter(
+  const matchesSearch = createSearchMatcher(searchQuery);
+  const scopedRows = rows.filter(
     (row) =>
-      (statusFilter === "all" || row.status === statusFilter) &&
-      (!supplierFilter || row.supplierName === supplierFilter)
+      (!supplierFilter || row.supplierName === supplierFilter) &&
+      matchesSearch([row.name, row.sku, row.supplierName])
   );
+  const visibleRows = scopedRows.filter(
+    (row) => statusFilter === "all" || row.status === statusFilter
+  );
+  const statusCounts = STATUS_FILTERS.reduce<Record<StatusFilter, number>>(
+    (counts, value) => ({
+      ...counts,
+      [value]:
+        value === "all"
+          ? scopedRows.length
+          : scopedRows.filter((row) => row.status === value).length
+    }),
+    { all: 0, review: 0, excess: 0, ok: 0, "no-sales": 0 }
+  );
+
+  function toggleExpanded(productId: string) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  }
 
   const reviewRows = rows.filter((row) => row.status === "review");
   const excessRows = rows.filter((row) => row.status === "excess" || row.status === "no-sales");
@@ -215,6 +303,15 @@ export function InventorySuggestionsReport({
     setPreparedDownload(null);
     setMessage(null);
   }
+
+  // Un archivo ya preparado deja de ser válido si cambian los filtros que definen sus filas.
+  const exportFilterKey = `${statusFilter}|${supplierFilter}|${searchQuery}`;
+  const lastExportFilterKey = useRef(exportFilterKey);
+  useEffect(() => {
+    if (lastExportFilterKey.current === exportFilterKey) return;
+    lastExportFilterKey.current = exportFilterKey;
+    resetExport();
+  }, [exportFilterKey]);
 
   function updateSetting(key: keyof InventorySuggestionSettings, value: number) {
     if (!Number.isFinite(value) || value < 0) return;
@@ -240,6 +337,11 @@ export function InventorySuggestionsReport({
   async function exportToExcel() {
     exportVersion.current += 1;
     const version = exportVersion.current;
+    const costByProduct = new Map(products.map((product) => [product.id, product.costMinor]));
+    const generatedAt = new Intl.DateTimeFormat("es-CO", {
+      dateStyle: "long",
+      timeStyle: "short"
+    }).format(new Date(nowMs ?? Date.now()));
     const workbook = {
       fileName: "moneta-sugerencias-inventario.xls",
       worksheets: [
@@ -247,10 +349,22 @@ export function InventorySuggestionsReport({
           name: "Parametros",
           rows: [
             ["Parametro", "Valor"],
+            ["Generado", generatedAt],
             ["Ventana de analisis (dias)", settings.windowDays],
             ["Tiempo de entrega proveedor (dias)", settings.leadTimeDays],
             ["Frecuencia de compra (dias)", settings.reviewPeriodDays],
-            ["Nota", "Sugerencias informativas basadas en el historial de ventas."]
+            [],
+            ["Filtros aplicados", ""],
+            ["Prioridad", statusFilter === "all" ? "Todas" : STATUS_LABELS[statusFilter]],
+            ["Proveedor", supplierFilter || "Todos"],
+            ["Busqueda", searchQuery.trim() || "Sin busqueda"],
+            ["Productos exportados", `${visibleRows.length} de ${rows.length}`],
+            [],
+            ["Como leer las clases", ""],
+            ["Clase ABC", "Importancia por ventas: A son los productos que mas venden en dinero, C los que menos."],
+            ["Clase XYZ", "Regularidad de la demanda: X se vende de forma estable, Y varia, Z es irregular o esporadica."],
+            [],
+            ["Nota", "Sugerencias informativas basadas en el historial de ventas. Los productos sin ventas no tienen rango sugerido."]
           ]
         },
         {
@@ -259,6 +373,7 @@ export function InventorySuggestionsReport({
             [
               "SKU",
               "Producto",
+              "Unidad",
               "Proveedor",
               "Prioridad",
               "Stock actual",
@@ -267,7 +382,9 @@ export function InventorySuggestionsReport({
               "Minimo sugerido",
               "Maximo sugerido",
               "Comprar sugerido",
+              "Costo unitario COP",
               "Costo estimado COP",
+              "Unidades en exceso",
               "Minimo actual",
               "Tendencia",
               "Confianza",
@@ -275,25 +392,32 @@ export function InventorySuggestionsReport({
               "Clase XYZ",
               "Explicacion"
             ],
-            ...visibleRows.map((row) => [
-              row.sku,
-              row.name,
-              row.supplierName,
-              STATUS_LABELS[row.status],
-              row.stock,
-              Math.round(row.averageWeeklyDemand * 10) / 10,
-              row.coverageDays === null ? "" : Math.floor(row.coverageDays),
-              row.suggestedMin,
-              row.suggestedMax,
-              row.suggestedOrderQuantity,
-              row.suggestedOrderCostMinor,
-              row.currentMinimumStock,
-              TREND_LABELS[row.trend],
-              CONFIDENCE_LABELS[row.confidence],
-              row.abcClass,
-              row.xyzClass,
-              describeSuggestion(row, settings)
-            ])
+            ...visibleRows.map((row) => {
+              const hasRange = row.status !== "no-sales";
+
+              return [
+                row.sku,
+                row.name,
+                row.unit,
+                row.supplierName,
+                STATUS_LABELS[row.status],
+                row.stock,
+                Math.round(row.averageWeeklyDemand * 10) / 10,
+                row.coverageDays === null ? "" : Math.floor(row.coverageDays),
+                hasRange ? row.suggestedMin : "",
+                hasRange ? row.suggestedMax : "",
+                hasRange ? row.suggestedOrderQuantity : "",
+                costByProduct.get(row.productId) ?? "",
+                hasRange ? row.suggestedOrderCostMinor : "",
+                hasRange ? row.excessUnits : "",
+                row.currentMinimumStock,
+                TREND_LABELS[row.trend],
+                CONFIDENCE_LABELS[row.confidence],
+                row.abcClass,
+                row.xyzClass,
+                describeSuggestion(row, settings)
+              ];
+            })
           ]
         }
       ]
@@ -430,83 +554,177 @@ export function InventorySuggestionsReport({
         />
       ) : (
         <section className="report-supporting-content" aria-label="Detalle sugerencias de inventario">
-          <div className="reports-quick-periods" role="group" aria-label="Filtrar por prioridad">
-            {(["all", "review", "excess", "ok", "no-sales"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={statusFilter === value}
-                onClick={() => setStatusFilter(value)}
-              >
-                {value === "all" ? "Todos" : STATUS_LABELS[value]}
-              </button>
-            ))}
+          <div className="inventory-suggestions-toolbar">
+            <div className="reports-quick-periods" role="group" aria-label="Filtrar por prioridad">
+              {STATUS_FILTERS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={statusFilter === value}
+                  onClick={() => setStatusFilter(value)}
+                >
+                  {value === "all" ? "Todos" : STATUS_LABELS[value]}
+                  <span className="inventory-suggestions-count">{statusCounts[value]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="field inventory-suggestions-search">
+              <label htmlFor={searchInputId}>Buscar producto</label>
+              <div className="document-search-input">
+                <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                  <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="m16 16 4.5 4.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                </svg>
+                <input
+                  autoComplete="off"
+                  id={searchInputId}
+                  placeholder="Nombre, código o proveedor"
+                  ref={searchInputRef}
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setSearchQuery("");
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <span className="inventory-suggestions-results" role="status" aria-live="polite">
+              {visibleRows.length} de {rows.length} productos
+            </span>
           </div>
 
-          <DataTable ariaLabel="Sugerencias de inventario">
+          <DataTable ariaLabel="Sugerencias de inventario" className="inventory-suggestions-table">
             <DataTableHeader
-              labels={[
-                "Producto",
-                "Prioridad",
-                "Stock",
-                "Cobertura",
-                "Rango sugerido",
-                "Comprar",
-                "Tendencia",
-                "Confianza",
-                "Por qué",
-                ""
-              ]}
+              labels={["Producto", "Prioridad", "Stock y rango sugerido", "Cobertura", "Comprar", ""]}
             />
             <tbody>
-              {visibleRows.map((row) => (
-                <tr key={row.productId}>
-                  <td>
-                    <strong>{row.name}</strong>
-                    <br />
-                    <small>
-                      {row.sku} · {row.supplierName}
-                    </small>
-                  </td>
-                  <td>
-                    <StatusBadge tone={statusTone(row.status)}>{STATUS_LABELS[row.status]}</StatusBadge>
-                  </td>
-                  <td>{row.stock}</td>
-                  <td>{formatCoverage(row.coverageDays)}</td>
-                  <td>{row.status === "no-sales" ? "—" : `${row.suggestedMin} – ${row.suggestedMax}`}</td>
-                  <td>
-                    {row.suggestedOrderQuantity > 0 ? (
-                      <>
-                        {row.suggestedOrderQuantity}
-                        <br />
-                        <small>{formatCurrency(row.suggestedOrderCostMinor)}</small>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>{TREND_LABELS[row.trend]}</td>
-                  <td title={`${row.historyDays} días de historia, ${row.saleDays} días con ventas`}>
-                    {CONFIDENCE_LABELS[row.confidence]}
-                  </td>
-                  <td className="inventory-suggestions-reason">{describeSuggestion(row, settings)}</td>
-                  <td>
-                    {onUpdateProduct &&
-                    row.status !== "no-sales" &&
-                    row.suggestedMin !== row.currentMinimumStock ? (
+              {visibleRows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="inventory-suggestions-empty">
+                    Ningún producto coincide con la búsqueda o los filtros.{" "}
+                    {searchQuery ? (
                       <button
+                        className="inventory-suggestions-link"
                         type="button"
-                        className="secondary-action"
-                        disabled={applyingId === row.productId}
-                        title={`Mínimo actual: ${row.currentMinimumStock}`}
-                        onClick={() => void applyAsMinimum(row)}
+                        onClick={() => {
+                          setSearchQuery("");
+                          searchInputRef.current?.focus();
+                        }}
                       >
-                        Usar {row.suggestedMin} como mínimo
+                        Limpiar búsqueda
                       </button>
                     ) : null}
                   </td>
                 </tr>
-              ))}
+              ) : null}
+              {visibleRows.map((row) => {
+                const expanded = expandedIds.has(row.productId);
+                const detailId = `inventory-suggestion-detail-${row.productId}`;
+                const canApplyMinimum =
+                  Boolean(onUpdateProduct) &&
+                  row.status !== "no-sales" &&
+                  row.suggestedMin !== row.currentMinimumStock;
+
+                return (
+                  <Fragment key={row.productId}>
+                    <tr className={expanded ? "inventory-suggestion-row expanded" : "inventory-suggestion-row"}>
+                      <td>
+                        <strong>{row.name}</strong>
+                        <br />
+                        <small>
+                          {row.sku} · {row.supplierName}
+                        </small>
+                      </td>
+                      <td>
+                        <StatusBadge tone={statusTone(row.status)}>{STATUS_LABELS[row.status]}</StatusBadge>
+                      </td>
+                      <td>
+                        <StockRangeBar row={row} />
+                      </td>
+                      <td>{formatCoverage(row.coverageDays)}</td>
+                      <td>
+                        {row.suggestedOrderQuantity > 0 ? (
+                          <>
+                            <strong>{row.suggestedOrderQuantity}</strong>
+                            <br />
+                            <small>{formatCurrency(row.suggestedOrderCostMinor)}</small>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="inventory-suggestion-toggle-cell">
+                        <button
+                          aria-controls={detailId}
+                          aria-expanded={expanded}
+                          aria-label={`${expanded ? "Ocultar" : "Ver"} detalle de ${row.name}`}
+                          className="inventory-suggestion-toggle"
+                          type="button"
+                          onClick={() => toggleExpanded(row.productId)}
+                        >
+                          {expanded ? "Ocultar" : "Detalle"}
+                          <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" width="14" height="14">
+                            <path d="m6 9 6 6 6-6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr className="inventory-suggestion-detail" id={detailId}>
+                        <td colSpan={6}>
+                          <div className="inventory-suggestion-detail-body">
+                            <p>{describeSuggestion(row, settings)}</p>
+                            <dl className="inventory-suggestion-facts">
+                              <div>
+                                <dt>Tendencia</dt>
+                                <dd>{TREND_LABELS[row.trend]}</dd>
+                              </div>
+                              <div>
+                                <dt>Confianza</dt>
+                                <dd>
+                                  {CONFIDENCE_LABELS[row.confidence]}
+                                  <small>
+                                    {row.historyDays} días de historia, {row.saleDays} con ventas
+                                  </small>
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Venta semanal</dt>
+                                <dd>~{formatQuantity(row.averageWeeklyDemand)}</dd>
+                              </div>
+                              <div>
+                                <dt>Mínimo actual</dt>
+                                <dd>{row.currentMinimumStock}</dd>
+                              </div>
+                              <div>
+                                <dt>Clase</dt>
+                                <dd>
+                                  {row.abcClass}
+                                  {row.xyzClass}
+                                </dd>
+                              </div>
+                            </dl>
+                            {canApplyMinimum ? (
+                              <button
+                                type="button"
+                                className="secondary-action"
+                                disabled={applyingId === row.productId}
+                                onClick={() => void applyAsMinimum(row)}
+                              >
+                                Usar {row.suggestedMin} como mínimo
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </DataTable>
         </section>
