@@ -4,3 +4,4 @@ export * from "./money";
 export * from "./product";
 export * from "./result";
 export * from "./sale";
+export * from "./inventory-suggestions";

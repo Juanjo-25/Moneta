@@ -4128,3 +4128,34 @@ button,
     break-inside: avoid;
   }
 }
+
+/* Sugerencias de inventario */
+.inventory-suggestions-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inventory-suggestions-number input {
+  min-width: 70px;
+  max-width: 90px;
+}
+
+.inventory-suggestions-select {
+  min-width: 160px;
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+}
+
+.inventory-suggestions-reason {
+  min-width: 260px;
+  max-width: 420px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}

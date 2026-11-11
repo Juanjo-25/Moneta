@@ -498,6 +498,8 @@ export function SectionContent({
         creditNotes={creditNotes.filter((creditNote) => creditNote.status === "confirmed")}
         customerReceipts={customerReceipts}
         formatCurrency={formatCurrency}
+        onUpdateProduct={onUpdateProduct}
+        products={products}
         purchases={purchases}
         receivables={receivables}
         sales={sales}

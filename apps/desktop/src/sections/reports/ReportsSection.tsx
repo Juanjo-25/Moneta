@@ -9,6 +9,7 @@ import { ReportSummaryShell } from "../../components/ReportSummaryShell";
 import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { SubmenuSwitch } from "../../components/SubmenuSwitch";
 import { parseLocalDate, startOfLocalDay } from "../../lib/dates";
+import { InventorySuggestionsReport } from "./InventorySuggestionsReport";
 import { ReportPeriodToolbar } from "./ReportPeriodToolbar";
 import {
   isInReportMonth,
@@ -28,6 +29,7 @@ import { saveNativeExcelExport } from "../../lib/tauri";
 import type {
   CreditNoteRecord,
   CustomerReceiptRecord,
+  ProductRecord,
   PurchaseExpenseCategory,
   PurchaseRecord,
   ReceivableRecord,
@@ -85,7 +87,7 @@ type SellerMarginRow = {
 };
 
 type ReportDetailView = "product" | "customer" | "seller" | "sales" | "sale" | null;
-type ReportTab = "profitability" | "dso" | "cashflow" | "expenses" | "variance";
+type ReportTab = "profitability" | "dso" | "cashflow" | "expenses" | "variance" | "inventory";
 type ProfitabilityTab = "overview" | "customer" | "product" | "seller" | "sales";
 
 type DsoSummary = {
@@ -1006,6 +1008,8 @@ type ReportsSectionProps = {
   creditNotes: CreditNoteRecord[];
   customerReceipts: CustomerReceiptRecord[];
   formatCurrency: (minor: number) => string;
+  onUpdateProduct?: ((product: ProductRecord) => Promise<boolean>) | undefined;
+  products?: ProductRecord[] | undefined;
   purchases: PurchaseRecord[];
   receivables: ReceivableRecord[];
   sales: SaleRecord[];
@@ -1017,6 +1021,8 @@ export function ReportsSection({
   creditNotes: allCreditNotes,
   customerReceipts,
   formatCurrency,
+  onUpdateProduct,
+  products = [],
   purchases: allPurchases,
   receivables,
   sales: allSales,
@@ -1099,7 +1105,8 @@ export function ReportsSection({
     { id: "dso", label: "DSO", title: "DSO" },
     { id: "cashflow", label: "Flujo de caja", title: "Flujo de caja" },
     { id: "expenses", label: "Egresos", title: "Egresos" },
-    { id: "variance", label: "Utilidades", title: "Utilidades" }
+    { id: "variance", label: "Utilidades", title: "Utilidades" },
+    { id: "inventory", label: "Sugerencias de inventario", title: "Sugerencias de inventario" }
   ];
 
   const profitabilityTabs: Array<{ id: ProfitabilityTab; label: string }> = [
@@ -1554,6 +1561,27 @@ export function ReportsSection({
           selectedValue={activeProfitabilityTab}
         />
       </section>
+    );
+  }
+
+  if (activeReportTab === "inventory") {
+    return (
+      <InventorySuggestionsReport
+        creditNotes={allCreditNotes}
+        formatCurrency={formatCurrency}
+        navigation={
+          <SubmenuSwitch
+            ariaLabel="Tipos de reportes"
+            items={reportTabs.map((tab) => ({ label: tab.label, value: tab.id }))}
+            onSelect={selectReportTab}
+            selectedValue={activeReportTab}
+          />
+        }
+        onUpdateProduct={onUpdateProduct}
+        products={products}
+        purchases={allPurchases}
+        sales={allSales}
+      />
     );
   }
 
