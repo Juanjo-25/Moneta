@@ -5,6 +5,7 @@ import {
 } from "react";
 import { PrimaryActionButton } from "./components/PrimaryActionButton";
 import { SecondaryActionButton } from "./components/SecondaryActionButton";
+import { NavIcon } from "./components/NavIcon";
 import { SectionHeader } from "./components/SectionHeader";
 import {
   compareDueDates,
@@ -225,6 +226,13 @@ const settingsSection: SectionConfig = {
   emptyTitle: "Sin configuracion",
   emptyBody: "Configura los datos del negocio y el formato de factura."
 };
+
+const navigationGroups: Array<{ label: string | null; sectionIds: SectionId[] }> = [
+  { label: null, sectionIds: ["dashboard"] },
+  { label: "Operación", sectionIds: ["sales", "purchases", "products"] },
+  { label: "Dinero", sectionIds: ["cash-receipts", "receivables", "credit-notes"] },
+  { label: "Contactos y análisis", sectionIds: ["customers", "suppliers", "reports"] }
+];
 
 const defaultSettings: AppSettings = {
   company: {
@@ -678,6 +686,11 @@ export function App() {
     today
   });
 
+  const companyName = (settings.company?.name ?? "").trim();
+  const companyLabel =
+    companyName !== "" && companyName !== defaultSettings.company.name
+      ? companyName
+      : "Inventario y cartera";
   const dashboardDateLabel = capitalize(
     new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long" }).format(
       today
@@ -2713,22 +2726,53 @@ export function App() {
             <span className="brand-mark">M</span>
             <div>
               <strong>Moneta</strong>
-              <small>Inventario y cartera</small>
+              <small>{companyLabel}</small>
             </div>
           </div>
         </div>
 
         <div className="sidebar-nav">
           <nav className="navigation" aria-label="Principal">
-            {navigationItems.map((item) => (
-              <button
-                aria-current={item.id === activeSectionId ? "page" : undefined}
-                className={item.id === activeSectionId ? "active" : ""}
-                key={item.id}
-                onClick={() => openSection(item.id)}
-              >
-                {item.label}
-              </button>
+            {navigationGroups.map((group) => (
+              <div className="navigation-group" key={group.label ?? "main"}>
+                {group.label ? (
+                  <span className="navigation-group-label">{group.label}</span>
+                ) : null}
+                {group.sectionIds.map((sectionId) => {
+                  const item = navigationItems.find((entry) => entry.id === sectionId);
+
+                  if (!item) {
+                    return null;
+                  }
+
+                  const badge =
+                    item.id === "receivables" && dashboardSummary.overdueReceivablesCount > 0
+                      ? dashboardSummary.overdueReceivablesCount
+                      : null;
+
+                  return (
+                    <button
+                      aria-current={item.id === activeSectionId ? "page" : undefined}
+                      className={item.id === activeSectionId ? "active" : ""}
+                      key={item.id}
+                      onClick={() => openSection(item.id)}
+                      title={
+                        badge === null
+                          ? undefined
+                          : `${badge} ${badge === 1 ? "factura vencida" : "facturas vencidas"}`
+                      }
+                    >
+                      <NavIcon section={item.id} />
+                      <span className="navigation-label">{item.label}</span>
+                      {badge === null ? null : (
+                        <span aria-hidden="true" className="navigation-badge">
+                          {badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             ))}
           </nav>
         </div>
@@ -2743,8 +2787,8 @@ export function App() {
             onClick={() => openSection("settings")}
             title="Configuracion"
           >
-            <span aria-hidden="true">&#9881;</span>
-            <strong>Configuracion</strong>
+            <NavIcon section="settings" />
+            <strong>Configuración</strong>
           </button>
         </div>
       </aside>
