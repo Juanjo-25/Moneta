@@ -64,6 +64,7 @@ import { validateQuotation } from "./lib/quotations";
 import { SectionContent } from "./sections/SectionContent";
 import { createEmptyQuotationDraft } from "./sections/sales/QuotationsSection";
 import { DashboardContent } from "./sections/dashboard/DashboardContent";
+import { buildDashboardSummary } from "./sections/dashboard/dashboard-summary";
 import {
   emptySalesDraft,
   type SalesDraftState
@@ -132,7 +133,7 @@ const navigationItems: SectionConfig[] = [
   {
     id: "dashboard",
     label: "Inicio",
-    title: "Resumen operativo",
+    title: "Así va el negocio hoy",
     description: "Vista general del negocio",
     primaryAction: "Nueva venta",
     emptyTitle: "Sin movimientos registrados",
@@ -311,29 +312,6 @@ function buildCustomerSummary(input: {
       0
     )
   };
-}
-
-function isSameLocalDay(left: Date, right: Date): boolean {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
-
-function isSameLocalMonth(left: Date, right: Date): boolean {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth()
-  );
-}
-
-function getSaleIssuedDate(sale: SaleRecord): Date {
-  return parseLocalDate(sale.issuedAt) ?? new Date(sale.occurredAtMs);
-}
-
-function getCreditNoteIssuedDate(creditNote: CreditNoteRecord): Date {
-  return parseLocalDate(creditNote.issuedAt) ?? new Date(creditNote.occurredAtMs);
 }
 
 function getSupplierPayableStatus(input: {
@@ -685,63 +663,26 @@ export function App() {
 
   const lowStockProducts = products.filter(isLowStock);
   const today = new Date();
-  const salesTodayTotal = sales.reduce(
-    (total, sale) =>
-      isSameLocalDay(getSaleIssuedDate(sale), today)
-        ? total + sale.totalMinor
-        : total,
-    0
-  );
-  const salesMonthTotal = sales.reduce(
-    (total, sale) =>
-      isSameLocalMonth(getSaleIssuedDate(sale), today)
-        ? total + sale.totalMinor
-        : total,
-    0
-  );
   const confirmedCreditNotes = creditNotes.filter(
     (creditNote) => creditNote.status === "confirmed"
   );
-  const creditNotesTodayTotal = confirmedCreditNotes.reduce(
-    (total, creditNote) =>
-      isSameLocalDay(getCreditNoteIssuedDate(creditNote), today)
-        ? total + creditNote.totalMinor
-        : total,
-    0
+  const dashboardSummary = buildDashboardSummary({
+    creditNotes: confirmedCreditNotes,
+    customerReceipts,
+    formatCurrency,
+    lowStockProducts,
+    products,
+    receivables,
+    sales,
+    supplierPayables,
+    today
+  });
+
+  const dashboardDateLabel = capitalize(
+    new Intl.DateTimeFormat("es-CO", { weekday: "long", day: "numeric", month: "long" }).format(
+      today
+    )
   );
-  const creditNotesMonthTotal = confirmedCreditNotes.reduce(
-    (total, creditNote) =>
-      isSameLocalMonth(getCreditNoteIssuedDate(creditNote), today)
-        ? total + creditNote.totalMinor
-        : total,
-    0
-  );
-  const pendingReceivablesTotal = receivables.reduce(
-    (total, receivable) => total + receivable.amountMinor,
-    0
-  );
-  const metrics = [
-    {
-      label: "Productos activos",
-      value: String(products.filter((product) => product.active).length)
-    },
-    {
-      label: "Ventas de hoy",
-      value: formatCurrency(Math.max(salesTodayTotal - creditNotesTodayTotal, 0))
-    },
-    {
-      label: "Ventas del mes",
-      value: formatCurrency(Math.max(salesMonthTotal - creditNotesMonthTotal, 0))
-    },
-    {
-      label: "Cartera pendiente",
-      value: formatCurrency(pendingReceivablesTotal)
-    },
-    {
-      label: "Alertas de inventario",
-      value: String(lowStockProducts.length)
-    }
-  ];
 
   function openSection(sectionId: SectionId) {
     setActiveSectionId(sectionId);
@@ -2823,7 +2764,9 @@ export function App() {
 
         <SectionHeader
           action={sectionHeaderAction}
-          description={activeSection.description}
+          description={
+            activeSection.id === "dashboard" ? dashboardDateLabel : activeSection.description
+          }
           eyebrow={activeSection.label}
           title={activeSection.title}
         />
@@ -2833,11 +2776,12 @@ export function App() {
             receivables={receivables}
             creditNotes={confirmedCreditNotes}
             formatCurrency={formatCurrency}
-            lowStockProducts={lowStockProducts}
-            metrics={metrics}
-            onOpenProducts={() => openSection("products")}
+            metrics={dashboardSummary.metrics}
             onOpenReports={() => openSection("reports")}
+            onOpenSection={openSection}
+            pendingTasks={dashboardSummary.pendingTasks}
             sales={sales}
+            todayCash={dashboardSummary.todayCash}
           />
         ) : (
           <SectionContent
@@ -2915,6 +2859,10 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function formatPayableStatus(status: SupplierPayableStatus): string {

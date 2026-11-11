@@ -5,7 +5,13 @@ import { SecondaryActionButton } from "../../components/SecondaryActionButton";
 import { parseLocalDate } from "../../lib/dates";
 import { DailySalesPanel } from "./DailySalesPanel";
 import { SalesHistory } from "./SalesHistory";
-import type { CreditNoteRecord, ProductRecord, ReceivableRecord, SaleRecord } from "../../types";
+import type { DashboardMetric, PendingTask, TodayCashSummary } from "./dashboard-summary";
+import type {
+  CreditNoteRecord,
+  ReceivableRecord,
+  SaleRecord,
+  SectionId
+} from "../../types";
 
 type DashboardTrendRow = {
   label: string;
@@ -22,23 +28,25 @@ type DashboardRankingRow = {
 type DashboardContentProps = {
   creditNotes: CreditNoteRecord[];
   formatCurrency: (minor: number) => string;
-  lowStockProducts: ProductRecord[];
-  metrics: Array<{ label: string; value: string }>;
-  onOpenProducts: () => void;
+  metrics: DashboardMetric[];
   onOpenReports: () => void;
+  onOpenSection: (sectionId: SectionId) => void;
+  pendingTasks: PendingTask[];
   sales: SaleRecord[];
   receivables: ReceivableRecord[];
+  todayCash: TodayCashSummary;
 };
 
 export function DashboardContent({
   creditNotes,
   formatCurrency,
-  lowStockProducts,
   metrics,
-  onOpenProducts,
   onOpenReports,
+  onOpenSection,
+  pendingTasks,
   sales,
-  receivables
+  receivables,
+  todayCash
 }: DashboardContentProps) {
   const monthlySalesRows = buildDashboardMonthlySalesRows(sales, creditNotes);
   const productRows = buildDashboardProductRows(sales, creditNotes);
@@ -54,8 +62,20 @@ export function DashboardContent({
           <article className="metric-card" key={metric.label}>
             <span>{metric.label}</span>
             <strong>{metric.value}</strong>
+            <small className={`metric-detail metric-detail-${metric.tone}`}>
+              {metric.detail}
+            </small>
           </article>
         ))}
+      </section>
+
+      <section className="dashboard-today-grid" aria-label="Operacion del dia">
+        <TodayCashPanel
+          formatCurrency={formatCurrency}
+          onOpenTreasury={() => onOpenSection("cash-receipts")}
+          summary={todayCash}
+        />
+        <PendingTasksPanel onOpenSection={onOpenSection} tasks={pendingTasks} />
       </section>
 
       <section
@@ -116,37 +136,131 @@ export function DashboardContent({
 
       <SalesHistory sales={sales} receivables={receivables} formatCurrency={formatCurrency} />
 
-      <section className="dashboard-operational-grid" aria-label="Alertas operativas">
-        <div className="panel dashboard-operational-panel">
-          <PanelHeader
-            action={
-              <SecondaryActionButton onClick={onOpenProducts} variant="compact">
-                Revisar
-              </SecondaryActionButton>
-            }
-          >
-            <h2>Inventario bajo</h2>
-          </PanelHeader>
-          {lowStockProducts.length > 0 ? (
-            <ul className="alert-list" aria-label="Productos con bajo stock">
-              {lowStockProducts.map((product) => (
-                <li key={product.id}>
-                  <strong>{product.name}</strong>
-                  <span>
-                    Stock {product.stock} / minimo {product.minimumStock}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState
-              body="Los productos bajo el minimo se mostraran aqui."
-              title="Sin alertas"
-            />
-          )}
-        </div>
-      </section>
     </>
+  );
+}
+
+function TodayCashPanel({
+  formatCurrency,
+  onOpenTreasury,
+  summary
+}: {
+  formatCurrency: (minor: number) => string;
+  onOpenTreasury: () => void;
+  summary: TodayCashSummary;
+}) {
+  const grossMinor = summary.paidMinor + summary.creditMinor;
+  const difference = summary.netSalesMinor - summary.lastWeekNetMinor;
+  const comparison =
+    summary.lastWeekNetMinor === 0 && summary.netSalesMinor === 0
+      ? "Sin ventas registradas hoy"
+      : difference === 0
+        ? `Igual que el ${summary.lastWeekLabel} pasado`
+        : `${formatCurrency(Math.abs(difference))} ${
+            difference > 0 ? "más" : "menos"
+          } que el ${summary.lastWeekLabel} pasado`;
+
+  return (
+    <div className="panel dashboard-today-panel">
+      <PanelHeader
+        action={
+          <SecondaryActionButton onClick={onOpenTreasury} variant="compact">
+            Ver tesorería
+          </SecondaryActionButton>
+        }
+      >
+        <h2>Caja de hoy</h2>
+      </PanelHeader>
+      <div className="today-cash-total">
+        <span>Ventas de hoy</span>
+        <strong>{formatCurrency(summary.netSalesMinor)}</strong>
+        <small>
+          {summary.invoiceCount} {summary.invoiceCount === 1 ? "factura" : "facturas"} ·{" "}
+          {comparison}
+        </small>
+      </div>
+      {grossMinor > 0 ? (
+        <div
+          aria-label={`De contado ${formatCurrency(summary.paidMinor)}, a crédito ${formatCurrency(
+            summary.creditMinor
+          )}`}
+          className="today-cash-bar"
+          role="img"
+        >
+          {summary.paidMinor > 0 ? (
+            <span className="today-cash-paid" style={{ flexGrow: summary.paidMinor }} />
+          ) : null}
+          {summary.creditMinor > 0 ? (
+            <span className="today-cash-credit" style={{ flexGrow: summary.creditMinor }} />
+          ) : null}
+        </div>
+      ) : (
+        <div aria-hidden="true" className="today-cash-bar today-cash-bar-empty" />
+      )}
+      <dl className="today-cash-breakdown">
+        <div>
+          <dt>
+            <span aria-hidden="true" className="today-cash-swatch today-cash-paid" />
+            De contado
+          </dt>
+          <dd>{formatCurrency(summary.paidMinor)}</dd>
+        </div>
+        <div>
+          <dt>
+            <span aria-hidden="true" className="today-cash-swatch today-cash-credit" />
+            A crédito
+          </dt>
+          <dd>{formatCurrency(summary.creditMinor)}</dd>
+        </div>
+        <div>
+          <dt>
+            <span aria-hidden="true" className="today-cash-swatch today-cash-receipts" />
+            Recibos cobrados
+          </dt>
+          <dd>{formatCurrency(summary.receiptsMinor)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function PendingTasksPanel({
+  onOpenSection,
+  tasks
+}: {
+  onOpenSection: (sectionId: SectionId) => void;
+  tasks: PendingTask[];
+}) {
+  return (
+    <div className="panel dashboard-today-panel">
+      <PanelHeader>
+        <h2>Pendientes para hoy</h2>
+      </PanelHeader>
+      {tasks.length > 0 ? (
+        <ul className="pending-task-list" aria-label="Pendientes">
+          {tasks.map((task) => (
+            <li className={`pending-task pending-task-${task.tone}`} key={task.id}>
+              <span className="pending-task-count">{task.count}</span>
+              <div className="pending-task-copy">
+                <strong>{task.title}</strong>
+                <span>{task.body}</span>
+              </div>
+              <SecondaryActionButton
+                onClick={() => onOpenSection(task.target)}
+                variant="compact"
+              >
+                {task.actionLabel}
+              </SecondaryActionButton>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState
+          body="No hay facturas vencidas, inventario bajo ni pagos próximos."
+          title="Todo al día"
+        />
+      )}
+    </div>
   );
 }
 

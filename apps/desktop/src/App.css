@@ -361,13 +361,13 @@ button,
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
 
 .dashboard-metric-grid {
-  margin-bottom: 26px;
+  margin-bottom: 20px;
 }
 
 .metric-card,
@@ -399,6 +399,210 @@ button,
   color: var(--text-primary);
   font-size: 23px;
   line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-metric-grid .metric-card {
+  gap: 8px;
+  padding: 18px;
+  background: var(--surface-elevated);
+}
+
+.dashboard-metric-grid .metric-card span {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dashboard-metric-grid .metric-card strong {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+.metric-detail {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.metric-detail-positive {
+  color: #067647;
+  font-weight: 600;
+}
+
+.metric-detail-negative {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.metric-detail-warning {
+  color: #b54708;
+  font-weight: 600;
+}
+
+.dashboard-today-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.dashboard-today-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.today-cash-total {
+  display: grid;
+  gap: 4px;
+}
+
+.today-cash-total span {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.today-cash-total strong {
+  color: var(--text-primary);
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-cash-total small {
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.today-cash-bar {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.today-cash-bar span {
+  flex-basis: 0;
+}
+
+.today-cash-bar-empty {
+  background: var(--surface-muted);
+}
+
+.today-cash-paid {
+  background: #0f766e;
+}
+
+.today-cash-credit {
+  background: #f59e0b;
+}
+
+.today-cash-receipts {
+  background: #60a5fa;
+}
+
+.today-cash-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.today-cash-breakdown div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.today-cash-breakdown dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.today-cash-breakdown dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.today-cash-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.pending-task-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending-task {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.pending-task-warning {
+  background: #fffaeb;
+}
+
+.pending-task-count {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #d5ece9;
+  color: #08504a;
+  font-weight: 800;
+}
+
+.pending-task-warning .pending-task-count {
+  background: #fec84b;
+  color: #4e1d09;
+}
+
+.pending-task-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pending-task-copy strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.pending-task-copy span {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-today-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .content-grid,
@@ -412,8 +616,7 @@ button,
   align-items: stretch;
 }
 
-.dashboard-primary-analysis,
-.dashboard-operational-grid {
+.dashboard-primary-analysis {
   display: grid;
   margin-bottom: 22px;
 }
@@ -893,11 +1096,6 @@ button,
   color: var(--text-secondary);
   padding: 8px 12px;
   font-weight: 700;
-}
-
-.dashboard-operational-panel {
-  min-height: 0;
-  background: #fcfcfd;
 }
 
 .sales-history { margin-bottom: 24px; }

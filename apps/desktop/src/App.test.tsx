@@ -185,7 +185,7 @@ describe("App navigation", () => {
     expect(topbar?.firstElementChild).toBe(topbarContext);
     expect(topbar?.lastElementChild).toBe(topbarAction);
 
-    expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Así va el negocio hoy" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Inicio" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Productos" }));
@@ -207,8 +207,9 @@ describe("App navigation", () => {
     expect(screen.getByRole("heading", { name: "Reportes" })).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
-    await user.click(screen.getByRole("button", { name: "Revisar" }));
-    expect(screen.getByRole("heading", { name: "Productos" })).toBeTruthy();
+    expect(screen.getByText("Todo al día")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Ver tesorería" }));
+    expect(screen.getByRole("heading", { name: "Tesoreria" })).toBeTruthy();
   });
 
   it("returns to the dashboard when the dashboard item is clicked", async () => {
@@ -221,7 +222,7 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
 
-    expect(screen.getByRole("heading", { name: "Resumen operativo" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Así va el negocio hoy" })).toBeTruthy();
   });
 
   it("opens configuration from the lower-left sidebar control", async () => {
@@ -1099,10 +1100,15 @@ describe("App navigation", () => {
 
     await user.click(screen.getByRole("button", { name: "Inicio" }));
 
-    expect(screen.getByText("Productos activos")).toBeTruthy();
-    expect(screen.getByText("Alertas de inventario")).toBeTruthy();
-    expect(screen.getAllByText("1")).toHaveLength(2);
-    expect(screen.getByText("Arroz libra")).toBeTruthy();
+    expect(screen.getByText("Productos activos").nextElementSibling?.textContent).toBe("1");
+    expect(screen.getByText("1 con inventario bajo")).toBeTruthy();
+
+    const pendingTasks = screen.getByRole("list", { name: "Pendientes" });
+    expect(within(pendingTasks).getByText("Producto con inventario bajo")).toBeTruthy();
+    expect(within(pendingTasks).getByText("Arroz libra")).toBeTruthy();
+
+    await user.click(within(pendingTasks).getByRole("button", { name: "Revisar" }));
+    expect(screen.getByRole("heading", { name: "Productos" })).toBeTruthy();
   });
 
   it("generates a printable inventory PDF for registered products", async () => {
@@ -1755,24 +1761,26 @@ describe("App navigation", () => {
     const analyticsSummary = screen.getByRole("region", { name: "Resumen analitico" });
     const primaryAnalysis = screen.getByRole("region", { name: "Analisis principal" });
     const secondaryAnalysis = screen.getByRole("region", { name: "Analisis secundario" });
-    const operationalAlerts = screen.getByRole("region", { name: "Alertas operativas" });
+    const todayOperations = screen.getByRole("region", { name: "Operacion del dia" });
     const primaryControls = within(primaryAnalysis).getByRole("region", {
       name: "Controles del analisis principal"
     });
     const dailySalesChart = within(primaryAnalysis).getByLabelText("Grafico ventas diarias");
 
     expect(
-      analyticsSummary.compareDocumentPosition(primaryAnalysis) &
+      analyticsSummary.compareDocumentPosition(todayOperations) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      todayOperations.compareDocumentPosition(primaryAnalysis) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
       primaryAnalysis.compareDocumentPosition(secondaryAnalysis) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    expect(
-      secondaryAnalysis.compareDocumentPosition(operationalAlerts) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+    expect(within(todayOperations).getByText("Ventas de hoy")).toBeTruthy();
+    expect(within(todayOperations).getByText("De contado")).toBeTruthy();
     expect(
       primaryControls.compareDocumentPosition(dailySalesChart) &
         Node.DOCUMENT_POSITION_FOLLOWING
